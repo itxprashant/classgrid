@@ -1,0 +1,361 @@
+/* Paper-planner timetable */
+
+.tt-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--r-lg);
+    margin: 0 -4px 4px;
+    padding: 0 4px 8px;
+    scrollbar-gutter: stable;
+}
+
+.tt {
+    --tt-row: 64px;
+    --tt-hour-col: 58px;
+    --tt-head: 44px;
+    --tt-rows: 15;
+    --tt-min-board: 540px;
+    --tt-block-inset: 4px;
+
+    display: grid;
+    grid-template-columns: var(--tt-hour-col) minmax(var(--tt-min-board), 1fr);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+    color: var(--ink);
+    min-width: calc(var(--tt-hour-col) + var(--tt-min-board));
+}
+
+/* Hour rail */
+.tt__hours {
+    border-right: 1px solid var(--line);
+    background: var(--paper-2);
+    display: flex;
+    flex-direction: column;
+    min-height: calc(var(--tt-head) + var(--tt-row) * var(--tt-rows));
+}
+
+.tt__hour-pad {
+    height: var(--tt-head);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+}
+
+.tt__hour {
+    height: var(--tt-row);
+    position: relative;
+    flex-shrink: 0;
+}
+
+.tt__hour span {
+    position: absolute;
+    top: 0;
+    right: 10px;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.02em;
+    font-feature-settings: 'tnum';
+    white-space: nowrap;
+}
+
+/* Board: day headers + plot */
+.tt__board {
+    display: flex;
+    flex-direction: column;
+    min-width: var(--tt-min-board);
+}
+
+.tt__days {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    height: var(--tt-head);
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-2);
+}
+
+.tt__day-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--fs-12);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    border-right: 1px solid var(--line);
+    min-width: 0;
+}
+
+.tt__day-head:last-child {
+    border-right: none;
+}
+
+.tt__day-abbr {
+    display: none;
+}
+
+/* Plot region */
+.tt__plot {
+    position: relative;
+    height: calc(var(--tt-row) * var(--tt-rows));
+    min-width: var(--tt-min-board);
+}
+
+.tt__lines {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+}
+
+.tt__hline {
+    height: var(--tt-row);
+    border-top: 1px dashed var(--line);
+    flex-shrink: 0;
+}
+
+.tt__hline.tt__hline--first {
+    border-top: none;
+}
+
+.tt__cols {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    pointer-events: none;
+}
+
+.tt__col {
+    border-right: 1px solid var(--line);
+}
+
+.tt__col:last-child {
+    border-right: none;
+}
+
+/* Empty state */
+.tt__empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--ink-3);
+    padding: 24px;
+    gap: 4px;
+}
+
+.tt__empty p {
+    color: var(--ink-3);
+    font-size: var(--fs-14);
+}
+
+/* Block — course code, type, time stacked */
+.tt-block {
+    position: absolute;
+    width: calc(100% / 5 - (2 * var(--tt-block-inset)));
+    margin-left: var(--tt-block-inset);
+    padding: 6px 8px;
+    border-radius: var(--r);
+    background: var(--lecture-tint);
+    border: 1px solid var(--lecture-edge);
+    color: var(--lecture-ink);
+    overflow: hidden;
+    cursor: default;
+    z-index: 5;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 0;
+    transition: transform var(--t-fast), box-shadow var(--t-fast), z-index 0s;
+}
+
+.tt-block:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-pop);
+    z-index: 20;
+}
+
+.tt-block--lecture {
+    background: var(--lecture-tint);
+    border-color: var(--lecture-edge);
+    color: var(--lecture-ink);
+}
+
+.tt-block--tutorial {
+    background: var(--tutorial-tint);
+    border-color: var(--tutorial-edge);
+    color: var(--tutorial-ink);
+}
+
+.tt-block--lab {
+    background: var(--lab-tint);
+    border-color: var(--lab-edge);
+    color: var(--lab-ink);
+}
+
+.tt-block--conflict {
+    border-color: var(--danger-edge);
+    box-shadow: 0 0 0 1px var(--danger-edge), 0 1px 2px oklch(0.5 0.02 60 / 0.06);
+}
+
+.tt-block--conflict::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        repeating-linear-gradient(135deg, transparent 0 6px, var(--danger-edge) 6px 7px);
+    opacity: 0.35;
+    pointer-events: none;
+    border-radius: var(--r);
+}
+
+.tt-block__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    line-height: 1.2;
+}
+
+.tt-block__code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tt-block__type {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tt-block__time {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    opacity: 0.85;
+    font-feature-settings: 'tnum';
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tt-block__loc {
+    font-size: 10px;
+    margin-top: auto;
+    padding-top: 2px;
+    color: inherit;
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Shorter sessions — tighter type but keep three lines */
+.tt-block--compact {
+    padding: 4px 6px;
+}
+
+.tt-block--compact .tt-block__code {
+    font-size: 10px;
+}
+
+.tt-block--compact .tt-block__type {
+    font-size: 8px;
+}
+
+.tt-block--compact .tt-block__time {
+    font-size: 9px;
+}
+
+.tt-block--compact .tt-block__loc {
+    display: none;
+}
+
+@media (max-width: 860px) {
+    .tt {
+        --tt-hour-col: 48px;
+        --tt-row: 72px;
+        --tt-head: 40px;
+        --tt-min-board: 620px;
+        --tt-block-inset: 5px;
+    }
+
+    .tt__hour span {
+        font-size: 10px;
+        right: 6px;
+    }
+
+    .tt-block__code {
+        font-size: 11px;
+    }
+
+    .tt-block__type {
+        font-size: 9px;
+    }
+
+    .tt-block__time {
+        font-size: 10px;
+    }
+
+    .tt-block__loc {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .tt {
+        --tt-hour-col: 44px;
+        --tt-row: 80px;
+        --tt-head: 38px;
+        --tt-min-board: 600px;
+        --tt-block-inset: 6px;
+    }
+
+    .tt__day-name {
+        display: none;
+    }
+
+    .tt__day-abbr {
+        display: inline;
+    }
+
+    .tt__day-head {
+        font-size: 11px;
+        letter-spacing: 0.04em;
+    }
+
+    .tt-block {
+        padding: 7px 8px;
+    }
+
+    .tt-block__code {
+        font-size: 11px;
+    }
+
+    .tt-block__type {
+        font-size: 9px;
+    }
+
+    .tt-block__time {
+        font-size: 10px;
+    }
+}

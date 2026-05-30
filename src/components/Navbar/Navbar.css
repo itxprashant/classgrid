@@ -1,0 +1,421 @@
+.nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+}
+
+.nav__inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    position: relative;
+    z-index: 2;
+}
+
+/* Brand */
+.nav__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: var(--ink);
+    transition: opacity var(--t-fast);
+    flex-shrink: 0;
+}
+
+.nav__brand:hover {
+    color: var(--ink);
+    opacity: 0.8;
+}
+
+.nav__mark {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-tint);
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.nav__wordmark {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    line-height: 1;
+}
+
+.nav__wordmark-serif {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-size: 1.25rem;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+}
+
+.nav__wordmark-mono {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    letter-spacing: 0;
+}
+
+/* Mobile menu toggle — hidden on desktop */
+.nav__menu-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.nav__menu-btn:hover {
+    background: var(--paper-2);
+    border-color: var(--line-strong);
+}
+
+.nav__menu-icon,
+.nav__menu-icon::before,
+.nav__menu-icon::after {
+    display: block;
+    width: 18px;
+    height: 2px;
+    background: currentColor;
+    border-radius: 1px;
+    position: relative;
+    transition: transform var(--t-fast), opacity var(--t-fast);
+}
+
+.nav__menu-icon::before,
+.nav__menu-icon::after {
+    content: '';
+    position: absolute;
+    left: 0;
+}
+
+.nav__menu-icon::before {
+    top: -6px;
+}
+
+.nav__menu-icon::after {
+    top: 6px;
+}
+
+.nav__menu-btn[aria-expanded='true'] .nav__menu-icon {
+    background: transparent;
+}
+
+.nav__menu-btn[aria-expanded='true'] .nav__menu-icon::before {
+    top: 0;
+    transform: rotate(45deg);
+}
+
+.nav__menu-btn[aria-expanded='true'] .nav__menu-icon::after {
+    top: 0;
+    transform: rotate(-45deg);
+}
+
+/* Panel — inline on desktop, drawer on mobile */
+.nav__panel {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.nav__links {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.nav__backdrop {
+    display: none;
+}
+
+/* Auth */
+.nav__auth {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 12px;
+    padding-left: 12px;
+    border-left: 1px solid var(--line);
+    min-height: 32px;
+}
+
+.nav__login-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.nav__user {
+    position: relative;
+}
+
+.nav__user-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px 4px 4px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill, 999px);
+    cursor: pointer;
+    color: var(--ink);
+    transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.nav__user-btn:hover {
+    background: var(--paper-2);
+    border-color: var(--ink-3);
+}
+
+.nav__user-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent-tint);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+}
+
+.nav__user-name {
+    font-size: var(--fs-14);
+    color: var(--ink-2);
+    line-height: 1;
+}
+
+.nav__user-kerberos {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--ink-2);
+}
+
+.nav__user-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 220px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 8px);
+    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.18);
+    padding: 6px;
+    z-index: 110;
+}
+
+.nav__user-menu-head {
+    padding: 8px 10px 10px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+}
+
+.nav__user-menu-name {
+    font-size: var(--fs-14);
+    color: var(--ink);
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.nav__user-menu-sub {
+    margin-top: 2px;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    word-break: break-all;
+}
+
+.nav__user-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    padding: 8px 10px;
+    font-size: var(--fs-14);
+    color: var(--ink-2);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast);
+}
+
+.nav__user-menu-item:hover {
+    background: var(--paper-2);
+    color: var(--ink);
+}
+
+.nav__link {
+    position: relative;
+    padding: 8px 12px;
+    font-size: var(--fs-14);
+    font-weight: 500;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-radius: var(--r-sm);
+    transition: color var(--t-fast), background var(--t-fast);
+    white-space: nowrap;
+}
+
+.nav__link:hover {
+    color: var(--ink);
+    background: var(--paper-2);
+}
+
+.nav__link.is-active {
+    color: var(--ink);
+}
+
+.nav__link.is-active::after {
+    content: '';
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 1px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+}
+
+@media (max-width: 860px) {
+    .nav {
+        --nav-bar-h: 61px;
+    }
+
+    .nav__inner {
+        padding: 12px 16px;
+        gap: 12px;
+    }
+
+    .nav__wordmark-mono {
+        display: none;
+    }
+
+    .nav__menu-btn {
+        display: inline-flex;
+    }
+
+    .nav__panel {
+        position: fixed;
+        top: var(--nav-bar-h, 61px);
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        padding: 12px 16px 20px;
+        background: var(--paper);
+        border-bottom: 1px solid var(--line);
+        box-shadow: var(--shadow-pop);
+        transform: translateY(-8px);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition:
+            transform var(--t-fast),
+            opacity var(--t-fast),
+            visibility var(--t-fast);
+    }
+
+    .nav__panel.is-open {
+        transform: translateY(0);
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+
+    .nav__links {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 2px;
+    }
+
+    .nav__link {
+        padding: 12px 14px;
+        font-size: var(--fs-15, 0.9375rem);
+        white-space: normal;
+    }
+
+    .nav__link.is-active::after {
+        left: 14px;
+        right: auto;
+        width: 24px;
+        bottom: 8px;
+    }
+
+    .nav__auth {
+        margin: 12px 0 0;
+        padding: 12px 0 0;
+        border-left: none;
+        border-top: 1px solid var(--line);
+        justify-content: stretch;
+    }
+
+    .nav__login-btn {
+        width: 100%;
+        justify-content: center;
+        min-height: 44px;
+    }
+
+    .nav__user {
+        width: 100%;
+    }
+
+    .nav__user-btn {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 8px 12px 8px 8px;
+        border-radius: var(--r);
+    }
+
+    .nav__user-name {
+        display: inline;
+    }
+
+    .nav__user-menu {
+        left: 0;
+        right: 0;
+        min-width: 0;
+    }
+
+    .nav__backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        top: var(--nav-bar-h, 61px);
+        z-index: 1;
+        border: 0;
+        padding: 0;
+        background: oklch(0.25 0.02 60 / 0.35);
+        cursor: pointer;
+    }
+}
+
+@media (max-width: 420px) {
+    .nav__wordmark-serif {
+        font-size: 1.1rem;
+    }
+}

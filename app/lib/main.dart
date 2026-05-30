@@ -1,0 +1,79 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'api/api_client.dart';
+import 'api/calendar_events_api.dart';
+import 'api/occupied_rooms_api.dart';
+import 'api/personal_events_api.dart';
+import 'api/planner_api.dart';
+import 'state/auth_provider.dart';
+import 'state/catalog_provider.dart';
+import 'state/planner_store.dart';
+import 'storage/local_store.dart';
+import 'theme/app_theme.dart';
+import 'notifications/class_notification_service.dart';
+import 'screens/home_shell.dart';
+import 'widgets/auth_deep_link_listener.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await ClassNotificationService.instance.init();
+
+  final apiClient = await ApiClient.create();
+  final localStore = await LocalStore.create();
+
+  runApp(ClassGridApp(apiClient: apiClient, localStore: localStore));
+}
+
+class ClassGridApp extends StatelessWidget {
+  const ClassGridApp({
+    super.key,
+    required this.apiClient,
+    required this.localStore,
+  });
+
+  final ApiClient apiClient;
+  final LocalStore localStore;
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = CatalogProvider(apiClient, localStore);
+    final auth = AuthProvider(apiClient);
+    final planner = PlannerStore(
+      plannerApi: PlannerApi(apiClient),
+      store: localStore,
+      catalog: catalog,
+    );
+
+    planner.initGuest();
+    catalog.load();
+    auth.addListener(() {
+      if (!auth.loading) {
+        planner.onUserChanged(auth.user);
+      }
+    });
+    auth.init();
+
+    return MultiProvider(
+      providers: [
+        Provider<ApiClient>.value(value: apiClient),
+        Provider<LocalStore>.value(value: localStore),
+        Provider<CalendarEventsApi>.value(value: CalendarEventsApi(apiClient)),
+        Provider<PersonalEventsApi>.value(value: PersonalEventsApi(apiClient)),
+        Provider<OccupiedRoomsApi>.value(value: OccupiedRoomsApi(apiClient)),
+        ChangeNotifierProvider<CatalogProvider>.value(value: catalog),
+        ChangeNotifierProvider<AuthProvider>.value(value: auth),
+        ChangeNotifierProvider<PlannerStore>.value(value: planner),
+      ],
+      child: AuthDeepLinkListener(
+        child: MaterialApp(
+          title: 'ClassGrid',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.build(),
+          home: const HomeShell(),
+        ),
+      ),
+    );
+  }
+}

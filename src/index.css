@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+    /* Paper canvas */
+    --paper: oklch(0.985 0.008 83);
+    --paper-2: oklch(0.975 0.01 83);
+    --surface: oklch(0.995 0.005 83);
+    --surface-sunk: oklch(0.97 0.012 83);
+
+    /* Ink */
+    --ink: oklch(0.27 0.02 60);
+    --ink-2: oklch(0.48 0.018 60);
+    --ink-3: oklch(0.62 0.015 60);
+    --ink-4: oklch(0.74 0.012 75);
+
+    /* Lines */
+    --line: oklch(0.90 0.012 80);
+    --line-strong: oklch(0.84 0.014 80);
+
+    /* Accent (deep teal, ≤10% of surface) */
+    --accent: oklch(0.52 0.085 195);
+    --accent-ink: oklch(0.36 0.075 195);
+    --accent-tint: oklch(0.94 0.035 195);
+    --accent-edge: oklch(0.80 0.06 195);
+
+    /* Session tints */
+    --lecture-tint: oklch(0.94 0.035 195);
+    --lecture-edge: oklch(0.78 0.06 195);
+    --lecture-ink: oklch(0.34 0.07 200);
+
+    --tutorial-tint: oklch(0.94 0.05 80);
+    --tutorial-edge: oklch(0.80 0.07 80);
+    --tutorial-ink: oklch(0.38 0.07 75);
+
+    --lab-tint: oklch(0.93 0.045 40);
+    --lab-edge: oklch(0.80 0.07 40);
+    --lab-ink: oklch(0.40 0.08 35);
+
+    /* States */
+    --danger: oklch(0.55 0.13 30);
+    --danger-tint: oklch(0.94 0.04 30);
+    --danger-edge: oklch(0.80 0.10 30);
+
+    --success: oklch(0.48 0.11 145);
+    --success-ink: oklch(0.34 0.09 145);
+    --success-tint: oklch(0.94 0.04 145);
+    --success-edge: oklch(0.78 0.08 145);
+
+    /* Radii */
+    --r-sm: 4px;
+    --r: 6px;
+    --r-lg: 10px;
+
+    /* Elevation */
+    --shadow-card: 0 1px 2px oklch(0.5 0.02 60 / 0.06);
+    --shadow-pop: 0 4px 16px oklch(0.4 0.02 60 / 0.08), 0 1px 2px oklch(0.4 0.02 60 / 0.06);
+
+    /* Type scale (fixed rem, ratio ~1.2) */
+    --fs-12: 0.75rem;
+    --fs-13: 0.8125rem;
+    --fs-14: 0.875rem;
+    --fs-16: 1rem;
+    --fs-18: 1.125rem;
+    --fs-21: 1.3125rem;
+    --fs-26: 1.625rem;
+    --fs-32: 2rem;
+    --fs-44: 2.75rem;
+
+    /* Families */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-serif: 'Fraunces', 'Iowan Old Style', 'Apple Garamond', Georgia, serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+    /* Motion */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --t-fast: 120ms var(--ease-out);
+    --t: 180ms var(--ease-out);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'cv11', 'ss01', 'kern';
+    overflow-x: clip;
+}
+
+body {
+    min-height: 100vh;
+    /* Subtle paper grain via overlapping low-chroma radial washes (no glass, no gradients on text) */
+    background-image:
+        radial-gradient(at 100% 0%, oklch(0.96 0.018 75 / 0.55) 0, transparent 45%),
+        radial-gradient(at 0% 100%, oklch(0.97 0.014 195 / 0.45) 0, transparent 50%);
+    background-attachment: fixed;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--ink);
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+
+a {
+    color: var(--accent-ink);
+    text-decoration: none;
+    transition: color var(--t-fast);
+}
+
+a:hover {
+    color: var(--accent);
+}
+
+button {
+    font-family: inherit;
+    color: inherit;
+}
+
+::selection {
+    background: var(--accent-tint);
+    color: var(--accent-ink);
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+}
+
+/* Mono helpers */
+.mono {
+    font-family: var(--font-mono);
+    font-feature-settings: 'tnum', 'zero';
+}
+
+.serif {
+    font-family: var(--font-serif);
+    font-feature-settings: 'ss01';
+}
+
+/* Custom (less invented) scrollbar — discreet, paper-tone */
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border: 2px solid var(--paper);
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-4);
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}

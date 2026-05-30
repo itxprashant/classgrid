@@ -1,0 +1,179 @@
+/* EditTiming form — paper planner */
+
+.edit-timing {
+    padding: 4px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.edit-timing__heading {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+}
+
+.edit-timing__section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.edit-timing__section-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+}
+
+.edit-timing__add {
+    background: transparent;
+    border: 1px dashed var(--line-strong);
+    color: var(--accent-ink);
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+
+.edit-timing__add:hover {
+    background: var(--accent-tint);
+    border-color: var(--accent-edge);
+    color: var(--accent-ink);
+}
+
+.edit-timing__session {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.edit-timing__session-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.edit-timing__session-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.edit-timing__remove {
+    background: transparent;
+    border: none;
+    color: var(--ink-3);
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--r-sm);
+    transition: background var(--t-fast), color var(--t-fast);
+}
+
+.edit-timing__remove:hover {
+    background: var(--danger-tint);
+    color: var(--danger);
+}
+
+.edit-timing__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+}
+
+.edit-timing__cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.edit-timing__cell label {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+}
+
+.edit-timing__cell select,
+.edit-timing__cell input {
+    height: 32px;
+    padding: 0 8px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    font-family: var(--font-sans);
+    font-size: 0.82rem;
+    color: var(--ink);
+    transition: border-color var(--t-fast), box-shadow var(--t-fast);
+    width: 100%;
+}
+
+.edit-timing__cell select {
+    appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+        linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+    background-position:
+        calc(100% - 12px) 50%,
+        calc(100% - 7px) 50%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 22px;
+    cursor: pointer;
+}
+
+.edit-timing__cell select:focus,
+.edit-timing__cell input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px oklch(0.85 0.06 195 / 0.3);
+}
+
+.edit-timing__venue {
+    grid-column: 1 / -1;
+}
+
+.edit-timing__empty {
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    font-style: italic;
+    padding: 6px 0;
+}
+
+.edit-timing__save-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding-top: 4px;
+}
+
+.edit-timing__saved {
+    font-size: 0.78rem;
+    color: var(--accent-ink);
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+}
+
+@media (max-width: 480px) {
+    .edit-timing__grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}

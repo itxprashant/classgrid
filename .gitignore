@@ -1,0 +1,88 @@
+# See https://help.github.com/articles/ignoring-files/
+
+# --- dependencies ---
+/node_modules
+/.pnp
+.pnp.js
+/server/node_modules
+
+# --- Python (scripts/) ---
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# --- secrets & local env (never commit real values) ---
+.env
+.env.*
+!.env.example
+deploy.env
+!/deploy.env.example
+/server/.env
+/server/.env.*
+!/server/.env.example
+/server/db/db.env
+*.pem
+*.key
+*.secret
+.gitsecret/
+
+# --- student enrollment data (PII; regenerate with scripts/fetch_student_courses.js) ---
+# Repo ships tiny stubs in studentCourses.json / courseStudents.json only.
+src/studentCourses2.json
+src/courseStudents2.json
+
+# --- personal / internal notes (not for public repo) ---
+todo.txt
+things_i_will_add.txt
+FEATURE_BACKLOG.md
+ANDROID.md
+
+# --- local-only checkouts (not part of this repo) ---
+/classgrid-ap/
+
+# --- testing / coverage ---
+/coverage
+
+# --- frontend build ---
+/build
+
+# --- Flutter / Android / iOS (app/) ---
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/.git/
+app/build/
+app/**/build/
+app/**/.gradle/
+app/**/.kotlin/
+app/**/local.properties
+app/**/key.properties
+app/**/*.keystore
+app/**/*.jks
+app/.idea/
+app/**/*.iml
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/ephemeral/
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+app/ios/Runner/GeneratedPluginRegistrant.*
+
+# --- logs & tooling ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.vercel
+
+# --- IDE / OS ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+.cursor/

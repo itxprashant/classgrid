@@ -1,0 +1,27 @@
+# ClassGrid Postgres — run on the Azure VM (not bundled into deploy.sh yet).
+#
+#   cp server/db/db.env.example /etc/classgrid/db.env   # fill POSTGRES_PASSWORD
+#   docker compose -f docker-compose.db.yml --env-file /etc/classgrid/db.env up -d
+#   ./server/db/migrate.sh   # with env vars from db.env
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: classgrid-postgres
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-classgrid}
+      POSTGRES_USER: ${POSTGRES_USER:-classgrid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in env file}
+    volumes:
+      - classgrid_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-classgrid} -d ${POSTGRES_DB:-classgrid}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  classgrid_pgdata:

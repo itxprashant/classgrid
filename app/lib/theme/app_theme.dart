@@ -1,0 +1,197 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import 'tokens.dart';
+
+/// Typography helpers matching the web design system:
+/// Inter for UI/body, Fraunces for page titles, IBM Plex Mono for code/data.
+class AppText {
+  AppText._();
+
+  static TextStyle sans({
+    double size = T.fs14,
+    FontWeight weight = FontWeight.w400,
+    Color? color,
+    double? height,
+    double? letterSpacing,
+    FontStyle? fontStyle,
+  }) =>
+      GoogleFonts.inter(
+        fontSize: size,
+        fontWeight: weight,
+        color: color ?? T.ink,
+        height: height,
+        letterSpacing: letterSpacing,
+        fontStyle: fontStyle,
+      );
+
+  static TextStyle serif({
+    double size = T.fs26,
+    FontWeight weight = FontWeight.w600,
+    Color? color,
+    FontStyle? fontStyle,
+    double? height,
+  }) =>
+      GoogleFonts.fraunces(
+        fontSize: size,
+        fontWeight: weight,
+        color: color ?? T.ink,
+        fontStyle: fontStyle,
+        height: height,
+      );
+
+  static TextStyle mono({
+    double size = T.fs13,
+    FontWeight weight = FontWeight.w500,
+    Color? color,
+    double? letterSpacing,
+    double? height,
+  }) =>
+      GoogleFonts.ibmPlexMono(
+        fontSize: size,
+        fontWeight: weight,
+        color: color ?? T.ink,
+        letterSpacing: letterSpacing,
+        height: height,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      );
+}
+
+class AppTheme {
+  AppTheme._();
+
+  static ThemeData build() {
+    final base = ThemeData(
+      useMaterial3: true,
+      scaffoldBackgroundColor: T.paper,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: T.accent,
+        brightness: Brightness.light,
+        primary: T.accent,
+        onPrimary: T.accentFg,
+        surface: T.surface,
+        onSurface: T.ink,
+        error: T.danger,
+      ),
+      textTheme: GoogleFonts.interTextTheme().apply(
+        bodyColor: T.ink,
+        displayColor: T.ink,
+      ),
+      dividerColor: T.line,
+      splashFactory: InkSparkle.splashFactory,
+    );
+
+    return base.copyWith(
+      appBarTheme: AppBarTheme(
+        backgroundColor: T.paper,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        foregroundColor: T.ink,
+        titleTextStyle: AppText.serif(size: T.fs21, weight: FontWeight.w600),
+        shape: Border(bottom: BorderSide(color: T.line)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: T.surface,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(T.r),
+          borderSide: BorderSide(color: T.lineStrong),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(T.r),
+          borderSide: BorderSide(color: T.lineStrong),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(T.r),
+          borderSide: BorderSide(color: T.accent, width: 1.5),
+        ),
+        hintStyle: AppText.sans(color: T.ink3),
+        labelStyle: AppText.sans(color: T.ink2),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: T.accent,
+          foregroundColor: T.accentFg,
+          textStyle: AppText.sans(weight: FontWeight.w600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.r)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: T.ink,
+          side: BorderSide(color: T.lineStrong),
+          textStyle: AppText.sans(weight: FontWeight.w500),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.r)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: T.accentInk,
+          textStyle: AppText.sans(weight: FontWeight.w500),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: T.surface,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(T.rLg),
+          side: BorderSide(color: T.line),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: T.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rLg)),
+        titleTextStyle: AppText.serif(size: T.fs18, weight: FontWeight.w600),
+        contentTextStyle: AppText.sans(color: T.ink2),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: T.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(T.rLg)),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: T.paper,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: T.accentTint,
+        elevation: 0,
+        height: 64,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => AppText.sans(
+            size: T.fs12,
+            weight: states.contains(WidgetState.selected)
+                ? FontWeight.w600
+                : FontWeight.w500,
+            color: states.contains(WidgetState.selected) ? T.accentInk : T.ink3,
+          ),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected) ? T.accentInk : T.ink3,
+            size: 22,
+          ),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: T.accentTint,
+        side: BorderSide(color: T.accentEdge),
+        labelStyle: AppText.mono(size: T.fs12, color: T.accentInk),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rSm)),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: T.ink,
+        contentTextStyle: AppText.sans(color: T.paper),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.r)),
+      ),
+    );
+  }
+}
