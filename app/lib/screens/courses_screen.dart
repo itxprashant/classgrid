@@ -25,15 +25,23 @@ class _CoursesScreenState extends State<CoursesScreen> {
   String _query = '';
   String? _dept;
   int _limit = _pageSize;
+  int _filteredTotal = 0;
 
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(() {
-      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) {
-        setState(() => _limit += _pageSize);
-      }
-    });
+    _scroll.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients || _limit >= _filteredTotal) return;
+    final pos = _scroll.position;
+    if (!pos.hasContentDimensions) return;
+    final nearEnd = pos.maxScrollExtent <= 0 || pos.pixels >= pos.maxScrollExtent - 400;
+    if (!nearEnd) return;
+    final next = (_limit + _pageSize).clamp(0, _filteredTotal);
+    if (next == _limit) return;
+    setState(() => _limit = next);
   }
 
   @override
@@ -70,7 +78,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
     final depts = (catalog.courses.map((c) => c.department).toSet().toList()..sort());
     final filtered = _filtered(catalog.courses);
-    final visible = filtered.take(_limit).toList();
+    _filteredTotal = filtered.length;
+    final cap = _limit.clamp(0, _filteredTotal);
+    final visible = filtered.take(cap).toList();
 
     return Column(
       children: [

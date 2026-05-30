@@ -6,6 +6,13 @@ import 'package:classgrid/core/semester_schedule.dart';
 import 'package:classgrid/core/calendar_events.dart';
 import 'package:classgrid/core/ics.dart';
 import 'package:classgrid/core/roster.dart';
+import 'package:classgrid/core/auth_token.dart';
+import 'package:classgrid/core/empty_halls.dart';
+import 'package:classgrid/core/reminder_schedule.dart';
+import 'package:classgrid/core/room_schedule.dart';
+import 'package:classgrid/core/planner_classes.dart';
+import 'package:classgrid/models/calendar_event.dart';
+import 'package:classgrid/models/course.dart';
 import 'package:classgrid/models/academic_day.dart';
 import 'package:classgrid/models/enrolled_student.dart';
 import 'package:classgrid/models/plan.dart';
@@ -193,6 +200,179 @@ void main() {
       expect(ics.contains('\r\n'), true);
       // CRLF line endings throughout.
       expect(ics.endsWith('\r\n'), true);
+    });
+  });
+
+  group('parseSessionTokenInput', () {
+    test('accepts raw JWT', () {
+      const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZXNzaW9uIn0.sig';
+      expect(parseSessionTokenInput(jwt), jwt);
+    });
+
+    test('extracts token from deep link', () {
+      expect(
+        parseSessionTokenInput('classgrid://auth/callback?token=abc.def.ghi'),
+        'abc.def.ghi',
+      );
+    });
+  });
+
+  group('room schedule', () {
+    Course courseWithHall({
+      required String code,
+      required String hall,
+      String? lectureTiming,
+    }) =>
+        Course(
+          courseCode: code,
+          courseName: 'Test $code',
+          totalCredits: 3,
+          creditStructure: '3.0-0.0-0.0',
+          slot: Slot(lectureTiming: lectureTiming),
+          lectureHall: hall,
+        );
+
+    test('normalizeRoomName standardizes LH spacing', () {
+      expect(normalizeRoomName('lh121'), 'LH 121');
+      expect(normalizeRoomName('LH  108'), 'LH 108');
+    });
+
+    test('buildRoomCatalog maps sessions to each hall', () {
+      final catalog = buildRoomCatalog([
+        courseWithHall(
+          code: 'COL106',
+          hall: 'LH 111, LH 121',
+          lectureTiming: '109001000',
+        ),
+      ]);
+      expect(catalog.rooms.length, 2);
+      expect(catalog.sessionsByRoom['LH 111']!.length, 1);
+      expect(catalog.sessionsByRoom['LH 111']!.first.courseCode, 'COL106');
+      expect(catalog.sessionsByRoom['LH 121']!.first.day, 'Monday');
+    });
+
+    test('filterRooms searches and filters by building', () {
+      final catalog = buildRoomCatalog([
+        courseWithHall(code: 'A', hall: 'LH 101', lectureTiming: '109001000'),
+        courseWithHall(code: 'B', hall: 'NR 201', lectureTiming: '209001000'),
+      ]);
+      expect(filterRooms(catalog.rooms, search: '121').length, 0);
+      expect(filterRooms(catalog.rooms, prefix: 'LH').length, 1);
+    });
+
+    test('roomSessionOverlapIndices flags different courses', () {
+      final sessions = [
+        const RoomSession(
+          courseCode: 'A',
+          courseName: 'A',
+          type: 'Lecture',
+          day: 'Monday',
+          start: '0900',
+          end: '1000',
+        ),
+        const RoomSession(
+          courseCode: 'B',
+          courseName: 'B',
+          type: 'Lecture',
+          day: 'Monday',
+          start: '0930',
+          end: '1030',
+        ),
+      ];
+      expect(roomSessionOverlapIndices(sessions).length, 2);
+    });
+  });
+
+  group('empty halls', () {
+    Course courseWithSlots({
+      required String code,
+      required String hall,
+      String? lectureTiming,
+      String? tutorialTiming,
+      String? labTiming,
+    }) =>
+        Course(
+          courseCode: code,
+          courseName: 'Test $code',
+          totalCredits: 3,
+          creditStructure: '3.0-0.0-0.0',
+          slot: Slot(
+            lectureTiming: lectureTiming,
+            tutorialTiming: tutorialTiming,
+            labTiming: labTiming,
+          ),
+          lectureHall: hall,
+        );
+
+    test('includes non-LH rooms from catalog', () {
+      final at = DateTime(2026, 9, 7, 10, 30); // Monday 10:30
+      final r = computeEmptyHalls(
+        courses: [
+          courseWithSlots(code: 'X', hall: 'NR 201', lectureTiming: '209001100'),
+        ],
+        at: at,
+      );
+      expect(r.totalTracked, 1);
+      expect(r.freeCount, 1);
+    });
+
+    test('tutorial timing marks room occupied', () {
+      final at = DateTime(2026, 9, 7, 10, 30);
+      final r = computeEmptyHalls(
+        courses: [
+          courseWithSlots(
+            code: 'COL106',
+            hall: 'LH 111',
+            tutorialTiming: '110001100',
+          ),
+        ],
+        at: at,
+      );
+      expect(r.freeCount, 0);
+      expect(r.timetableOccupiedCount, 1);
+    });
+  });
+
+  group('reminder schedule', () {
+    test('class reminder fires 30 minutes before start', () {
+      final day = DateTime(2026, 9, 7);
+      const c = PlannerClass(
+        id: 'COL106-lecture-0900-1000',
+        courseCode: 'COL106',
+        kind: 'lecture',
+        kindLabel: 'L',
+        start: '0900',
+        end: '1000',
+        timeLabel: '09:00',
+      );
+      final start = classEventStart(day, c)!;
+      expect(start.hour, 9);
+      expect(
+        start.subtract(const Duration(minutes: kReminderMinutesBefore)).hour,
+        8,
+      );
+      expect(
+        start.subtract(const Duration(minutes: kReminderMinutesBefore)).minute,
+        30,
+      );
+    });
+
+    test('timed events can remind; fullday cannot', () {
+      final timed = CalendarEvent(
+        date: '2026-09-07',
+        title: 'Quiz',
+        type: 'quiz',
+        schedule: 'at',
+        time: '1400',
+      );
+      final allDay = CalendarEvent(
+        date: '2026-09-07',
+        title: 'Deadline',
+        type: 'deadline',
+        schedule: 'fullday',
+      );
+      expect(calendarEventStart(timed)?.hour, 14);
+      expect(calendarEventStart(allDay), isNull);
     });
   });
 

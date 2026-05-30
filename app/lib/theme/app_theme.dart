@@ -23,6 +23,7 @@ class AppText {
         height: height,
         letterSpacing: letterSpacing,
         fontStyle: fontStyle,
+        decoration: TextDecoration.none,
       );
 
   static TextStyle serif({
@@ -38,6 +39,7 @@ class AppText {
         color: color ?? T.ink,
         fontStyle: fontStyle,
         height: height,
+        decoration: TextDecoration.none,
       );
 
   static TextStyle mono({
@@ -54,7 +56,31 @@ class AppText {
         letterSpacing: letterSpacing,
         height: height,
         fontFeatures: const [FontFeature.tabularFigures()],
+        decoration: TextDecoration.none,
       );
+}
+
+TextTheme _textThemeWithoutUnderline(TextTheme base) {
+  TextStyle? strip(TextStyle? s) =>
+      s?.copyWith(decoration: TextDecoration.none, decorationColor: null);
+
+  return TextTheme(
+    displayLarge: strip(base.displayLarge),
+    displayMedium: strip(base.displayMedium),
+    displaySmall: strip(base.displaySmall),
+    headlineLarge: strip(base.headlineLarge),
+    headlineMedium: strip(base.headlineMedium),
+    headlineSmall: strip(base.headlineSmall),
+    titleLarge: strip(base.titleLarge),
+    titleMedium: strip(base.titleMedium),
+    titleSmall: strip(base.titleSmall),
+    bodyLarge: strip(base.bodyLarge),
+    bodyMedium: strip(base.bodyMedium),
+    bodySmall: strip(base.bodySmall),
+    labelLarge: strip(base.labelLarge),
+    labelMedium: strip(base.labelMedium),
+    labelSmall: strip(base.labelSmall),
+  );
 }
 
 class AppTheme {
@@ -63,19 +89,26 @@ class AppTheme {
   static ThemeData build() {
     final base = ThemeData(
       useMaterial3: true,
+      brightness: Brightness.light,
       scaffoldBackgroundColor: T.paper,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: T.accent,
+      canvasColor: T.paper,
+      cardColor: T.surface,
+      colorScheme: ColorScheme(
         brightness: Brightness.light,
         primary: T.accent,
         onPrimary: T.accentFg,
+        secondary: T.accentInk,
+        onSecondary: T.paper,
         surface: T.surface,
         onSurface: T.ink,
         error: T.danger,
+        onError: T.paper,
       ),
-      textTheme: GoogleFonts.interTextTheme().apply(
-        bodyColor: T.ink,
-        displayColor: T.ink,
+      textTheme: _textThemeWithoutUnderline(
+        GoogleFonts.interTextTheme().apply(
+          bodyColor: T.ink,
+          displayColor: T.ink,
+        ),
       ),
       dividerColor: T.line,
       splashFactory: InkSparkle.splashFactory,
@@ -191,6 +224,27 @@ class AppTheme {
         contentTextStyle: AppText.sans(color: T.paper),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.r)),
+      ),
+      timePickerTheme: TimePickerThemeData(
+        backgroundColor: T.surface,
+        dialBackgroundColor: T.paper2,
+        hourMinuteColor: T.accentTint,
+        dayPeriodColor: T.accentTint,
+        entryModeIconColor: T.ink3,
+      ),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: T.surface,
+        headerBackgroundColor: T.paper2,
+        headerForegroundColor: T.ink,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: T.surface,
+        surfaceTintColor: Colors.transparent,
+        textStyle: AppText.sans(color: T.ink),
+      ),
+      listTileTheme: ListTileThemeData(
+        textColor: T.ink,
+        iconColor: T.ink3,
       ),
     );
   }

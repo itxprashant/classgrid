@@ -10,6 +10,7 @@ const {
     clearFlowCookie,
     readFlow,
 } = require('./session');
+const { desktopAuthSuccessHtml } = require('./desktopAuthPage');
 
 const router = express.Router();
 
@@ -22,11 +23,13 @@ router.get('/login', async (req, res) => {
         const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
         const state = client.randomState();
         const returnApp = req.query.app === '1';
+        const returnDesktop = req.query.desktop === '1';
 
         setFlowCookie(res, {
             v: codeVerifier,
             s: state,
             ...(returnApp ? { app: 1 } : {}),
+            ...(returnDesktop ? { desktop: 1 } : {}),
         });
 
         const authUrl = client.buildAuthorizationUrl(cfg, {
@@ -92,6 +95,11 @@ router.get('/callback', async (req, res) => {
             picture,
             email,
         });
+
+        if (flow.app === 1 && flow.desktop === 1) {
+            res.type('html').send(desktopAuthSuccessHtml(sessionToken));
+            return;
+        }
 
         if (flow.app === 1) {
             const dest = new URL(`${config.mobileAppScheme}://auth/callback`);

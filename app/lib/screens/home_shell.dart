@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_drawer.dart';
 import '../widgets/profile_button.dart';
 import 'calendar_screen.dart';
 import 'courses_screen.dart';
 import 'empty_halls_screen.dart';
 import 'plan_screen.dart';
+import 'rooms_screen.dart';
 
 /// Top-level navigation shell: bottom nav over an IndexedStack so each tab keeps
 /// its scroll position and state. App bar hosts the wordmark + profile/login.
@@ -20,11 +22,22 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  static const _titles = ['Plan', 'Courses', 'Empty halls', 'Calendar'];
+  static const _titles = ['Plan', 'Courses', 'Rooms', 'Calendar'];
+
+  void _openEmptyHalls() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const EmptyHallsScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: AppDrawer(
+        selectedIndex: _index,
+        onTabSelected: (i) => setState(() => _index = i),
+        onOpenEmptyHalls: _openEmptyHalls,
+      ),
       appBar: AppBar(
         titleSpacing: 16,
         title: Row(
@@ -39,14 +52,17 @@ class _HomeShellState extends State<HomeShell> {
         ),
         actions: const [ProfileButton()],
       ),
-      body: IndexedStack(
-        index: _index,
-        children: const [
-          PlanScreen(),
-          CoursesScreen(),
-          EmptyHallsScreen(),
-          CalendarScreen(),
-        ],
+      body: Material(
+        color: T.paper,
+        child: IndexedStack(
+          index: _index,
+          children: const [
+            PlanScreen(),
+            CoursesScreen(),
+            RoomsScreen(),
+            CalendarScreen(),
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
@@ -61,9 +77,9 @@ class _HomeShellState extends State<HomeShell> {
               selectedIcon: Icon(Icons.menu_book),
               label: 'Courses'),
           NavigationDestination(
-              icon: Icon(Icons.meeting_room_outlined),
-              selectedIcon: Icon(Icons.meeting_room),
-              label: 'Halls'),
+              icon: Icon(Icons.domain_outlined),
+              selectedIcon: Icon(Icons.domain),
+              label: 'Rooms'),
           NavigationDestination(
               icon: Icon(Icons.calendar_month_outlined),
               selectedIcon: Icon(Icons.calendar_month),

@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../core/clashes.dart';
+import '../core/timetable_layout.dart';
 import '../models/plan.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
-
-const int _startHour = 7;
-const int _endHour = 21;
-const double _rowHeight = 58;
-const double _railWidth = 40;
-const double _headerHeight = 26;
+import 'timetable_hour_rail.dart';
 
 const Map<String, int> _dayIndex = {
   'Monday': 0,
@@ -33,20 +29,6 @@ class TimetableGrid extends StatelessWidget {
   final List<SelectedCourse> courses;
   final Map<String, CourseTimetable> timetableData;
 
-  double _hourOffset(String start) {
-    final hour = int.parse(start.substring(0, 2));
-    final minute = int.parse(start.substring(2, 4));
-    return (hour - _startHour) + minute / 60.0;
-  }
-
-  double _duration(String start, String end) {
-    final sh = int.parse(start.substring(0, 2));
-    final sm = int.parse(start.substring(2, 4));
-    final eh = int.parse(end.substring(0, 2));
-    final em = int.parse(end.substring(2, 4));
-    return (eh - sh) + (em - sm) / 60.0;
-  }
-
   /// Drop leading zero on the hour so "09:30" → "9:30" — saves width in narrow columns.
   static String _formatTime(String hhmm) {
     final hour = int.parse(hhmm.substring(0, 2));
@@ -66,8 +48,7 @@ class TimetableGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final sessions = flattenSessions(courses, timetableData);
     final conflicts = conflictIndices(sessions);
-    final hourCount = _endHour - _startHour; // 14
-    final plotHeight = hourCount * _rowHeight;
+    final plotHeight = TimetableLayout.plotHeight;
 
     return Container(
       decoration: BoxDecoration(
@@ -81,10 +62,10 @@ class TimetableGrid extends StatelessWidget {
         children: [
           // Day header row.
           SizedBox(
-            height: _headerHeight,
+            height: TimetableLayout.headerHeight,
             child: Row(
               children: [
-                SizedBox(width: _railWidth),
+                SizedBox(width: TimetableLayout.railWidth),
                 for (final d in _dayLabels)
                   Expanded(
                     child: Container(
@@ -103,24 +84,23 @@ class TimetableGrid extends StatelessWidget {
           SizedBox(
             height: plotHeight,
             child: LayoutBuilder(builder: (context, constraints) {
-              final dayAreaWidth = constraints.maxWidth - _railWidth;
+              final dayAreaWidth = constraints.maxWidth - TimetableLayout.railWidth;
               final colWidth = dayAreaWidth / 5;
               return Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  // Hour gridlines + labels.
-                  for (int h = _startHour; h <= _endHour; h++)
+                  for (int h = TimetableLayout.startHour; h <= TimetableLayout.endHour; h++)
                     Positioned(
-                      top: (h - _startHour) * _rowHeight,
+                      top: TimetableLayout.lineTopForHour(h),
                       left: 0,
                       right: 0,
-                      child: _HourLine(hour: h),
+                      child: TimetableHourRail(hour: h),
                     ),
-                  // Column separators.
                   for (int i = 0; i < 5; i++)
                     Positioned(
                       top: 0,
                       bottom: 0,
-                      left: _railWidth + i * colWidth,
+                      left: TimetableLayout.railWidth + i * colWidth,
                       child: Container(width: 1, color: T.line),
                     ),
                   // Session blocks.
@@ -138,9 +118,11 @@ class TimetableGrid extends StatelessWidget {
   Widget _buildBlock(GridSession s, int index, bool conflict, double colWidth) {
     final dayIdx = _dayIndex[s.day];
     if (dayIdx == null) return const SizedBox.shrink();
-    final top = _hourOffset(s.start) * _rowHeight;
-    final span = _duration(s.start, s.end);
-    final height = (span * _rowHeight).clamp(20.0, plotHeightMax);
+    final top = TimetableLayout.hourOffset(s.start) * TimetableLayout.rowHeight +
+        TimetableLayout.blockInset;
+    final span = TimetableLayout.durationHours(s.start, s.end);
+    final height = (span * TimetableLayout.rowHeight - 2 * TimetableLayout.blockInset)
+        .clamp(20.0, TimetableLayout.plotHeight);
     final compact = span < 0.75;
 
     Color tint, edge, ink;
@@ -165,10 +147,10 @@ class TimetableGrid extends StatelessWidget {
     final end = _formatTime(s.end);
 
     return Positioned(
-      top: top + 1,
-      left: _railWidth + dayIdx * colWidth + 1.5,
-      width: colWidth - 3,
-      height: height - 2,
+      top: top,
+      left: TimetableLayout.railWidth + dayIdx * colWidth + TimetableLayout.blockInset,
+      width: colWidth - 2 * TimetableLayout.blockInset,
+      height: height,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
         decoration: BoxDecoration(
@@ -209,58 +191,9 @@ class TimetableGrid extends StatelessWidget {
     );
   }
 
-  static const double plotHeightMax = (21 - 7) * _rowHeight;
 }
 
-class _HourLine extends StatelessWidget {
-  const _HourLine({required this.hour});
-  final int hour;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = hour <= 12 ? '$hour' : '${hour - 12}';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: _railWidth,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 4, top: 0),
-            child: Text(label,
-                textAlign: TextAlign.right,
-                style: AppText.mono(size: T.fs12, color: T.ink3)),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 7),
-            child: CustomPaint(painter: _DashedLinePainter(), size: const Size(double.infinity, 1)),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _DashedLinePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = T.line
-      ..strokeWidth = 1;
-    const dash = 4.0, gap = 4.0;
-    double x = 0;
-    while (x < size.width) {
-      canvas.drawLine(Offset(x, 0), Offset(x + dash, 0), paint);
-      x += dash + gap;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Diagonal hatch overlay drawn over conflicting blocks.
+/// Diagonal hatch overlay drawn over conflicting blocks (shared with [RoomWeekGrid]).
 class DiagonalHatch extends Decoration {
   const DiagonalHatch();
 

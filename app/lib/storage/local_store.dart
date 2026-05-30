@@ -11,6 +11,8 @@ class LocalStore {
   LocalStore(this._prefs);
   final SharedPreferences _prefs;
 
+  SharedPreferences get sharedPreferences => _prefs;
+
   static const _kSelectedCourses = 'selectedCourses';
   static const _kTimetableData = 'timetableData';
   static const _kCalendarEvents = 'cg_calendar_events';

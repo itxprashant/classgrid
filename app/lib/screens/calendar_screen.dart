@@ -17,9 +17,12 @@ import '../state/planner_store.dart';
 import '../storage/local_store.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../core/reminder_schedule.dart';
+import '../storage/reminder_store.dart';
 import '../widgets/academic_calendar_sheet.dart';
 import '../widgets/common.dart';
 import '../widgets/event_form_sheet.dart';
+import '../widgets/reminder_toggle.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -726,6 +729,8 @@ class _DayEventsDialog extends StatelessWidget {
       items.add(Text('Classes', style: AppText.sans(size: T.fs12, color: T.ink3, weight: FontWeight.w600)));
       items.add(const SizedBox(height: 4));
       for (final c in classes) {
+        final dateKey = formatDateKey(day);
+        final rKey = classReminderKey(dateKey, c);
         items.add(
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -737,6 +742,11 @@ class _DayEventsDialog extends StatelessWidget {
             subtitle: Text(
               '${_classKindLabel(c.kind)} · ${_classTimeRange(c)}',
               style: AppText.sans(size: T.fs12, color: T.ink3),
+            ),
+            trailing: ReminderToggle(
+              reminderKey: rKey,
+              canEnable: canRemindClass(c, day),
+              onToggle: () => context.read<ReminderStore>().toggleClass(c, day),
             ),
           ),
         );
@@ -752,6 +762,7 @@ class _DayEventsDialog extends StatelessWidget {
         final schedule = formatEventSchedule(e);
         final typeLabel = kEventTypeLabels[e.type] ?? e.type;
         if (i > 0) items.add(const Divider(height: 1));
+        final eKey = eventReminderKey(e);
         items.add(
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -772,7 +783,18 @@ class _DayEventsDialog extends StatelessWidget {
               ].join(' · '),
               style: AppText.sans(size: T.fs12, color: T.ink3),
             ),
-            trailing: Icon(Icons.chevron_right, size: 20, color: T.ink4),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ReminderToggle(
+                  reminderKey: eKey,
+                  canEnable: canRemindEvent(e),
+                  tooltipDisabled: 'All-day / EOD events have no start-time reminder',
+                  onToggle: () => context.read<ReminderStore>().toggleEvent(e),
+                ),
+                Icon(Icons.chevron_right, size: 20, color: T.ink4),
+              ],
+            ),
             onTap: () => Navigator.pop(context, _DayDialogEdit(e)),
           ),
         );

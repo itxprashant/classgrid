@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../config.dart';
 import '../state/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import 'desktop_login_dialog.dart';
 
 /// App-bar action: opens ClassGrid in the browser for IITD login, or shows the
 /// account menu when signed in.
@@ -11,6 +13,14 @@ class ProfileButton extends StatelessWidget {
   const ProfileButton({super.key});
 
   Future<void> _startLogin(BuildContext context) async {
+    if (AppConfig.usesDesktopLogin) {
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const DesktopLoginDialog(),
+      );
+      return;
+    }
     final auth = context.read<AuthProvider>();
     final opened = await auth.startBrowserLogin();
     if (!context.mounted) return;

@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import courses from '../courses.json';
 import extraOccupied from '../extra_occupied.json';
 import { useAuth } from '../auth/AuthContext';
-import { getAcademicDay, describeAcademicDay } from '../utils/semesterSchedule';
+import { describeAcademicDay, SEMESTER } from '../utils/semesterSchedule';
+import { computeEmptyHallsState } from '../utils/emptyHalls';
+import { normalizeRoomName, roomToSlug } from '../utils/roomSchedule';
 import {
     fetchOccupiedRooms,
     createOccupiedRoom,
@@ -24,14 +27,6 @@ function formatDisplayDate(date) {
         month: 'short',
         year: 'numeric',
     });
-}
-
-function normalizeRoomName(name) {
-    const s = String(name || '').trim().replace(/\s+/g, ' ');
-    if (!s) return '';
-    const m = s.match(/^LH\s*(.+)$/i);
-    if (m) return `LH ${m[1].trim()}`;
-    return s;
 }
 
 function formatHHMM(value) {
@@ -74,7 +69,7 @@ function groupHalls(entries) {
 const EmptyLectureHalls = () => {
     const { user, login } = useAuth();
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [isCustomTime, setIsCustomTime] = useState(false);
+    const [isCustomSchedule, setIsCustomSchedule] = useState(false);
     const [manualMarkings, setManualMarkings] = useState([]);
     const [markingsLoading, setMarkingsLoading] = useState(false);
     const [selectedMarking, setSelectedMarking] = useState(null);
@@ -86,10 +81,10 @@ const EmptyLectureHalls = () => {
 
     useEffect(() => {
         const timer = setInterval(() => {
-            if (!isCustomTime) setCurrentTime(new Date());
+            if (!isCustomSchedule) setCurrentTime(new Date());
         }, 60000);
         return () => clearInterval(timer);
-    }, [isCustomTime]);
+    }, [isCustomSchedule]);
 
     const timeValueNum = useMemo(() => {
         const h = currentTime.getHours();
@@ -118,14 +113,6 @@ const EmptyLectureHalls = () => {
         loadMarkings();
     }, [loadMarkings]);
 
-    const manualByRoom = useMemo(() => {
-        const map = new Map();
-        manualMarkings.forEach((m) => {
-            map.set(normalizeRoomName(m.room), m);
-        });
-        return map;
-    }, [manualMarkings]);
-
     const {
         displayEntries,
         allHalls,
@@ -133,86 +120,16 @@ const EmptyLectureHalls = () => {
         markedCount,
         timetableOccupiedCount,
         academic,
-    } = useMemo(() => {
-        const now = currentTime;
-        const academic = getAcademicDay(now);
-        const effectiveDayCode = academic.hasClasses ? academic.effectiveDayCode : null;
-        const currentTimeValue = timeValueNum;
-
-        const allHalls = new Set();
-        courses.forEach((course) => {
-            if (course.lectureHall) {
-                course.lectureHall.split(',').map((h) => h.trim()).forEach((hall) => {
-                    if (hall.startsWith('LH')) allHalls.add(hall);
-                });
-            }
-        });
-
-        manualMarkings.forEach((m) => {
-            const room = normalizeRoomName(m.room);
-            if (room.startsWith('LH')) allHalls.add(room);
-        });
-
-        const timetableOccupied = new Set();
-        if (effectiveDayCode) {
-            courses.forEach((course) => {
-                if (course.slot && course.slot.lectureTiming) {
-                    course.slot.lectureTiming.split(',').forEach((timing) => {
-                        if (timing.length !== 9) return;
-                        const day = parseInt(timing.substring(0, 1), 10);
-                        const start = parseInt(timing.substring(1, 5), 10);
-                        const end = parseInt(timing.substring(5, 9), 10);
-                        if (day === effectiveDayCode && currentTimeValue >= start && currentTimeValue < end) {
-                            if (course.lectureHall) {
-                                course.lectureHall.split(',').map((h) => h.trim()).forEach((hall) => {
-                                    if (hall.startsWith('LH')) timetableOccupied.add(hall);
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-        }
-
-        const extraOccupiedSet = new Set();
-        extraOccupied.forEach((item) => {
-            if (item.day === now.getDay()) {
-                const start = parseInt(item.startTime, 10);
-                const end = parseInt(item.endTime, 10);
-                if (currentTimeValue >= start && currentTimeValue < end) {
-                    if (item.lectureHall.startsWith('LH')) {
-                        extraOccupiedSet.add(item.lectureHall);
-                    }
-                }
-            }
-        });
-
-        const displayEntries = [];
-        let freeCount = 0;
-        let markedCount = 0;
-
-        Array.from(allHalls).sort().forEach((room) => {
-            if (timetableOccupied.has(room) || extraOccupiedSet.has(room)) return;
-
-            const marking = manualByRoom.get(normalizeRoomName(room));
-            if (marking) {
-                displayEntries.push({ room, status: 'marked', marking });
-                markedCount += 1;
-            } else {
-                displayEntries.push({ room, status: 'free' });
-                freeCount += 1;
-            }
-        });
-
-        return {
-            displayEntries,
-            allHalls: Array.from(allHalls),
-            freeCount,
-            markedCount,
-            timetableOccupiedCount: timetableOccupied.size + extraOccupiedSet.size,
-            academic,
-        };
-    }, [currentTime, timeValueNum, manualMarkings, manualByRoom]);
+    } = useMemo(
+        () =>
+            computeEmptyHallsState({
+                courses,
+                extraOccupied,
+                manualMarkings,
+                at: currentTime,
+            }),
+        [currentTime, manualMarkings]
+    );
 
     const grouped = useMemo(() => groupHalls(displayEntries), [displayEntries]);
     const groupKeys = Object.keys(grouped).sort();
@@ -223,6 +140,16 @@ const EmptyLectureHalls = () => {
         return map;
     }, [displayEntries]);
 
+    const handleDateChange = (e) => {
+        const value = e.target.value;
+        if (!value) return;
+        const [y, m, d] = value.split('-').map(Number);
+        const newTime = new Date(currentTime);
+        newTime.setFullYear(y, m - 1, d);
+        setCurrentTime(newTime);
+        setIsCustomSchedule(true);
+    };
+
     const handleTimeChange = (e) => {
         const value = e.target.value;
         if (!value) return;
@@ -231,11 +158,11 @@ const EmptyLectureHalls = () => {
         newTime.setHours(parseInt(hours, 10));
         newTime.setMinutes(parseInt(minutes, 10));
         setCurrentTime(newTime);
-        setIsCustomTime(true);
+        setIsCustomSchedule(true);
     };
 
     const handleReset = () => {
-        setIsCustomTime(false);
+        setIsCustomSchedule(false);
         setCurrentTime(new Date());
     };
 
@@ -251,19 +178,6 @@ const EmptyLectureHalls = () => {
     const closeMarkDialog = () => {
         setMarkDialog(null);
         setMarkError(null);
-    };
-
-    const handleHallClick = (room) => {
-        const entry = hallEntryByRoom.get(room);
-        if (entry && entry.status === 'marked') {
-            setSelectedMarking(entry.marking);
-            return;
-        }
-        if (!user) {
-            login();
-            return;
-        }
-        openMarkDialog(room);
     };
 
     const submitMark = async () => {
@@ -309,23 +223,32 @@ const EmptyLectureHalls = () => {
             <header className="eh__head">
                 <div className="eh__eyebrow">Right now · live</div>
                 <h1 className="eh__title">
-                    Free lecture halls, <em>by hour</em>.
+                    Free rooms, <em>by hour</em>.
                 </h1>
                 <p className="eh__sub">
-                    All LH-prefixed halls cross-referenced against the live timetable. Red rooms are
-                    marked occupied outside the official allotment. Pick a different time to plan ahead.
+                    All campus rooms from the catalog (lecture, tutorial, and lab slots) cross-referenced
+                    against the timetable for the chosen date. Red rooms are marked occupied outside the
+                    official allotment. Open a room name for its weekly schedule.
                 </p>
             </header>
 
             <div className="eh__controls">
                 <div className="eh__control">
                     <label className="field-label" htmlFor="eh-day">Date</label>
-                    <div id="eh-day" className="eh__day-value mono">
-                        {formatDisplayDate(currentTime)}
-                        {academic.type === 'swapped' && (
-                            <span className="eh__day-swap"> → {academic.effectiveDay} timetable</span>
-                        )}
-                    </div>
+                    <input
+                        id="eh-day"
+                        type="date"
+                        className="field field--mono"
+                        value={selectedDate}
+                        min={SEMESTER.classesStart}
+                        max={SEMESTER.lastTeachingDay}
+                        onChange={handleDateChange}
+                    />
+                    {academic.type === 'swapped' && (
+                        <span className="eh__day-swap muted">
+                            {formatDisplayDate(currentTime)} → {academic.effectiveDay} timetable
+                        </span>
+                    )}
                 </div>
                 <div className="eh__control">
                     <label className="field-label" htmlFor="eh-time">Time</label>
@@ -338,7 +261,7 @@ const EmptyLectureHalls = () => {
                     />
                 </div>
                 <div className="eh__control eh__control--inline">
-                    {isCustomTime ? (
+                    {isCustomSchedule ? (
                         <button type="button" className="btn btn--sm" onClick={handleReset}>
                             Reset to now
                         </button>
@@ -384,8 +307,8 @@ const EmptyLectureHalls = () => {
                 <p className="eh__loading muted">Loading room markings…</p>
             ) : displayEntries.length === 0 ? (
                 <div className="empty">
-                    <strong>Every tracked hall is occupied</strong>
-                    Try a different time, or check back in 30 minutes.
+                    <strong>Every tracked room is occupied</strong>
+                    Try a different date or time, or check back later.
                 </div>
             ) : (
                 <div className="eh__groups">
@@ -402,18 +325,51 @@ const EmptyLectureHalls = () => {
                                 {grouped[key].map((room) => {
                                     const entry = hallEntryByRoom.get(room);
                                     const isMarked = entry && entry.status === 'marked';
+                                    const scheduleTo = `/rooms/${roomToSlug(room)}`;
                                     return (
-                                        <button
+                                        <div
                                             key={room}
-                                            type="button"
                                             className={
-                                                'eh__hall' +
-                                                (isMarked ? ' eh__hall--marked' : '')
+                                                'eh__hall-row' +
+                                                (isMarked ? ' eh__hall-row--marked' : '')
                                             }
-                                            onClick={() => handleHallClick(room)}
                                         >
-                                            {room}
-                                        </button>
+                                            <Link
+                                                to={scheduleTo}
+                                                className={
+                                                    'eh__hall' +
+                                                    (isMarked ? ' eh__hall--marked' : '')
+                                                }
+                                            >
+                                                {room}
+                                            </Link>
+                                            {isMarked ? (
+                                                <button
+                                                    type="button"
+                                                    className="eh__hall-action"
+                                                    onClick={() => setSelectedMarking(entry.marking)}
+                                                    aria-label={`Who marked ${room} occupied`}
+                                                >
+                                                    Details
+                                                </button>
+                                            ) : user ? (
+                                                <button
+                                                    type="button"
+                                                    className="eh__hall-action"
+                                                    onClick={() => openMarkDialog(room)}
+                                                >
+                                                    Mark
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className="eh__hall-action eh__hall-action--ghost"
+                                                    onClick={login}
+                                                >
+                                                    Sign in
+                                                </button>
+                                            )}
+                                        </div>
                                     );
                                 })}
                             </div>
@@ -423,8 +379,8 @@ const EmptyLectureHalls = () => {
             )}
 
             <p className="eh__legend-hint muted">
-                Green = free per timetable · Red = marked occupied (not on allotment chart)
-                {user ? ' · Click a free room to mark it' : ' · Sign in to mark a room'}
+                Green = free per timetable · Red = marked occupied · Room name → weekly schedule
+                {user ? ' · Mark = manual occupancy for this date' : ''}
             </p>
 
             {selectedMarking && (
@@ -454,6 +410,14 @@ const EmptyLectureHalls = () => {
                             </button>
                         </div>
                         <p className="eh__dialog-lead">Occupied — not listed on the official room allotment.</p>
+                        <p className="eh__dialog-link-row">
+                            <Link
+                                to={`/rooms/${roomToSlug(selectedMarking.room)}`}
+                                className="btn btn--sm btn--ghost"
+                            >
+                                Weekly schedule
+                            </Link>
+                        </p>
                         <dl className="eh__dialog-meta">
                             <div>
                                 <dt>Date</dt>

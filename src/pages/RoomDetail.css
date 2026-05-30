@@ -1,0 +1,199 @@
+/* Room detail — per-room schedule */
+
+.rd {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 96px 32px 64px;
+}
+
+.rd__crumb {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.rd__crumb a {
+    color: var(--accent-ink);
+    text-decoration: none;
+}
+
+.rd__crumb a:hover {
+    text-decoration: underline;
+}
+
+.rd__head {
+    margin-bottom: 24px;
+}
+
+.rd__eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+}
+
+.rd__title {
+    font-size: 2.2rem;
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+}
+
+.rd__sub {
+    margin-top: 8px;
+    color: var(--ink-2);
+    font-size: 0.95rem;
+}
+
+.rd__warn {
+    color: var(--warn-ink, oklch(0.45 0.12 40));
+}
+
+.rd__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.rd__view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    overflow: hidden;
+    background: var(--paper-2);
+}
+
+.rd__view-btn {
+    border: none;
+    background: transparent;
+    padding: 8px 18px;
+    font-family: var(--font-sans);
+    font-size: 0.88rem;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast);
+}
+
+.rd__view-btn.is-active {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--shadow-sm, 0 1px 2px oklch(0 0 0 / 0.06));
+}
+
+.rd__list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.rd__day {
+    padding: 0;
+    overflow: hidden;
+}
+
+.rd__day-title {
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 14px 18px;
+    margin: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-2);
+    color: var(--ink);
+}
+
+.rd__sessions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.rd__session {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+}
+
+.rd__session:last-child {
+    border-bottom: none;
+}
+
+.rd__session--conflict {
+    background: oklch(0.96 0.04 40 / 0.5);
+}
+
+.rd__session-time {
+    font-size: 0.85rem;
+    color: var(--ink-2);
+    white-space: nowrap;
+}
+
+.rd__session-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 12px;
+}
+
+.rd__session-code {
+    font-weight: 600;
+    color: var(--accent-ink);
+    text-decoration: none;
+}
+
+.rd__session-code:hover {
+    text-decoration: underline;
+}
+
+.rd__session-name {
+    flex: 1 1 100%;
+    font-size: 0.92rem;
+    color: var(--ink);
+}
+
+.rd__session-instr {
+    flex: 1 1 100%;
+    font-size: 0.85rem;
+}
+
+.rd__empty {
+    padding: 40px 28px;
+    text-align: center;
+    max-width: 40rem;
+    margin: 0 auto;
+}
+
+.rd__empty-title {
+    font-size: 1.5rem;
+    margin-bottom: 12px;
+}
+
+@media (max-width: 640px) {
+    .rd {
+        padding: 88px 20px 48px;
+    }
+
+    .rd__title {
+        font-size: 1.75rem;
+    }
+
+    .rd__session {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+}

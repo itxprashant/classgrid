@@ -247,8 +247,48 @@
 
 .eh__halls {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 8px;
+}
+
+.eh__hall-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.eh__hall-row--marked .eh__hall {
+    flex: 1;
+}
+
+.eh__day-swap {
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.eh__hall-action {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: var(--paper);
+    color: var(--ink-2);
+    cursor: pointer;
+    align-self: center;
+    width: 100%;
+}
+
+.eh__hall-action:hover {
+    border-color: var(--ink-4);
+    color: var(--ink);
+}
+
+.eh__hall-action--ghost {
+    background: transparent;
 }
 
 .eh__stat-value--warn {
@@ -268,17 +308,18 @@
 
 .eh__hall {
     padding: 14px 16px;
-    background: var(--accent-tint);
-    border: 1px solid var(--accent-edge);
-    color: var(--accent-ink);
+    background: var(--success-tint);
+    border: 1px solid var(--success-edge);
+    color: var(--success-ink);
     border-radius: var(--r);
     font-family: var(--font-mono);
     font-size: 0.92rem;
     font-weight: 500;
     text-align: center;
     letter-spacing: 0.02em;
+    text-decoration: none;
     transition: transform var(--t-fast), box-shadow var(--t-fast);
-    cursor: pointer;
+    display: block;
 }
 
 .eh__hall--marked {
@@ -338,6 +379,10 @@
     font-size: 0.92rem;
     color: var(--danger);
     font-weight: 500;
+}
+
+.eh__dialog-link-row {
+    margin: 0;
 }
 
 .eh__dialog-hint {

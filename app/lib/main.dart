@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'api/api_client.dart';
@@ -11,6 +12,7 @@ import 'state/auth_provider.dart';
 import 'state/catalog_provider.dart';
 import 'state/planner_store.dart';
 import 'storage/local_store.dart';
+import 'storage/reminder_store.dart';
 import 'theme/app_theme.dart';
 import 'notifications/class_notification_service.dart';
 import 'screens/home_shell.dart';
@@ -19,12 +21,25 @@ import 'widgets/auth_deep_link_listener.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await GoogleFonts.pendingFonts([
+    GoogleFonts.inter(),
+    GoogleFonts.fraunces(),
+    GoogleFonts.ibmPlexMono(),
+  ]);
+
   await ClassNotificationService.instance.init();
 
   final apiClient = await ApiClient.create();
   final localStore = await LocalStore.create();
+  final prefs = localStore.sharedPreferences;
+  final reminderStore = ReminderStore(prefs, ClassNotificationService.instance);
+  await reminderStore.load();
 
-  runApp(ClassGridApp(apiClient: apiClient, localStore: localStore));
+  runApp(ClassGridApp(
+    apiClient: apiClient,
+    localStore: localStore,
+    reminderStore: reminderStore,
+  ));
 }
 
 class ClassGridApp extends StatelessWidget {
@@ -32,10 +47,12 @@ class ClassGridApp extends StatelessWidget {
     super.key,
     required this.apiClient,
     required this.localStore,
+    required this.reminderStore,
   });
 
   final ApiClient apiClient;
   final LocalStore localStore;
+  final ReminderStore reminderStore;
 
   @override
   Widget build(BuildContext context) {
@@ -67,12 +84,24 @@ class ClassGridApp extends StatelessWidget {
         ChangeNotifierProvider<CatalogProvider>.value(value: catalog),
         ChangeNotifierProvider<AuthProvider>.value(value: auth),
         ChangeNotifierProvider<PlannerStore>.value(value: planner),
+        ChangeNotifierProvider<ReminderStore>.value(value: reminderStore),
       ],
       child: AuthDeepLinkListener(
         child: MaterialApp(
           title: 'ClassGrid',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.build(),
+          themeMode: ThemeMode.light,
+          builder: (context, child) {
+            final mq = MediaQuery.of(context);
+            return MediaQuery(
+              data: mq.copyWith(platformBrightness: Brightness.light),
+              child: DefaultTextStyle(
+                style: AppText.sans(),
+                child: child ?? const SizedBox.shrink(),
+              ),
+            );
+          },
           home: const HomeShell(),
         ),
       ),

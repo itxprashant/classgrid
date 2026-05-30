@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+
+import '../core/reminder_schedule.dart';
 
 /// Local notifications for class reminders.
 class ClassNotificationService {
@@ -21,6 +24,16 @@ class ClassNotificationService {
     tz_data.initializeTimeZones();
     final local = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(local.identifier));
+
+    if (defaultTargetPlatform == TargetPlatform.linux) {
+      await _plugin.initialize(
+        settings: const InitializationSettings(
+          linux: LinuxInitializationSettings(defaultActionName: 'Open'),
+        ),
+      );
+      _ready = true;
+      return;
+    }
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwinInit = DarwinInitializationSettings(
@@ -49,7 +62,6 @@ class ClassNotificationService {
     await android?.requestNotificationsPermission();
     await android?.requestExactAlarmsPermission();
 
-    // Clear any leftover QA test alarms (ids 9001–9002).
     await _plugin.cancel(id: 9001);
     await _plugin.cancel(id: 9002);
 
@@ -77,5 +89,46 @@ class ClassNotificationService {
       when.minute,
       when.second,
     );
+  }
+
+  /// Schedule a one-shot local notification at [notifyAt].
+  Future<bool> scheduleReminder({
+    required String key,
+    required String title,
+    required String body,
+    required DateTime notifyAt,
+  }) async {
+    if (!_ready) await init();
+    if (!notifyAt.isAfter(DateTime.now())) return false;
+
+    final id = notificationIdForKey(key);
+    try {
+      var mode = AndroidScheduleMode.inexactAllowWhileIdle;
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final android = _plugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+        if (await android?.canScheduleExactNotifications() ?? false) {
+          mode = AndroidScheduleMode.exactAllowWhileIdle;
+        }
+      }
+
+      await _plugin.zonedSchedule(
+        id: id,
+        scheduledDate: localTzDateTime(notifyAt),
+        notificationDetails: details,
+        androidScheduleMode: mode,
+        title: title,
+        body: body,
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[ClassNotificationService] schedule failed: $e');
+      return false;
+    }
+  }
+
+  Future<void> cancelReminder(String key) async {
+    if (!_ready) return;
+    await _plugin.cancel(id: notificationIdForKey(key));
   }
 }

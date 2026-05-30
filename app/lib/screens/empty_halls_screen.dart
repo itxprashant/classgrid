@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/occupied_rooms_api.dart';
+import '../core/empty_halls.dart';
+import '../core/room_schedule.dart';
 import '../core/semester_schedule.dart';
 import '../models/academic_day.dart';
 import '../models/occupied_room.dart';
@@ -15,26 +17,9 @@ import '../state/catalog_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
+import 'room_detail_screen.dart';
 
-String _normalizeRoom(String name) {
-  final s = name.trim().replaceAll(RegExp(r'\s+'), ' ');
-  if (s.isEmpty) return '';
-  final m = RegExp(r'^LH\s*(.+)$', caseSensitive: false).firstMatch(s);
-  if (m != null) return 'LH ${m.group(1)!.trim()}';
-  return s;
-}
-
-class _HallEntry {
-  final String room;
-  final bool marked;
-  final OccupiedRoom? marking;
-  const _HallEntry(this.room, this.marked, this.marking);
-}
-
-/// Free lecture-hall finder. Mirrors the web EmptyLectureHalls page: the hall
-/// universe is built from the catalog + manual markings, cross-referenced
-/// against the live timetable (using the academic effective day) and the static
-/// `extra_occupied.json` overlay; remaining halls are free or red-marked.
+/// Free-room finder. Mirrors the web Empty Lecture Halls page.
 class EmptyHallsScreen extends StatefulWidget {
   const EmptyHallsScreen({super.key});
 
@@ -43,6 +28,7 @@ class EmptyHallsScreen extends StatefulWidget {
 }
 
 class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
+  late DateTime _calendarDate;
   TimeOfDay _time = TimeOfDay.now();
   bool _custom = false;
   List<OccupiedRoom> _markings = [];
@@ -50,13 +36,28 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
   bool _loading = false;
   bool _initialized = false;
 
-  DateTime get _now {
-    final base = DateTime.now();
-    return DateTime(base.year, base.month, base.day, _time.hour, _time.minute);
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _calendarDate = DateTime(now.year, now.month, now.day);
   }
 
-  String get _dateKey => formatDateKey(_now);
+  DateTime get _at => DateTime(
+        _calendarDate.year,
+        _calendarDate.month,
+        _calendarDate.day,
+        _time.hour,
+        _time.minute,
+      );
+
+  String get _dateKey => formatDateKey(_at);
   int get _timeValue => _time.hour * 100 + _time.minute;
+
+  DateTime _parseYmd(String ymd) {
+    final p = ymd.split('-');
+    return DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+  }
 
   @override
   void didChangeDependencies() {
@@ -89,83 +90,20 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
     }
   }
 
-  ({List<_HallEntry> entries, int free, int marked, int occupied, int total, AcademicDay academic}) _compute(
-      CatalogProvider catalog) {
-    final academic = getAcademicDay(_now);
-    final effectiveDayCode = academic.hasClasses ? academic.effectiveDayCode : null;
-    final tv = _timeValue;
-
-    final allHalls = <String>{};
-    for (final c in catalog.courses) {
-      final lh = c.lectureHall;
-      if (lh != null) {
-        for (final h in lh.split(',').map((e) => e.trim())) {
-          if (h.startsWith('LH')) allHalls.add(h);
-        }
-      }
-    }
-    for (final m in _markings) {
-      final room = _normalizeRoom(m.room);
-      if (room.startsWith('LH')) allHalls.add(room);
-    }
-
-    final timetableOccupied = <String>{};
-    if (effectiveDayCode != null) {
-      for (final c in catalog.courses) {
-        final timing = c.slot.lectureTiming;
-        final lh = c.lectureHall;
-        if (timing == null || lh == null) continue;
-        for (final t in timing.split(',')) {
-          if (t.length != 9) continue;
-          final day = int.parse(t.substring(0, 1));
-          final start = int.parse(t.substring(1, 5));
-          final end = int.parse(t.substring(5, 9));
-          if (day == effectiveDayCode && tv >= start && tv < end) {
-            for (final h in lh.split(',').map((e) => e.trim())) {
-              if (h.startsWith('LH')) timetableOccupied.add(h);
-            }
-          }
-        }
-      }
-    }
-
-    final jsDay = _now.weekday % 7; // Sun=0..Sat=6
-    final extraSet = <String>{};
-    for (final item in _extraOccupied) {
-      if (item is! Map) continue;
-      if (item['day'] == jsDay) {
-        final start = int.tryParse('${item['startTime']}') ?? 0;
-        final end = int.tryParse('${item['endTime']}') ?? 0;
-        final hall = '${item['lectureHall']}';
-        if (tv >= start && tv < end && hall.startsWith('LH')) extraSet.add(hall);
-      }
-    }
-
-    final manualByRoom = {for (final m in _markings) _normalizeRoom(m.room): m};
-
-    final entries = <_HallEntry>[];
-    var free = 0, marked = 0;
-    final sorted = allHalls.toList()..sort();
-    for (final room in sorted) {
-      if (timetableOccupied.contains(room) || extraSet.contains(room)) continue;
-      final marking = manualByRoom[_normalizeRoom(room)];
-      if (marking != null) {
-        entries.add(_HallEntry(room, true, marking));
-        marked++;
-      } else {
-        entries.add(_HallEntry(room, false, null));
-        free++;
-      }
-    }
-
-    return (
-      entries: entries,
-      free: free,
-      marked: marked,
-      occupied: timetableOccupied.length + extraSet.length,
-      total: allHalls.length,
-      academic: academic,
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _calendarDate,
+      firstDate: _parseYmd(Semester.classesStart),
+      lastDate: _parseYmd(Semester.lastTeachingDay),
     );
+    if (picked != null) {
+      setState(() {
+        _calendarDate = DateTime(picked.year, picked.month, picked.day);
+        _custom = true;
+      });
+      await _loadMarkings();
+    }
   }
 
   Future<void> _pickTime() async {
@@ -175,19 +113,29 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
         _time = picked;
         _custom = true;
       });
-      _loadMarkings();
+      await _loadMarkings();
     }
   }
 
-  void _resetTime() {
+  void _resetSchedule() {
+    final now = DateTime.now();
     setState(() {
-      _time = TimeOfDay.now();
+      _calendarDate = DateTime(now.year, now.month, now.day);
+      _time = TimeOfDay.fromDateTime(now);
       _custom = false;
     });
     _loadMarkings();
   }
 
-  void _onHallTap(_HallEntry entry) {
+  void _openSchedule(String room) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RoomDetailScreen(roomName: normalizeRoomName(room)),
+      ),
+    );
+  }
+
+  void _onMarkTap(EmptyHallEntry entry) {
     if (entry.marked) {
       _showMarking(entry.marking!);
       return;
@@ -199,7 +147,7 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
       );
       return;
     }
-    _showMarkDialog(_normalizeRoom(entry.room));
+    _showMarkDialog(normalizeRoomName(entry.room));
   }
 
   Future<void> _showMarkDialog(String room) async {
@@ -237,7 +185,7 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'For ${DateFormat('EEE, d MMM').format(_now)} from ${_time.format(context)} until the end time below. This date only.',
+                  'For ${DateFormat('EEE, d MMM y').format(_at)} from ${_time.format(context)} until the end time below. This date only.',
                   style: AppText.sans(size: T.fs12, color: T.ink3),
                 ),
                 const SizedBox(height: 12),
@@ -287,7 +235,15 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Occupied — not on the official room allotment.', style: AppText.sans(size: T.fs13, color: T.ink2)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _openSchedule(m.room);
+              },
+              child: const Text('Weekly schedule'),
+            ),
+            const SizedBox(height: 8),
             _metaRow('Date', m.date),
             _metaRow('Time', '${m.start.substring(0, 2)}:${m.start.substring(2)}–${m.end.substring(0, 2)}:${m.end.substring(2)}'),
             if (m.markedBy?.name != null) _metaRow('Marked by', m.markedBy!.name!),
@@ -324,13 +280,29 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
-    if (catalog.loading && !catalog.isReady) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    final r = _compute(catalog);
 
-    // Group by prefix token (e.g. "LH").
-    final groups = <String, List<_HallEntry>>{};
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Empty halls', style: AppText.serif(size: T.fs18, weight: FontWeight.w600)),
+      ),
+      body: Material(
+        color: T.paper,
+        child: catalog.loading && !catalog.isReady
+            ? const Center(child: CircularProgressIndicator())
+            : _buildBody(context, catalog),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, CatalogProvider catalog) {
+    final r = computeEmptyHalls(
+      courses: catalog.courses,
+      extraOccupied: _extraOccupied,
+      manualMarkings: _markings,
+      at: _at,
+    );
+
+    final groups = <String, List<EmptyHallEntry>>{};
     for (final e in r.entries) {
       final key = RegExp(r'^(\w+)').firstMatch(e.room)?.group(1) ?? 'Other';
       (groups[key] ??= []).add(e);
@@ -341,30 +313,35 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
       onRefresh: _loadMarkings,
       child: ListView(
         children: [
-          const PageHeader(eyebrow: 'Right now · live', title: 'Free lecture halls'),
+          const PageHeader(eyebrow: 'Right now · live', title: 'Free rooms'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('DATE', style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1)),
-                      Text(DateFormat('EEE, d MMM y').format(_now), style: AppText.mono(size: T.fs14)),
-                      if (r.academic.type == AcademicType.swapped)
-                        Text('→ ${r.academic.effectiveDay} timetable',
-                            style: AppText.mono(size: T.fs12, color: T.accentInk)),
-                    ],
+                  child: OutlinedButton(
+                    onPressed: _pickDate,
+                    style: OutlinedButton.styleFrom(alignment: Alignment.centerLeft),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('DATE', style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1)),
+                        Text(DateFormat('EEE, d MMM y').format(_at), style: AppText.mono(size: T.fs14)),
+                        if (r.academic.type == AcademicType.swapped)
+                          Text('→ ${r.academic.effectiveDay} timetable',
+                              style: AppText.mono(size: T.fs12, color: T.accentInk)),
+                      ],
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _pickTime,
                   icon: const Icon(Icons.schedule, size: 18),
                   label: Text(_time.format(context), style: AppText.mono(size: T.fs14)),
                 ),
                 if (_custom)
-                  TextButton(onPressed: _resetTime, child: const Text('Now')),
+                  TextButton(onPressed: _resetSchedule, child: const Text('Now')),
               ],
             ),
           ),
@@ -377,18 +354,18 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(children: [
-              _stat('Free', '${r.free}', T.successInk),
-              _stat('Marked', '${r.marked}', T.danger),
-              _stat('In class', '${r.occupied}', T.ink2),
-              _stat('Tracked', '${r.total}', T.ink2),
+              _stat('Free', '${r.freeCount}', T.successInk),
+              _stat('Marked', '${r.markedCount}', T.danger),
+              _stat('In class', '${r.timetableOccupiedCount}', T.ink2),
+              _stat('Tracked', '${r.totalTracked}', T.ink2),
             ]),
           ),
           if (_loading) const LinearProgressIndicator(minHeight: 2),
           if (r.entries.isEmpty)
             EmptyState(
               message: catalog.courses.every((c) => c.lectureHall == null)
-                  ? 'No halls are tracked yet. The catalog has no venue data this semester, so only manually-marked rooms appear here.'
-                  : 'Every tracked hall is occupied. Try a different time.',
+                  ? 'No rooms are tracked yet. The catalog has no venue data this semester, so only manually-marked rooms appear here.'
+                  : 'Every tracked room is occupied. Try a different date or time.',
               icon: Icons.meeting_room_outlined,
             )
           else
@@ -396,7 +373,7 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              'Green = free per timetable · Red = marked occupied (not on the allotment chart).',
+              'Green = free per timetable · Red = marked occupied · Tap room name for weekly schedule.',
               style: AppText.sans(size: T.fs12, color: T.ink3),
             ),
           ),
@@ -421,7 +398,7 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
         ),
       );
 
-  Widget _group(String key, List<_HallEntry> entries) {
+  Widget _group(String key, List<EmptyHallEntry> entries) {
     entries.sort((a, b) {
       double n(String s) => double.tryParse(s.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0;
       return n(a.room).compareTo(n(b.room));
@@ -442,19 +419,37 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
             runSpacing: 8,
             children: [
               for (final e in entries)
-                InkWell(
-                  onTap: () => _onHallTap(e),
-                  borderRadius: BorderRadius.circular(T.rSm),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: e.marked ? T.dangerTint : T.successTint,
-                      border: Border.all(color: e.marked ? T.dangerEdge : T.successEdge),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: () => _openSchedule(e.room),
                       borderRadius: BorderRadius.circular(T.rSm),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: e.marked ? T.dangerTint : T.successTint,
+                          border: Border.all(color: e.marked ? T.dangerEdge : T.successEdge),
+                          borderRadius: BorderRadius.circular(T.rSm),
+                        ),
+                        child: Text(e.room,
+                            style: AppText.mono(size: T.fs13, color: e.marked ? T.danger : T.successInk)),
+                      ),
                     ),
-                    child: Text(e.room,
-                        style: AppText.mono(size: T.fs13, color: e.marked ? T.danger : T.successInk)),
-                  ),
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: () => _onMarkTap(e),
+                      style: TextButton.styleFrom(
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        e.marked ? 'Details' : (context.read<AuthProvider>().isLoggedIn ? 'Mark' : 'Sign in'),
+                        style: AppText.sans(size: T.fs12, color: T.ink3),
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),

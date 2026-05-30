@@ -30,11 +30,20 @@ Routes (declared in [src/App.js](src/App.js)):
   — paginated catalog list.
 - `/course/:courseCode` → [src/pages/CourseDetails.jsx](src/pages/CourseDetails.jsx)
   — single course view with enrolled-students pie chart.
+- `/rooms` → [src/pages/RoomSchedules.jsx](src/pages/RoomSchedules.jsx) —
+  browse all campus rooms from the catalog (`lectureHall` + `extra_occupied.json`);
+  search by name and filter by building prefix (e.g. LH). Primary entry to **Empty halls**
+  via button → `/empty-halls`.
+- `/rooms/:roomSlug` → [src/pages/RoomDetail.jsx](src/pages/RoomDetail.jsx) —
+  per-room weekly schedule as a list or calendar grid; data from
+  [src/utils/roomSchedule.js](src/utils/roomSchedule.js).
 - `/empty-halls` → [src/pages/EmptyLectureHalls.jsx](src/pages/EmptyLectureHalls.jsx)
-  — free LH rooms at a chosen date/time vs the live timetable. Green = free;
-  red = manually marked occupied (Postgres, not on the official allotment).
-  Click a free room (logged in) to mark it; click red to see who marked it.
-  Legacy static overlay: [src/extra_occupied.json](src/extra_occupied.json).
+  — free campus rooms at a chosen **date and time** vs the live timetable
+  (lecture, tutorial, and lab slots; all `lectureHall` tokens, not LH-only).
+  Logic in [src/utils/emptyHalls.js](src/utils/emptyHalls.js). Green = free;
+  red = manually marked occupied (Postgres). Room name → `/rooms/:slug`;
+  **Mark** / **Details** for manual occupancy. Legacy overlay:
+  [src/extra_occupied.json](src/extra_occupied.json).
 - `/calendar` → [src/pages/MyCalendar.jsx](src/pages/MyCalendar.jsx) —
   monthly grid for **shared course events** (quizzes, deadlines, …) and
   **personal events** (private per user). Shared events: Postgres
@@ -45,7 +54,7 @@ Routes (declared in [src/App.js](src/App.js)):
   institute calendar via **Holidays & timetable changes** modal on this page too.
 - `/my-calendar` → redirect to `/calendar`.
 
-`Navbar` links: Plan · Courses · Empty halls · Calendar (plus IITD login).
+`Navbar` links: Plan · Courses · Rooms · Calendar (plus IITD login). **Empty halls** is linked from `/rooms` (not a top-level nav item).
 `Footer` wraps every route.
 
 ## Tech stack
@@ -391,9 +400,12 @@ A small Express app. Files:
   - Both are httpOnly, SameSite=Lax, `Secure` in production.
   - `requireSession` middleware → 401 `{"error":"not_authenticated"}`.
 - [server/src/auth.js](server/src/auth.js) — `GET /auth/login`,
-  `GET /auth/callback`, `POST/GET /auth/logout`. Optional `?app=1` on
-  `/auth/login` marks the flow for the Flutter app; the callback then 302s to
-  `{MOBILE_APP_SCHEME}://auth/callback?token=…` instead of the SPA. Web logins
+ `GET /auth/callback`, `POST/GET /auth/logout`. Optional `?app=1` on
+ `/auth/login` marks the flow for the Flutter app; the callback then 302s to
+ `{MOBILE_APP_SCHEME}://auth/callback?token=…` instead of the SPA. Add
+ `&desktop=1` with `app=1` for Linux/Windows: callback returns an HTML page
+ with a copyable token ([desktopAuthPage.js](server/src/desktopAuthPage.js))
+ instead of the custom scheme. Web logins
   (no `app=1`) still redirect to `${FRONTEND_ORIGIN}/?login=success` with
   `cg_session` set as a cookie.
 - [server/src/courses.js](server/src/courses.js) — loads
@@ -559,7 +571,9 @@ iOS scaffold exists under `app/ios/` but the app is **Android-first**; no iOS-sp
 | `/` Generator | **Plan** tab — [plan_screen.dart](app/lib/screens/plan_screen.dart) | Push routes for add-course sheet, edit-timing sheet |
 | `/course-explorer` | **Courses** tab — [courses_screen.dart](app/lib/screens/courses_screen.dart) | |
 | `/course/:code` | **Course detail** — [course_detail_screen.dart](app/lib/screens/course_detail_screen.dart) | Pushed from Courses list; no roster donut |
-| `/empty-halls` | **Empty halls** tab — [empty_halls_screen.dart](app/lib/screens/empty_halls_screen.dart) | |
+| `/rooms` | **Rooms** tab — [rooms_screen.dart](app/lib/screens/rooms_screen.dart) | Search + building filter; button → Empty halls |
+| `/rooms/:roomSlug` | **Room detail** — [room_detail_screen.dart](app/lib/screens/room_detail_screen.dart) | Pushed from Rooms list; list + week grid |
+| `/empty-halls` | **Empty halls** — [empty_halls_screen.dart](app/lib/screens/empty_halls_screen.dart) | Pushed from Rooms (not a bottom-nav tab) |
 | `/calendar` | **Calendar** tab — [calendar_screen.dart](app/lib/screens/calendar_screen.dart) | |
 | Navbar login | **ProfileButton** in app bar — [profile_button.dart](app/lib/widgets/profile_button.dart) | Opens ClassGrid in system browser |
 
@@ -645,11 +659,12 @@ Device-side **local** reminders for planned classes (not server push). Implement
 in [class_notification_service.dart](app/lib/notifications/class_notification_service.dart)
 and initialized from [main.dart](app/lib/main.dart) before `runApp`.
 
-**Current state:** plugin init, Android notification channel (`class_reminders`),
-timezone setup (`flutter_timezone` → `timezone` `TZDateTime`), and permission
-prompts. **Scheduling/rescheduling from `PlannerStore` is not wired yet** — add
-`zonedSchedule` calls when building real “class starting soon” reminders from
-`flattenSessions` / planner timetable data.
+**Current state:** plugin init, Android channel (`class_reminders`), timezone
+setup, and **per-item 30‑minute reminders** from the calendar day dialog (bell
+on each class / timed event). Persistence in [reminder_store.dart](app/lib/storage/reminder_store.dart);
+scheduling in [class_notification_service.dart](app/lib/notifications/class_notification_service.dart)
+via `zonedSchedule`. All-day / EOD events and institute-calendar rows have no
+bell (no concrete start time). Reminders reschedule on app launch.
 
 **Dependencies:** `flutter_local_notifications`, `timezone`, `flutter_timezone`
 ([app/pubspec.yaml](app/pubspec.yaml)).
@@ -716,6 +731,8 @@ run `flutter test`:
 | [core/calendar_events.dart](app/lib/core/calendar_events.dart) | [src/utils/calendarEvents.js](src/utils/calendarEvents.js) |
 | [core/planner_classes.dart](app/lib/core/planner_classes.dart) | [src/utils/plannerClasses.js](src/utils/plannerClasses.js) |
 | [core/ics.dart](app/lib/core/ics.dart) | `generateICS` in Generator.jsx |
+| [core/room_schedule.dart](app/lib/core/room_schedule.dart) | [src/utils/roomSchedule.js](src/utils/roomSchedule.js) |
+| [core/empty_halls.dart](app/lib/core/empty_halls.dart) | [src/utils/emptyHalls.js](src/utils/emptyHalls.js) |
 
 Timing format, academic calendar rules, event validation, and ICS output must
 stay identical. Semester date constants live in `semester_schedule.dart` and
@@ -735,10 +752,10 @@ scroll pagination (40/page). Tap → course detail with **Add to plan**.
 **Course detail** — metadata, slot/timing summary, add-to-plan. **No** enrolled
 students pie chart (web-only; no roster API on mobile).
 
-**Empty halls** — date defaults to today, time picker, `getAcademicDay` for
-effective weekday, catalog `lectureHall` + bundled `extra_occupied.json` +
-Postgres markings. Green = free, red = manually marked. Mark/delete requires
-login. If catalog `lectureHall` is null (venues not synced), only manual
+**Empty halls** — date + time pickers (defaults to now), `getAcademicDay` for
+effective weekday; [empty_halls.dart](app/lib/core/empty_halls.dart) checks
+lecture/tutorial/lab. Tap room → `RoomDetailScreen`; Mark/Details for Postgres
+markings (login required). If catalog `lectureHall` is null, only manual
 markings appear — run `sync_venues.py` and redeploy catalog.
 
 **Calendar** — Monday-first month grid, academic day markers, shared + personal
@@ -783,7 +800,7 @@ via Play Console or sideload. Backend/catalog deploy is shared with web.
 | PNG timetable export | `html2canvas-pro` | not implemented |
 | Course roster donut | `courseStudents.json` | not implemented (no API) |
 | Deep links / app links | n/a | not implemented |
-| Local class reminders | n/a | init + channel only; planner-driven schedule not implemented |
+| Local class reminders | n/a | Calendar day dialog: 30‑min before class/timed event (Android/iOS; Linux may need desktop notification support) |
 | Push notifications (FCM / server) | n/a | not implemented |
 | Catalog `If-None-Match` revalidation | n/a | etag stored but not sent yet on refresh |
 | Bearer / mobile OAuth routes | n/a | intentionally not used |
@@ -837,8 +854,9 @@ via Play Console or sideload. Backend/catalog deploy is shared with web.
 - **Local notifications on Android** — users must grant notification permission
   (Android 13+) and often **Alarms & reminders** for exact `zonedSchedule` times.
   Some OEMs (Xiaomi, Motorola, …) delay background alarms unless battery
-  optimization is disabled for ClassGrid. Only init/channel setup is shipped;
-  planner-driven `zonedSchedule` / cancel must be added before reminders fire.
+  optimization is disabled for ClassGrid. On **Linux desktop**, scheduled
+  alarms may not fire until the platform plugin supports `zonedSchedule`; use
+  Android for reliable reminders.
 
 ## Conventions
 
@@ -910,7 +928,8 @@ via Play Console or sideload. Backend/catalog deploy is shared with web.
   [src/pages/EmptyLectureHalls.jsx](src/pages/EmptyLectureHalls.jsx),
   [src/utils/occupiedRoomsApi.js](src/utils/occupiedRoomsApi.js),
   [server/src/occupiedRooms.js](server/src/occupiedRooms.js), table
-  `occupied_rooms`. Mark by clicking a green room chip (login required).
+  `occupied_rooms`. Shared logic in `emptyHalls.js` / `empty_halls.dart`.
+  Date + time pickers; room name → weekly schedule; **Mark** for manual occupancy.
 - **Touch academic calendar (holidays/swaps):** shared
   [src/utils/semesterSchedule.js](src/utils/semesterSchedule.js); modal
   [src/components/AcademicCalendar/AcademicCalendarButton.jsx](src/components/AcademicCalendar/AcademicCalendarButton.jsx)

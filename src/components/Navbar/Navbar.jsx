@@ -12,7 +12,7 @@ function initialsFromName(name) {
 const NAV_ITEMS = [
     { to: '/', end: true, label: 'Plan' },
     { to: '/course-explorer', label: 'Courses' },
-    { to: '/empty-halls', label: 'Empty halls' },
+    { to: '/rooms', label: 'Rooms' },
     { to: '/calendar', label: 'Calendar' },
 ];
 

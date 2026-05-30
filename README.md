@@ -75,7 +75,7 @@ Register a localhost redirect URI with the IdP (e.g. `http://localhost:4000/auth
 
 ### Android app (Flutter)
 
-Native client in [app/](app/) with bottom tabs for **Plan**, **Courses**, **Empty halls**, and **Calendar**. Business logic in `app/lib/core/` mirrors the web utilities; the course catalog is fetched from `GET /api/catalog` (not bundled in the APK).
+Native client in [app/](app/) with bottom tabs for **Plan**, **Courses**, **Rooms**, and **Calendar** (empty-hall finder opened from Rooms). Business logic in `app/lib/core/` mirrors the web utilities; the course catalog is fetched from `GET /api/catalog` (not bundled in the APK).
 
 **Requirements:** Flutter 3 / Dart 3.10+ ([install Flutter](https://docs.flutter.dev/get-started/install)).
 
