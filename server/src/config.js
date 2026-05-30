@@ -47,6 +47,9 @@ const config = {
     catalogPath: (process.env.CATALOG_PATH
         || path.join(repoRoot, 'src', 'courses.json')).trim(),
 
+    courseStudentsPath: (process.env.COURSE_STUDENTS_PATH
+        || path.join(repoRoot, 'src', 'courseStudents.json')).trim(),
+
     databaseUrl: (process.env.DATABASE_URL || '').trim() || null,
 
     // Custom URL scheme for the Flutter app deep link after OAuth

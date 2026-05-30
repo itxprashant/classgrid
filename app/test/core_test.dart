@@ -5,7 +5,9 @@ import 'package:classgrid/core/clashes.dart';
 import 'package:classgrid/core/semester_schedule.dart';
 import 'package:classgrid/core/calendar_events.dart';
 import 'package:classgrid/core/ics.dart';
+import 'package:classgrid/core/roster.dart';
 import 'package:classgrid/models/academic_day.dart';
+import 'package:classgrid/models/enrolled_student.dart';
 import 'package:classgrid/models/plan.dart';
 import 'package:classgrid/models/session.dart';
 
@@ -191,6 +193,21 @@ void main() {
       expect(ics.contains('\r\n'), true);
       // CRLF line endings throughout.
       expect(ics.endsWith('\r\n'), true);
+    });
+  });
+
+  group('branchCounts', () {
+    test('groups by kerberos prefix', () {
+      const students = [
+        EnrolledStudent(id: 'cs120001', name: 'A'),
+        EnrolledStudent(id: 'cs120002', name: 'B'),
+        EnrolledStudent(id: 'mt120001', name: 'C'),
+      ];
+      final rows = branchCounts(students);
+      expect(rows.length, 2);
+      expect(rows[0].branch, 'CS1');
+      expect(rows[0].count, 2);
+      expect(rows[1].branch, 'MT1');
     });
   });
 }

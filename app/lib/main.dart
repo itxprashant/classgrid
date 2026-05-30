@@ -5,6 +5,7 @@ import 'api/api_client.dart';
 import 'api/calendar_events_api.dart';
 import 'api/occupied_rooms_api.dart';
 import 'api/personal_events_api.dart';
+import 'api/courses_api.dart';
 import 'api/planner_api.dart';
 import 'state/auth_provider.dart';
 import 'state/catalog_provider.dart';
@@ -62,6 +63,7 @@ class ClassGridApp extends StatelessWidget {
         Provider<CalendarEventsApi>.value(value: CalendarEventsApi(apiClient)),
         Provider<PersonalEventsApi>.value(value: PersonalEventsApi(apiClient)),
         Provider<OccupiedRoomsApi>.value(value: OccupiedRoomsApi(apiClient)),
+        Provider<CoursesApi>.value(value: CoursesApi(apiClient)),
         ChangeNotifierProvider<CatalogProvider>.value(value: catalog),
         ChangeNotifierProvider<AuthProvider>.value(value: auth),
         ChangeNotifierProvider<PlannerStore>.value(value: planner),

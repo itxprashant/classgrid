@@ -182,22 +182,24 @@ Refresh the data files below from the repo root, then deploy (see [Course catalo
     ```bash
     python3 scripts/sync_venues.py
     ```
-3. **Update student course registrations** ([src/studentCourses.json](src/studentCourses.json) + [src/courseStudents.json](src/courseStudents.json))
+3. **Update student course registrations** ([src/studentCourses.json](src/studentCourses.json), [src/courseStudents.json](src/courseStudents.json))
   - Edit `SEMESTER_PREFIX` in [scripts/fetch_student_courses.js](scripts/fetch_student_courses.js) (e.g. `'2601-'` for Sem 2601).
   - Run:
     ```bash
     node scripts/fetch_student_courses.js
     ```
-  - These files are large (multi-MB) when populated. The repo ships **stubs** (a single sample student) so the bundle stays small. Don't commit the regenerated blobs unless you are intentionally refreshing semester data.
+  - These files are large (multi-MB) when populated. The repo ships **stubs** so the bundle stays small. Don't commit regenerated blobs unless you are intentionally refreshing semester data.
+  - `studentCourses.json` → OAuth auto-fetch (`GET /api/me/courses`). `courseStudents.json` → course rosters (`GET /api/courses/:code/students`; web bundle + Android API).
 4. **Update semester labels in the planner**
   - Web: in [src/pages/Generator.jsx](src/pages/Generator.jsx) bump `SEMESTER_LABEL`, `SEMESTER_START`, and `SEMESTER_END`.
   - Android: match the same window in [app/lib/core/semester_schedule.dart](app/lib/core/semester_schedule.dart) and [app/lib/core/ics.dart](app/lib/core/ics.dart).
 5. **Deploy**
   - **Web catalog** (bundled JSON): `./deploy.sh --static`
-  - **Backend catalog** (`GET /api/catalog` for Android) **+ enrollment data**: `./deploy.sh --api` — uploads `src/courses.json` and restarts the API. Override paths if needed:
+  - **Backend catalog** (`GET /api/catalog` for Android) **+ enrollment + roster data**: `./deploy.sh --api` — uploads `src/courses.json`, `src/studentCourses.json`, and `src/courseStudents.json`, then restarts the API. Override paths if needed:
     ```bash
     CATALOG_DATA_SRC=/path/to/courses.json \
     STUDENT_DATA_SRC=/path/to/populated/studentCourses.json \
+    COURSE_STUDENTS_DATA_SRC=/path/to/courseStudents.json \
     ./deploy.sh --api
     ```
   - **Both:** `./deploy.sh`

@@ -38,6 +38,7 @@ API_PORT="${API_PORT:-4500}"
 
 STUDENT_DATA_SRC="${STUDENT_DATA_SRC:-${SCRIPT_DIR}/src/studentCourses.json}"
 CATALOG_DATA_SRC="${CATALOG_DATA_SRC:-${SCRIPT_DIR}/src/courses.json}"
+COURSE_STUDENTS_DATA_SRC="${COURSE_STUDENTS_DATA_SRC:-${SCRIPT_DIR}/src/courseStudents.json}"
 
 SSH=()
 RSYNC_SSH=""
@@ -90,6 +91,7 @@ SESSION_SECRET=
 FRONTEND_ORIGIN=https://${DEPLOY_DOMAIN}
 STUDENT_COURSES_PATH=${REMOTE_API_DIR}/data/studentCourses.json
 CATALOG_PATH=${REMOTE_API_DIR}/data/courses.json
+COURSE_STUDENTS_PATH=${REMOTE_API_DIR}/data/courseStudents.json
 EOF
         remote "sudo chmod 640 ${API_ENV_FILE} && sudo chown root:${DEPLOY_USER} ${API_ENV_FILE}"
         echo "Created ${API_ENV_FILE} with placeholders. Edit it on the server before starting."
@@ -217,6 +219,15 @@ deploy_api() {
             "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/data/courses.json"
     else
         echo "Skipping catalog upload (file not found: ${CATALOG_DATA_SRC})."
+    fi
+
+    if [[ -f "$COURSE_STUDENTS_DATA_SRC" ]]; then
+        echo "Uploading courseStudents roster from ${COURSE_STUDENTS_DATA_SRC} ..."
+        rsync -avz -e "$RSYNC_SSH" \
+            "$COURSE_STUDENTS_DATA_SRC" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/data/courseStudents.json"
+    else
+        echo "Skipping courseStudents upload (file not found: ${COURSE_STUDENTS_DATA_SRC})."
     fi
 
     echo "Installing API deps and restarting service..."

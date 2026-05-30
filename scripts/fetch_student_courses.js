@@ -5,7 +5,7 @@ const path = require('path');
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const BASE_URL = 'https://ldapweb.iitd.ac.in/LDAP/courses';
-const SEMESTER_PREFIX = '2502-';
+const SEMESTER_PREFIX = '2601-';
 const OUTPUT_FILE = path.join(__dirname, '../src/studentCourses.json');
 
 async function fetchCourses() {
