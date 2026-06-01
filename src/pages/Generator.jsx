@@ -28,6 +28,10 @@ function toMinutes(t) {
 
 // Semester metadata is sourced from src/utils/semesterSchedule.js so the
 // planner, free-room finder and ICS export all share one calendar.
+const ANDROID_APK_URL =
+    'https://drive.google.com/file/d/1_3fPAEBmWddY7HQ18oXbgiOwQSYJdr3I/view?usp=sharing';
+const ANDROID_APP_VERSION = '1.0.2';
+
 const SEMESTER_LABEL = SEMESTER.label; // e.g. "Semester 1, 2026–2027"
 const SEMESTER_START = parseDateKey(SEMESTER.classesStart); // Commencement of classes
 const SEMESTER_END = parseDateKey(SEMESTER.lastTeachingDay); // Last teaching day
@@ -611,6 +615,42 @@ export default function Generator() {
                     </div>
                 </div>
             </header>
+
+            <aside className="gen__android" aria-labelledby="gen-android-title">
+                <div className="gen__android-body">
+                    <div className="gen__android-copy">
+                        <div className="gen__eyebrow">Mobile</div>
+                        <p id="gen-android-title" className="gen__android-title">
+                            ClassGrid for Android
+                        </p>
+                        <ul className="gen__android-list">
+                            <li>Smooth Android experience with your weekly/monthly schedule</li>
+                            <li>Courses, Calendar, rooms, and reminders</li>
+                        </ul>
+                    </div>
+                    <div className="gen__android-phone" aria-hidden="true">
+                        <span className="gen__android-phone-notch" />
+                        <span className="gen__android-phone-screen" />
+                    </div>
+                    <a
+                        href={ANDROID_APK_URL}
+                        className="gen__android-btn"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <span className="gen__android-btn-meta">
+                            <strong>Android build</strong>
+                            v{ANDROID_APP_VERSION} · sideload
+                        </span>
+                        <span className="gen__android-btn-action">
+                            Get APK
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </span>
+                    </a>
+                </div>
+            </aside>
 
             <div className="gen__toolbar">
                 <button

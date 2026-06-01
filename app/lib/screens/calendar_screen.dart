@@ -24,6 +24,8 @@ import '../widgets/common.dart';
 import '../widgets/event_form_sheet.dart';
 import '../widgets/reminder_toggle.dart';
 
+enum _CalendarViewMode { month, week }
+
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
@@ -33,8 +35,10 @@ class CalendarScreen extends StatefulWidget {
 
 class _CalendarScreenState extends State<CalendarScreen> {
   late DateTime _month; // first day of the visible month
+  late DateTime _weekAnchor; // any day in the visible week
+  _CalendarViewMode _viewMode = _CalendarViewMode.month;
   int _slideDirection = 1; // 1 = forward, -1 = back (for slide animation)
-  double _monthSwipeDx = 0;
+  double _periodSwipeDx = 0;
   List<CalendarEvent> _shared = [];
   List<CalendarEvent> _personal = [];
   List<String> _enrolledCodes = [];
@@ -48,6 +52,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
     super.initState();
     final now = DateTime.now();
     _month = DateTime(now.year, now.month, 1);
+    _weekAnchor = DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime _startOfWeek(DateTime date) {
+    final d = DateTime(date.year, date.month, date.day);
+    final offset = (d.weekday - DateTime.monday) % 7;
+    return d.subtract(Duration(days: offset));
+  }
+
+  List<DateTime> _weekDates() {
+    final start = _startOfWeek(_weekAnchor);
+    return List.generate(7, (i) => start.add(Duration(days: i)));
+  }
+
+  List<DateTime> _visibleDays() =>
+      _viewMode == _CalendarViewMode.week ? _weekDates() : _gridDays();
+
+  String _fmtWeekRange(DateTime start, DateTime end) {
+    final sameMonth = start.month == end.month && start.year == end.year;
+    final startStr = DateFormat('d MMM').format(start);
+    final endStr = DateFormat(sameMonth ? 'd' : 'd MMM').format(end);
+    return '$startStr – $endStr';
   }
 
   @override
@@ -72,7 +98,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   List<DateTime> _gridDays() => _gridDaysFor(_month);
 
   Future<void> _reload() async {
-    final days = _gridDays();
+    final days = _visibleDays();
     final from = formatDateKey(days.first);
     final to = formatDateKey(days.last);
 
@@ -138,16 +164,59 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _reload();
   }
 
-  void _onMonthSwipeEnd(DragEndDetails details) {
+  void _changePeriod(int delta) {
+    if (delta == 0) return;
+    if (_viewMode == _CalendarViewMode.week) {
+      setState(() {
+        _slideDirection = delta > 0 ? 1 : -1;
+        _weekAnchor = _startOfWeek(_weekAnchor).add(Duration(days: 7 * delta));
+      });
+      _reload();
+      return;
+    }
+    _changeMonth(delta);
+  }
+
+  void _goToday() {
+    final now = DateTime.now();
+    setState(() {
+      _weekAnchor = DateTime(now.year, now.month, now.day);
+      _month = DateTime(now.year, now.month, 1);
+    });
+    _reload();
+  }
+
+  void _switchView(_CalendarViewMode mode) {
+    if (mode == _viewMode) return;
+    if (mode == _CalendarViewMode.week) {
+      final now = DateTime.now();
+      final inMonth = now.year == _month.year && now.month == _month.month;
+      setState(() {
+        _weekAnchor = inMonth
+            ? DateTime(now.year, now.month, now.day)
+            : DateTime(_month.year, _month.month, 1);
+        _viewMode = mode;
+      });
+    } else {
+      final rep = _startOfWeek(_weekAnchor).add(const Duration(days: 3));
+      setState(() {
+        _month = DateTime(rep.year, rep.month, 1);
+        _viewMode = mode;
+      });
+    }
+    _reload();
+  }
+
+  void _onPeriodSwipeEnd(DragEndDetails details) {
     const minDragPx = 56.0;
     const velocityThreshold = 350.0;
     final v = details.primaryVelocity ?? 0;
-    if (_monthSwipeDx <= -minDragPx || v < -velocityThreshold) {
-      _changeMonth(1);
-    } else if (_monthSwipeDx >= minDragPx || v > velocityThreshold) {
-      _changeMonth(-1);
+    if (_periodSwipeDx <= -minDragPx || v < -velocityThreshold) {
+      _changePeriod(1);
+    } else if (_periodSwipeDx >= minDragPx || v > velocityThreshold) {
+      _changePeriod(-1);
     }
-    _monthSwipeDx = 0;
+    _periodSwipeDx = 0;
   }
 
   Map<String, List<CalendarEvent>> _eventsByDate() {
@@ -283,11 +352,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     final planner = context.watch<PlannerStore>();
     final byDate = _eventsByDate();
-    final days = _gridDays();
+    final days = _visibleDays();
+    final weekDates = _weekDates();
     final classesByDate = _showClasses
         ? buildClassesByDate(days, planner.selectedCourses, planner.timetableData)
         : const <String, List<PlannerClass>>{};
-    final monthKey = '${_month.year}-${_month.month}';
+    final periodKey = _viewMode == _CalendarViewMode.week
+        ? '${weekDates.first.year}-${weekDates.first.month}-${weekDates.first.day}'
+        : '${_month.year}-${_month.month}';
+    final headerTitle = _viewMode == _CalendarViewMode.week
+        ? _fmtWeekRange(weekDates.first, weekDates.last)
+        : DateFormat('MMMM yyyy').format(_month);
 
     return RefreshIndicator(
       onRefresh: _reload,
@@ -295,16 +370,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
         children: [
           PageHeader(
             eyebrow: 'Calendar',
-            title: DateFormat('MMMM yyyy').format(_month),
+            title: headerTitle,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  onPressed: () => _changeMonth(-1),
+                  onPressed: () => _changePeriod(-1),
                   icon: const Icon(Icons.chevron_left),
                 ),
                 IconButton(
-                  onPressed: () => _changeMonth(1),
+                  onPressed: () => _changePeriod(1),
                   icon: const Icon(Icons.chevron_right),
                 ),
               ],
@@ -330,6 +405,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
           ),
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Row(
+              children: [
+                SegmentedButton<_CalendarViewMode>(
+                  segments: const [
+                    ButtonSegment(value: _CalendarViewMode.month, label: Text('Month')),
+                    ButtonSegment(value: _CalendarViewMode.week, label: Text('Week')),
+                  ],
+                  selected: {_viewMode},
+                  onSelectionChanged: (s) => _switchView(s.first),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: _goToday,
+                  child: const Text('Today'),
+                ),
+              ],
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -343,7 +438,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
           if (_error != null)
             StatusBanner(kind: 'err', text: _error!, onClose: () => setState(() => _error = null)),
           if (_loading) const LinearProgressIndicator(minHeight: 2),
-          _animatedMonth(byDate, classesByDate, monthKey),
+          if (_viewMode == _CalendarViewMode.month)
+            _animatedMonth(byDate, classesByDate, periodKey)
+          else
+            _animatedWeek(byDate, classesByDate, periodKey),
           const SizedBox(height: 24),
         ],
       ),
@@ -387,9 +485,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _weekdayHeader(),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragUpdate: (details) => _monthSwipeDx += details.delta.dx,
-          onHorizontalDragEnd: _onMonthSwipeEnd,
-          onHorizontalDragCancel: () => _monthSwipeDx = 0,
+          onHorizontalDragUpdate: (details) => _periodSwipeDx += details.delta.dx,
+          onHorizontalDragEnd: _onPeriodSwipeEnd,
+          onHorizontalDragCancel: () => _periodSwipeDx = 0,
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 280),
             switchInCurve: Curves.easeOutCubic,
@@ -429,6 +527,103 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  Widget _animatedWeek(
+    Map<String, List<CalendarEvent>> byDate,
+    Map<String, List<PlannerClass>> classesByDate,
+    String weekKey,
+  ) {
+    final days = _weekDates();
+    const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: (details) => _periodSwipeDx += details.delta.dx,
+      onHorizontalDragEnd: _onPeriodSwipeEnd,
+      onHorizontalDragCancel: () => _periodSwipeDx = 0,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 280),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeOutCubic,
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(
+            alignment: Alignment.topCenter,
+            clipBehavior: Clip.hardEdge,
+            children: [
+              ...previousChildren,
+              if (currentChild != null) currentChild,
+            ],
+          );
+        },
+        transitionBuilder: (child, animation) {
+          final key = child.key as ValueKey<String>?;
+          final isEntering = key?.value == weekKey;
+          final dir = _slideDirection.toDouble();
+          final offset = Tween<Offset>(
+            begin: isEntering ? Offset(dir, 0) : Offset.zero,
+            end: isEntering ? Offset.zero : Offset(-dir, 0),
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          ));
+          return ClipRect(
+            child: SlideTransition(position: offset, child: child),
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey(weekKey),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked = constraints.maxWidth < 600;
+              if (stacked) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < days.length; i++)
+                        _WeekDayColumn(
+                          day: days[i],
+                          weekdayLabel: weekdayLabels[i],
+                          academic: getAcademicDay(days[i]),
+                          events: byDate[formatDateKey(days[i])] ?? const [],
+                          classes: classesByDate[formatDateKey(days[i])] ?? const [],
+                          onDayTap: () => _onDayTap(days[i]),
+                          onEventTap: (e) => _openForm(EventDraft.fromEvent(e)),
+                          stacked: true,
+                        ),
+                    ],
+                  ),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < days.length; i++)
+                        Expanded(
+                          child: _WeekDayColumn(
+                            day: days[i],
+                            weekdayLabel: weekdayLabels[i],
+                            academic: getAcademicDay(days[i]),
+                            events: byDate[formatDateKey(days[i])] ?? const [],
+                            classes: classesByDate[formatDateKey(days[i])] ?? const [],
+                            onDayTap: () => _onDayTap(days[i]),
+                            onEventTap: (e) => _openForm(EventDraft.fromEvent(e)),
+                            stacked: false,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _monthGrid(
     List<DateTime> days,
     DateTime visibleMonth,
@@ -464,6 +659,263 @@ class _CalendarScreenState extends State<CalendarScreen> {
             onEventTap: (e) => _openForm(EventDraft.fromEvent(e)),
           );
         },
+      ),
+    );
+  }
+}
+
+class _WeekDayColumn extends StatelessWidget {
+  const _WeekDayColumn({
+    required this.day,
+    required this.weekdayLabel,
+    required this.academic,
+    required this.events,
+    required this.classes,
+    required this.onDayTap,
+    required this.onEventTap,
+    required this.stacked,
+  });
+
+  final DateTime day;
+  final String weekdayLabel;
+  final AcademicDay academic;
+  final List<CalendarEvent> events;
+  final List<PlannerClass> classes;
+  final VoidCallback onDayTap;
+  final void Function(CalendarEvent) onEventTap;
+  final bool stacked;
+
+  Color? get _dayTint {
+    switch (academic.type) {
+      case AcademicType.holiday:
+        return T.successTint;
+      case AcademicType.swapped:
+        return T.accentTint;
+      case AcademicType.breakPeriod:
+        return isExamPeriod(academic.name) ? T.dangerTint : T.surfaceSunk;
+      case AcademicType.weekend:
+        return T.surfaceSunk;
+      default:
+        return null;
+    }
+  }
+
+  ({Color tint, Color ink})? get _academicChipColors {
+    switch (academic.type) {
+      case AcademicType.holiday:
+        return (tint: T.successTint, ink: T.successInk);
+      case AcademicType.swapped:
+        return (tint: T.tutorialTint, ink: T.tutorialInk);
+      case AcademicType.breakPeriod:
+        return isExamPeriod(academic.name)
+            ? (tint: T.dangerTint, ink: T.danger)
+            : (tint: T.surfaceSunk, ink: T.ink3);
+      default:
+        return null;
+    }
+  }
+
+  List<({String kind, String sortKey, Object data})> _sortedItems() {
+    final items = <({String kind, String sortKey, Object data})>[
+      for (final c in classes) (kind: 'class', sortKey: c.start, data: c),
+      for (final e in events) (kind: 'event', sortKey: eventSortKey(e), data: e),
+    ];
+    items.sort((a, b) => a.sortKey.compareTo(b.sortKey));
+    return items;
+  }
+
+  (Color tint, Color ink) _classColors(String kind) {
+    switch (kind) {
+      case 'tutorial':
+        return (T.tutorialTint, T.tutorialInk);
+      case 'lab':
+        return (T.labTint, T.labInk);
+      default:
+        return (T.lectureTint, T.lectureInk);
+    }
+  }
+
+  Widget _weekChipForItem(({String kind, String sortKey, Object data}) item) {
+    if (item.kind == 'class') {
+      final c = item.data as PlannerClass;
+      final colors = _classColors(c.kind);
+      return _WeekChip(
+        text: '${c.courseCode} ${c.kindLabel} ${c.timeLabel}',
+        tint: colors.$1,
+        ink: colors.$2,
+      );
+    }
+    final e = item.data as CalendarEvent;
+    final schedule = formatEventSchedule(e);
+    final label = e.isPersonal
+        ? 'You · ${e.title}'
+        : (e.courseCode != null && e.courseCode!.isNotEmpty)
+            ? '${e.courseCode}: ${e.title}'
+            : e.title;
+    return _WeekChip(
+      text: schedule.isEmpty ? label : '$label · $schedule',
+      tint: e.isPersonal ? T.labTint : T.accentTint,
+      ink: e.isPersonal ? T.labInk : T.accentInk,
+      onTap: () => onEventTap(e),
+    );
+  }
+
+  Widget _weekItemsBody(List<({String kind, String sortKey, Object data})> items) {
+    if (items.isEmpty) {
+      return SizedBox(
+        height: stacked ? 44 : null,
+        width: double.infinity,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onDayTap,
+            child: Center(child: Icon(Icons.add, size: 20, color: T.ink4)),
+          ),
+        ),
+      );
+    }
+    final chips = [for (final item in items) _weekChipForItem(item)];
+    if (stacked) {
+      return Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: chips,
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(8),
+      children: chips,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isToday = formatDateKey(day) == formatDateKey(DateTime.now());
+    final items = _sortedItems();
+    final academicLabel = academicCellLabel(academic);
+    final academicColors = _academicChipColors;
+
+    final decoration = BoxDecoration(
+      color: _dayTint ?? T.surface,
+      border: Border.all(
+        color: isToday ? T.accent : T.line,
+        width: isToday ? 1.5 : 1,
+      ),
+      borderRadius: BorderRadius.circular(stacked ? T.r : T.rSm),
+    );
+
+    final column = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    weekdayLabel.toUpperCase(),
+                    style: AppText.mono(
+                      size: T.fs12,
+                      color: T.ink3,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${day.day}',
+                    style: AppText.mono(
+                      size: T.fs16,
+                      color: isToday ? T.accentInk : T.ink,
+                      weight: isToday ? FontWeight.w700 : FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: onDayTap,
+                    icon: Icon(Icons.add, size: 18, color: T.ink3),
+                    tooltip: 'Add event',
+                  ),
+                ],
+              ),
+              if (academicLabel != null && academicColors != null) ...[
+                const SizedBox(height: 6),
+                _WeekChip(
+                  text: academicLabel,
+                  tint: academicColors.tint,
+                  ink: academicColors.ink,
+                  maxLines: 2,
+                ),
+              ],
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        if (stacked)
+          _weekItemsBody(items)
+        else
+          Expanded(child: _weekItemsBody(items)),
+      ],
+    );
+
+    if (stacked) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        constraints: const BoxConstraints(minHeight: 120),
+        decoration: decoration,
+        child: column,
+      );
+    }
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 320),
+      decoration: decoration,
+      child: column,
+    );
+  }
+}
+
+class _WeekChip extends StatelessWidget {
+  const _WeekChip({
+    required this.text,
+    required this.tint,
+    required this.ink,
+    this.onTap,
+    this.maxLines = 3,
+  });
+
+  final String text;
+  final Color tint;
+  final Color ink;
+  final VoidCallback? onTap;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: tint,
+          borderRadius: BorderRadius.circular(T.rSm),
+          border: Border.all(color: T.line.withValues(alpha: 0.6)),
+        ),
+        child: Text(
+          text,
+          maxLines: maxLines,
+          overflow: TextOverflow.ellipsis,
+          style: AppText.sans(size: T.fs12, color: ink, height: 1.25),
+        ),
       ),
     );
   }

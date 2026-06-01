@@ -55,6 +55,10 @@ const config = {
     // Custom URL scheme for the Flutter app deep link after OAuth
     // (classgrid://auth/callback?token=…). Override only if the app scheme changes.
     mobileAppScheme: (process.env.MOBILE_APP_SCHEME || 'classgrid').trim(),
+
+    // Minimum Flutter APK (GET /api/app/version). Edited in server/data/android-version.json.
+    androidVersionPath: (process.env.ANDROID_VERSION_PATH
+        || path.join(__dirname, '..', 'data', 'android-version.json')).trim(),
 };
 
 config.isProd = config.nodeEnv === 'production';

@@ -126,9 +126,10 @@ class _RoomsScreenState extends State<RoomsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: StatusBanner(
               kind: 'warn',
-              text: 'Venues are not in the catalog yet. Run sync_venues.py and refresh the API catalog.',
+              text: 'Venues are not in the catalog yet. Wait for Room Allotment Chart of the current semester to be released.',
             ),
           ),
+          
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: TextField(
@@ -190,8 +191,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
   Widget _buildingChip(String label, bool selected, VoidCallback onTap) => Padding(
         padding: const EdgeInsets.only(right: 6),
-        child: ChoiceChip(
-          label: Text(label, style: AppText.mono(size: T.fs12)),
+        child: AppChoiceChip(
+          label: label,
           selected: selected,
           onSelected: (_) => onTap(),
         ),

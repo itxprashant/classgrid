@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api/reminders_api.dart';
 import '../core/planner_classes.dart';
 import '../core/reminder_schedule.dart';
 import '../core/semester_schedule.dart';
@@ -30,11 +31,25 @@ class ReminderEntry {
         'eventStart': eventStart.toIso8601String(),
       };
 
+  Map<String, dynamic> toApiJson() => {
+        'key': key,
+        'title': title,
+        'body': body,
+        'eventStart': eventStart.toUtc().toIso8601String(),
+      };
+
   factory ReminderEntry.fromJson(Map<String, dynamic> json) => ReminderEntry(
         key: json['key'] as String,
         title: json['title'] as String,
         body: json['body'] as String,
         eventStart: DateTime.parse(json['eventStart'] as String),
+      );
+
+  factory ReminderEntry.fromApiJson(Map<String, dynamic> json) => ReminderEntry(
+        key: json['key'] as String,
+        title: json['title'] as String,
+        body: json['body'] as String,
+        eventStart: DateTime.parse(json['eventStart'] as String).toLocal(),
       );
 }
 
@@ -46,36 +61,104 @@ enum ReminderToggleResult {
   failed,
 }
 
-/// Enabled reminders persisted locally; schedules via [ClassNotificationService].
+/// Reminder subscriptions: guests use local prefs; signed-in users sync via [RemindersApi].
 class ReminderStore extends ChangeNotifier {
-  ReminderStore(this._prefs, this._notifications);
+  ReminderStore(
+    this._prefs,
+    this._notifications, {
+    RemindersApi? remindersApi,
+  }) : _remindersApi = remindersApi;
 
   final SharedPreferences _prefs;
   final ClassNotificationService _notifications;
+  final RemindersApi? _remindersApi;
 
   static const _storageKey = 'cg_reminders';
 
   final Map<String, ReminderEntry> _entries = {};
   bool _loaded = false;
+  bool _syncing = false;
+  bool _useApi = false;
 
   Future<void> load() async {
     _entries.clear();
-    try {
-      final raw = _prefs.getString(_storageKey);
-      if (raw != null) {
-        final parsed = jsonDecode(raw);
-        if (parsed is List) {
-          for (final item in parsed) {
-            if (item is! Map) continue;
-            final entry = ReminderEntry.fromJson(Map<String, dynamic>.from(item));
-            _entries[entry.key] = entry;
-          }
-        }
-      }
-    } catch (_) {}
+    _useApi = false;
+    await _loadFromPrefs();
     _loaded = true;
     await _rescheduleAll();
     notifyListeners();
+  }
+
+  /// Call when auth state changes (after [AuthProvider.loading] is false).
+  Future<void> onAuthChanged({required bool isLoggedIn}) async {
+    if (!_loaded) await load();
+    if (_syncing) return;
+
+    if (isLoggedIn && _remindersApi != null) {
+      await _syncFromApi();
+      return;
+    }
+
+    if (_useApi) {
+      _useApi = false;
+      _entries.clear();
+      await _loadFromPrefs();
+      await _rescheduleAll();
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadFromPrefs() async {
+    try {
+      final raw = _prefs.getString(_storageKey);
+      if (raw == null) return;
+      final parsed = jsonDecode(raw);
+      if (parsed is! List) return;
+      for (final item in parsed) {
+        if (item is! Map) continue;
+        final entry = ReminderEntry.fromJson(Map<String, dynamic>.from(item));
+        _entries[entry.key] = entry;
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _syncFromApi() async {
+    final api = _remindersApi;
+    if (api == null) return;
+
+    _syncing = true;
+    try {
+      final localSnapshot = _entries.values.toList();
+      var server = await api.fetchReminders();
+
+      if (server.isEmpty && localSnapshot.isNotEmpty) {
+        server = await api.replaceReminders(localSnapshot);
+      } else if (localSnapshot.isNotEmpty) {
+        final serverKeys = server.map((e) => e.key).toSet();
+        final toUpload =
+            localSnapshot.where((e) => !serverKeys.contains(e.key)).toList();
+        for (final entry in toUpload) {
+          try {
+            await api.upsertReminder(entry);
+          } catch (_) {}
+        }
+        if (toUpload.isNotEmpty) {
+          server = await api.fetchReminders();
+        }
+      }
+
+      _entries
+        ..clear()
+        ..addEntries(server.map((e) => MapEntry(e.key, e)));
+      _useApi = true;
+      await _persist();
+      await _rescheduleAll();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[ReminderStore] API sync failed: $e');
+    } finally {
+      _syncing = false;
+    }
   }
 
   bool isEnabled(String key) => _entries.containsKey(key);
@@ -137,6 +220,19 @@ class ReminderStore extends ChangeNotifier {
     if (!ok) return ReminderToggleResult.failed;
 
     _entries[key] = entry;
+
+    final api = _remindersApi;
+    if (_useApi && api != null) {
+      try {
+        await api.upsertReminder(entry);
+      } catch (e) {
+        debugPrint('[ReminderStore] upsert failed: $e');
+        await _notifications.cancelReminder(key);
+        _entries.remove(key);
+        return ReminderToggleResult.failed;
+      }
+    }
+
     await _persist();
     notifyListeners();
     return ReminderToggleResult.enabled;
@@ -145,6 +241,16 @@ class ReminderStore extends ChangeNotifier {
   Future<void> _disable(String key) async {
     await _notifications.cancelReminder(key);
     _entries.remove(key);
+
+    final api = _remindersApi;
+    if (_useApi && api != null) {
+      try {
+        await api.deleteReminder(key);
+      } catch (e) {
+        debugPrint('[ReminderStore] delete failed: $e');
+      }
+    }
+
     await _persist();
     notifyListeners();
   }

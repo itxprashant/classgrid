@@ -60,10 +60,7 @@ export default function RoomSchedules() {
             {!catalogHasVenues && (
                 <div className="rs__notice panel" role="status">
                     <p>
-                        <strong>Venues are not in the catalog yet.</strong> Run{' '}
-                        <code className="mono">python3 scripts/sync_venues.py</code> from the repo root,
-                        then rebuild or redeploy so <code className="mono">courses.json</code> includes
-                        lecture halls.
+                        <strong>Venues are not in the catalog yet.</strong> Wait for Room Allotment Chart of the current semester to be released.
                     </p>
                 </div>
             )}

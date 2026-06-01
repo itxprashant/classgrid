@@ -126,6 +126,43 @@ class EmptyState extends StatelessWidget {
   }
 }
 
+/// Choice chip with readable label on both selected (dark) and unselected (tint) states.
+class AppChoiceChip extends StatelessWidget {
+  const AppChoiceChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: AppText.mono(
+          size: T.fs12,
+          color: selected ? T.accentFg : T.accentInk,
+        ),
+      ),
+      selected: selected,
+      selectedColor: T.accent,
+      backgroundColor: T.accentTint,
+      side: BorderSide(color: T.accentEdge),
+      checkmarkColor: T.accentFg,
+      labelStyle: AppText.mono(
+        size: T.fs12,
+        color: selected ? T.accentFg : T.accentInk,
+      ),
+      onSelected: onSelected,
+    );
+  }
+}
+
 /// An editorial page header: eyebrow + serif title + optional subtitle.
 class PageHeader extends StatelessWidget {
   const PageHeader({

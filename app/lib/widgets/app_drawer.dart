@@ -21,11 +21,13 @@ class AppDrawer extends StatelessWidget {
     required this.selectedIndex,
     required this.onTabSelected,
     this.onOpenEmptyHalls,
+    this.onOpenAbout,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
   final VoidCallback? onOpenEmptyHalls;
+  final VoidCallback? onOpenAbout;
 
   static const _tabs = [
     _NavItem(0, 'Plan', Icons.grid_view_outlined, Icons.grid_view),
@@ -98,6 +100,24 @@ class AppDrawer extends StatelessWidget {
                     onTap: () {
                       Navigator.pop(context);
                       onOpenEmptyHalls?.call();
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Divider(height: 1, indent: 20, endIndent: 20, color: T.line),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                    child: Text(
+                      'App',
+                      style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 0.12),
+                    ),
+                  ),
+                  _DrawerTile(
+                    label: 'About',
+                    icon: Icons.info_outline,
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpenAbout?.call();
                     },
                   ),
                 ],

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/calendar_events.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import 'common.dart';
 
 class CourseOption {
   final String courseCode;
@@ -139,8 +140,8 @@ class _EventFormSheetState extends State<EventFormSheet> {
                 spacing: 8,
                 children: [
                   for (final s in kEventSchedules)
-                    ChoiceChip(
-                      label: Text(kScheduleLabels[s] ?? s),
+                    AppChoiceChip(
+                      label: kScheduleLabels[s] ?? s,
                       selected: d.schedule == s,
                       onSelected: (_) => setState(() => d.schedule = s),
                     ),

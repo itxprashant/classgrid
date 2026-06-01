@@ -46,6 +46,11 @@
     --success-tint: oklch(0.94 0.04 145);
     --success-edge: oklch(0.78 0.08 145);
 
+    /* Personal events (calendar) */
+    --personal-tint: oklch(0.97 0.02 300);
+    --personal-edge: oklch(0.82 0.08 300);
+    --personal-ink: oklch(0.42 0.12 300);
+
     /* Radii */
     --r-sm: 4px;
     --r: 6px;

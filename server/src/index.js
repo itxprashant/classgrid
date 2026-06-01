@@ -11,6 +11,8 @@ const calendarRouter = require('./calendarEvents');
 const plannerRouter = require('./planner');
 const occupiedRoomsRouter = require('./occupiedRooms');
 const personalEventsRouter = require('./personalEvents');
+const appVersionRouter = require('./appVersion');
+const remindersRouter = require('./reminders');
 
 const app = express();
 
@@ -25,6 +27,8 @@ app.use('/api', calendarRouter);
 app.use('/api', plannerRouter);
 app.use('/api', occupiedRoomsRouter);
 app.use('/api', personalEventsRouter);
+app.use('/api', appVersionRouter);
+app.use('/api', remindersRouter);
 
 app.get('/', (req, res) => {
     res.json({ name: 'classgrid-api', ok: true });

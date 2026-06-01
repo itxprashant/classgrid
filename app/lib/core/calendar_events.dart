@@ -50,6 +50,14 @@ String hhmmToInput(String? hhmm) {
 
 String inputToHHMM(String? value) => normalizeHHMM(value) ?? '';
 
+/// Chronological sort key for a day's events. Mirrors `eventSortKey` in MyCalendar.jsx.
+String eventSortKey(CalendarEvent e) {
+  if (e.schedule == 'at') return e.time ?? '0000';
+  if (e.schedule == 'timed') return e.start ?? '0000';
+  if (e.schedule == 'eod') return '2400';
+  return '0000';
+}
+
 /// Human-readable schedule string for an event. Mirrors `formatEventSchedule`.
 String formatEventSchedule(CalendarEvent e) {
   final schedule = kEventSchedules.contains(e.schedule) ? e.schedule : 'fullday';

@@ -143,8 +143,8 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
   Widget _deptChip(String label, bool selected, VoidCallback onTap) => Padding(
         padding: const EdgeInsets.only(right: 6),
-        child: ChoiceChip(
-          label: Text(label, style: AppText.mono(size: T.fs12)),
+        child: AppChoiceChip(
+          label: label,
           selected: selected,
           onSelected: (_) => onTap(),
         ),

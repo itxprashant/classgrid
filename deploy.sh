@@ -39,6 +39,7 @@ API_PORT="${API_PORT:-4500}"
 STUDENT_DATA_SRC="${STUDENT_DATA_SRC:-${SCRIPT_DIR}/src/studentCourses.json}"
 CATALOG_DATA_SRC="${CATALOG_DATA_SRC:-${SCRIPT_DIR}/src/courses.json}"
 COURSE_STUDENTS_DATA_SRC="${COURSE_STUDENTS_DATA_SRC:-${SCRIPT_DIR}/src/courseStudents.json}"
+ANDROID_VERSION_SRC="${ANDROID_VERSION_SRC:-${SCRIPT_DIR}/server/data/android-version.json}"
 
 SSH=()
 RSYNC_SSH=""
@@ -92,6 +93,7 @@ FRONTEND_ORIGIN=https://${DEPLOY_DOMAIN}
 STUDENT_COURSES_PATH=${REMOTE_API_DIR}/data/studentCourses.json
 CATALOG_PATH=${REMOTE_API_DIR}/data/courses.json
 COURSE_STUDENTS_PATH=${REMOTE_API_DIR}/data/courseStudents.json
+ANDROID_VERSION_PATH=${REMOTE_API_DIR}/data/android-version.json
 EOF
         remote "sudo chmod 640 ${API_ENV_FILE} && sudo chown root:${DEPLOY_USER} ${API_ENV_FILE}"
         echo "Created ${API_ENV_FILE} with placeholders. Edit it on the server before starting."
@@ -230,6 +232,15 @@ deploy_api() {
         echo "Skipping courseStudents upload (file not found: ${COURSE_STUDENTS_DATA_SRC})."
     fi
 
+    if [[ -f "$ANDROID_VERSION_SRC" ]]; then
+        echo "Uploading android-version from ${ANDROID_VERSION_SRC} ..."
+        rsync -avz -e "$RSYNC_SSH" \
+            "$ANDROID_VERSION_SRC" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/data/android-version.json"
+    else
+        echo "Skipping android-version upload (file not found: ${ANDROID_VERSION_SRC})."
+    fi
+
     echo "Installing API deps and restarting service..."
     remote "cd ${REMOTE_API_DIR} && npm ci --omit=dev && sudo systemctl restart classgrid-api && sudo systemctl status classgrid-api --no-pager -l | head -n 20"
 }
@@ -265,6 +276,7 @@ case "${1:-}" in
         echo "  SSH_IDENTITY      Path to SSH private key"
         echo "  DEPLOY_DOMAIN     Public site hostname (nginx + certbot + OAuth redirect)"
         echo "  API_PORT          Backend listen port (default: 4500)"
+        echo "  ANDROID_VERSION_SRC  Android minimum version JSON (default: server/data/android-version.json)"
         echo ""
         echo "  (no args)  build + rsync static and API"
         echo "  --setup    configure nginx + certbot + systemd, then deploy"

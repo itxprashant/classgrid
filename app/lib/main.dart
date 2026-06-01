@@ -8,6 +8,7 @@ import 'api/occupied_rooms_api.dart';
 import 'api/personal_events_api.dart';
 import 'api/courses_api.dart';
 import 'api/planner_api.dart';
+import 'api/reminders_api.dart';
 import 'state/auth_provider.dart';
 import 'state/catalog_provider.dart';
 import 'state/planner_store.dart';
@@ -17,6 +18,7 @@ import 'theme/app_theme.dart';
 import 'notifications/class_notification_service.dart';
 import 'screens/home_shell.dart';
 import 'widgets/auth_deep_link_listener.dart';
+import 'widgets/version_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +34,11 @@ Future<void> main() async {
   final apiClient = await ApiClient.create();
   final localStore = await LocalStore.create();
   final prefs = localStore.sharedPreferences;
-  final reminderStore = ReminderStore(prefs, ClassNotificationService.instance);
+  final reminderStore = ReminderStore(
+    prefs,
+    ClassNotificationService.instance,
+    remindersApi: RemindersApi(apiClient),
+  );
   await reminderStore.load();
 
   runApp(ClassGridApp(
@@ -69,6 +75,7 @@ class ClassGridApp extends StatelessWidget {
     auth.addListener(() {
       if (!auth.loading) {
         planner.onUserChanged(auth.user);
+        reminderStore.onAuthChanged(isLoggedIn: auth.isLoggedIn);
       }
     });
     auth.init();
@@ -102,7 +109,10 @@ class ClassGridApp extends StatelessWidget {
               ),
             );
           },
-          home: const HomeShell(),
+          home: VersionGate(
+            apiClient: apiClient,
+            child: const HomeShell(),
+          ),
         ),
       ),
     );

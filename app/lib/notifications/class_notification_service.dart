@@ -14,7 +14,6 @@ class ClassNotificationService {
 
   static const _channelId = 'class_reminders';
   static const _channelName = 'Class reminders';
-
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
 

@@ -11,6 +11,7 @@ import 'package:classgrid/core/empty_halls.dart';
 import 'package:classgrid/core/reminder_schedule.dart';
 import 'package:classgrid/core/room_schedule.dart';
 import 'package:classgrid/core/planner_classes.dart';
+import 'package:classgrid/core/app_version.dart';
 import 'package:classgrid/models/calendar_event.dart';
 import 'package:classgrid/models/course.dart';
 import 'package:classgrid/models/academic_day.dart';
@@ -158,6 +159,37 @@ void main() {
       expect(isDraftScheduleValid(d), false);
       d.end = '1500';
       expect(isDraftScheduleValid(d), true);
+    });
+  });
+
+  group('eventSortKey', () {
+    test('orders timed and at events by start time', () {
+      final at = CalendarEvent(
+        date: '2026-06-02',
+        title: 'Quiz',
+        type: 'quiz',
+        schedule: 'at',
+        time: '1430',
+      );
+      final timed = CalendarEvent(
+        date: '2026-06-02',
+        title: 'Talk',
+        type: 'others',
+        schedule: 'timed',
+        start: '0900',
+        end: '1000',
+      );
+      expect(eventSortKey(timed).compareTo(eventSortKey(at)), lessThan(0));
+    });
+
+    test('eod sorts after timed starts', () {
+      final eod = CalendarEvent(
+        date: '2026-06-02',
+        title: 'Due',
+        type: 'deadline',
+        schedule: 'eod',
+      );
+      expect(eventSortKey(eod), '2400');
     });
   });
 
@@ -388,6 +420,56 @@ void main() {
       expect(rows[0].branch, 'CS1');
       expect(rows[0].count, 2);
       expect(rows[1].branch, 'MT1');
+    });
+  });
+
+  group('appVersionIsBehind', () {
+    test('same version and build is current', () {
+      expect(
+        appVersionIsBehind(
+          installedVersion: '1.0.0',
+          installedBuild: 2,
+          requiredVersion: '1.0.0',
+          requiredBuild: 2,
+        ),
+        isFalse,
+      );
+    });
+
+    test('older build on same version requires update', () {
+      expect(
+        appVersionIsBehind(
+          installedVersion: '1.0.0',
+          installedBuild: 1,
+          requiredVersion: '1.0.0',
+          requiredBuild: 2,
+        ),
+        isTrue,
+      );
+    });
+
+    test('older version name requires update', () {
+      expect(
+        appVersionIsBehind(
+          installedVersion: '1.0.0',
+          installedBuild: 9,
+          requiredVersion: '1.0.1',
+          requiredBuild: 1,
+        ),
+        isTrue,
+      );
+    });
+
+    test('newer install passes', () {
+      expect(
+        appVersionIsBehind(
+          installedVersion: '1.1.0',
+          installedBuild: 1,
+          requiredVersion: '1.0.0',
+          requiredBuild: 99,
+        ),
+        isFalse,
+      );
     });
   });
 }

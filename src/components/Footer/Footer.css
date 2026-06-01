@@ -35,6 +35,12 @@
     display: inline-block;
 }
 
+.footer__version {
+    padding-left: 8px;
+    margin-left: 4px;
+    border-left: 1px solid var(--line);
+}
+
 .footer__credit {
     display: inline-flex;
     gap: 10px;

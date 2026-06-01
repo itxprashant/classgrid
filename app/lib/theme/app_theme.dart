@@ -215,8 +215,12 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: T.accentTint,
+        selectedColor: T.accent,
+        disabledColor: T.paper2,
         side: BorderSide(color: T.accentEdge),
+        checkmarkColor: T.accentFg,
         labelStyle: AppText.mono(size: T.fs12, color: T.accentInk),
+        secondaryLabelStyle: AppText.mono(size: T.fs12, color: T.accentFg),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rSm)),
       ),
       snackBarTheme: SnackBarThemeData(

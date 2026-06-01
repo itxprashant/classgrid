@@ -6,6 +6,7 @@ import '../widgets/app_drawer.dart';
 import '../widgets/profile_button.dart';
 import 'calendar_screen.dart';
 import 'courses_screen.dart';
+import 'about_screen.dart';
 import 'empty_halls_screen.dart';
 import 'plan_screen.dart';
 import 'rooms_screen.dart';
@@ -30,6 +31,12 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _openAbout() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -37,6 +44,7 @@ class _HomeShellState extends State<HomeShell> {
         selectedIndex: _index,
         onTabSelected: (i) => setState(() => _index = i),
         onOpenEmptyHalls: _openEmptyHalls,
+        onOpenAbout: _openAbout,
       ),
       appBar: AppBar(
         titleSpacing: 16,

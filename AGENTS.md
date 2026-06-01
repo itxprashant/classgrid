@@ -122,6 +122,7 @@ Environment overrides (all optional):
 | `API_PORT` | `4500` (must match `PORT` in `/etc/classgrid/api.env`) |
 | `STUDENT_DATA_SRC` | `src/studentCourses.json` (deployed to `/opt/classgrid-api/data/studentCourses.json`) |
 | `CATALOG_DATA_SRC` | `src/courses.json` (deployed to `/opt/classgrid-api/data/courses.json` for `/api/catalog`) |
+| `ANDROID_VERSION_SRC` | `server/data/android-version.json` (deployed to `/opt/classgrid-api/data/android-version.json` for `/api/app/version`) |
 
 Production env files (never commit):
 
@@ -180,6 +181,7 @@ applied migrations in place. `./deploy.sh --api` does **not** run migrations.
 | `003_occupied_rooms.sql` | `occupied_rooms` | Manual LH occupancy (initial schema) |
 | `004_occupied_rooms_by_date.sql` | `occupied_rooms` | Replaces weekly `day_of_week` with `occupancy_date` |
 | `005_personal_events.sql` | `personal_events` | Private calendar events per kerberos |
+| `006_user_reminders.sql` | `user_reminders` | Per-kerberos class/event reminder subscriptions (mobile) |
 
 Azure NSG `myvm-nsg` exposes TCP **5432** publicly for remote admin (DBeaver).
 Restrict the rule to your IP when you can. The API connects on `127.0.0.1:5432`.
@@ -315,6 +317,7 @@ shape used everywhere downstream is
 | Planner courses + tut/lab slots | `user_plans` (Postgres) + `localStorage` cache | Private per kerberos; guests use `localStorage` only | `GET/PUT /api/me/plan` — [plannerApi.js](src/utils/plannerApi.js), [planner.js](server/src/planner.js) |
 | Shared calendar events | `course_events` | Shared per course | `/api/events` — [calendarEventsApi.js](src/utils/calendarEventsApi.js) |
 | Personal calendar events | `personal_events` | Private per kerberos | `/api/me/events` — [personalEventsApi.js](src/utils/personalEventsApi.js) |
+| Class/event reminders (mobile) | `user_reminders` | Private per kerberos | `GET/POST/PUT/DELETE /api/me/reminders` — [reminders.js](server/src/reminders.js), [reminders_api.dart](app/lib/api/reminders_api.dart) |
 | Manual room occupancy | `occupied_rooms` | Global read; write attributed to marker | `/api/rooms/occupied` — [occupiedRoomsApi.js](src/utils/occupiedRoomsApi.js) |
 
 **Planner (Generator)** — keys synced to `localStorage` on every change:
@@ -382,7 +385,7 @@ A small Express app. Files:
 
 - [server/src/index.js](server/src/index.js) — wires `cookie-parser`, JSON,
   `trust proxy 1`, and routers (`/auth`, `/api` → courses, catalog,
-  calendarEvents, planner, occupiedRooms, personalEvents). `GET /` returns
+  calendarEvents, planner, occupiedRooms, personalEvents, reminders). `GET /` returns
   `{ name, ok }`.
 - [server/src/config.js](server/src/config.js) — env loader. Looks for
   `server/.env` and the repo-root `.env`. Bails fast on missing OIDC/session
@@ -423,6 +426,13 @@ A small Express app. Files:
   - `GET /api/catalog/meta` — `{ semesterCode, count, etag }` for cheap
     revalidation. The web SPA still imports `src/courses.json` at build time —
     this endpoint exists for clients that can't bundle the catalog.
+- [server/src/appVersion.js](server/src/appVersion.js) — minimum Flutter APK
+  (no auth, no DB). `GET /api/app/version` → `{ android: { version, build,
+  downloadUrl } }` from [server/data/android-version.json](server/data/android-version.json)
+  (`ANDROID_VERSION_PATH` on prod, rsynced by `./deploy.sh --api`). Bump that
+  file when shipping a new APK (or run `./scripts/release-android-apk.sh`, which
+  syncs it from `app/pubspec.yaml`). The app blocks on outdated builds before
+  `HomeShell`.
 - [server/src/db.js](server/src/db.js) — lazy `pg` pool from `DATABASE_URL`.
 - [server/src/planner.js](server/src/planner.js) — per-user timetable plan:
   - `GET /api/me/plan` — load saved plan (requires session).
@@ -443,6 +453,13 @@ A small Express app. Files:
   - `POST /api/me/events` — create.
   - `PATCH /api/me/events/:id` — update own row only.
   - `DELETE /api/me/events/:id` — delete own row only.
+- [server/src/reminders.js](server/src/reminders.js) — **mobile** class/event
+  reminder subscriptions (requires session; table `user_reminders`). The app
+  still fires OS notifications locally; this API syncs which bells are enabled:
+  - `GET /api/me/reminders` — future reminders for the signed-in user (purges expired rows).
+  - `POST /api/me/reminders` — upsert `{ key, title, body, eventStart }` (ISO8601).
+  - `PUT /api/me/reminders` — replace all with `{ reminders: [...] }` (login migration).
+  - `DELETE /api/me/reminders/:key` — remove one (`key` URL-encoded).
 - [server/src/occupiedRooms.js](server/src/occupiedRooms.js) — manual room
   occupancy:
   - `GET /api/rooms/occupied?date=&time=` — active markings for that calendar
@@ -589,9 +606,12 @@ iOS scaffold exists under `app/ios/` but the app is **Android-first**; no iOS-sp
 2. `ApiClient.create()` — loads persisted `cg_session` from secure storage,
    attaches dio interceptor.
 3. `LocalStore.create()` — SharedPreferences singleton.
-4. `CatalogProvider.load()` — seed from cache, then `GET /api/catalog`.
-5. `PlannerStore.initGuest()` — read `selectedCourses` / `timetableData` locally.
-6. `AuthProvider.init()` → `GET /api/me`; on auth change,
+4. `VersionGate` — `GET /api/app/version` vs `package_info_plus`; outdated builds
+   stay on [update_required_screen.dart](app/lib/screens/update_required_screen.dart).
+   Skip locally: `--dart-define=SKIP_VERSION_CHECK=true`.
+5. `CatalogProvider.load()` — seed from cache, then `GET /api/catalog`.
+6. `PlannerStore.initGuest()` — read `selectedCourses` / `timetableData` locally.
+7. `AuthProvider.init()` → `GET /api/me`; on auth change,
    `PlannerStore.onUserChanged()` loads DB plan or silent auto-fetch on first login.
 
 API service objects (`CalendarEventsApi`, `PersonalEventsApi`, `OccupiedRoomsApi`)
@@ -645,9 +665,11 @@ reads the same JWT from the deep link.
 | Wrapper | Endpoints | Auth |
 |---------|-----------|------|
 | [catalog_api.dart](app/lib/api/catalog_api.dart) | `GET /api/catalog` | none |
+| [app_version_api.dart](app/lib/api/app_version_api.dart) | `GET /api/app/version` | none |
 | [planner_api.dart](app/lib/api/planner_api.dart) | `GET/PUT /api/me/plan`, `GET /api/me/courses` | session |
 | [calendar_events_api.dart](app/lib/api/calendar_events_api.dart) | `GET/POST/PATCH/DELETE /api/events` | read public; write session |
 | [personal_events_api.dart](app/lib/api/personal_events_api.dart) | `GET/POST/PATCH/DELETE /api/me/events` | session |
+| [reminders_api.dart](app/lib/api/reminders_api.dart) | `GET/POST/PUT/DELETE /api/me/reminders` | session |
 | [occupied_rooms_api.dart](app/lib/api/occupied_rooms_api.dart) | `GET/POST/DELETE /api/rooms/occupied` | read public; write session |
 
 Payload shapes match the web `src/utils/*Api.js` modules and Postgres tables
@@ -661,8 +683,11 @@ and initialized from [main.dart](app/lib/main.dart) before `runApp`.
 
 **Current state:** plugin init, Android channel (`class_reminders`), timezone
 setup, and **per-item 30‑minute reminders** from the calendar day dialog (bell
-on each class / timed event). Persistence in [reminder_store.dart](app/lib/storage/reminder_store.dart);
-scheduling in [class_notification_service.dart](app/lib/notifications/class_notification_service.dart)
+on each class / timed event). Signed-in users sync toggles via
+[reminders_api.dart](app/lib/api/reminders_api.dart) → `user_reminders` Postgres;
+guests keep [reminder_store.dart](app/lib/storage/reminder_store.dart) in
+SharedPreferences. OS scheduling stays in
+[class_notification_service.dart](app/lib/notifications/class_notification_service.dart)
 via `zonedSchedule`. All-day / EOD events and institute-calendar rows have no
 bell (no concrete start time). Reminders reschedule on app launch.
 
@@ -800,8 +825,8 @@ via Play Console or sideload. Backend/catalog deploy is shared with web.
 | PNG timetable export | `html2canvas-pro` | not implemented |
 | Course roster donut | `courseStudents.json` | not implemented (no API) |
 | Deep links / app links | n/a | not implemented |
-| Local class reminders | n/a | Calendar day dialog: 30‑min before class/timed event (Android/iOS; Linux may need desktop notification support) |
-| Push notifications (FCM / server) | n/a | not implemented |
+| Local class reminders | n/a | Calendar day dialog: 30‑min before class/timed event; signed-in sync via `/api/me/reminders` |
+| Push notifications (FCM / server) | n/a | not implemented (reminders are local OS alarms + API sync only) |
 | Catalog `If-None-Match` revalidation | n/a | etag stored but not sent yet on refresh |
 | Bearer / mobile OAuth routes | n/a | intentionally not used |
 
@@ -828,11 +853,11 @@ via Play Console or sideload. Backend/catalog deploy is shared with web.
 - **Bump ICS semester window:** [core/ics.dart](app/lib/core/ics.dart) and web
   Generator constants together.
 - **Touch class notifications:** [class_notification_service.dart](app/lib/notifications/class_notification_service.dart)
-  (schedule/cancel/reschedule), [main.dart](app/lib/main.dart) (init), Android
-  manifest + Gradle desugaring (see [Local notifications](#local-notifications)).
-  Hook from [planner_store.dart](app/lib/state/planner_store.dart) when the plan
-  changes; reuse `core/planner_classes.dart` or `core/clashes.dart` session flattening
-  for fire times.
+  (schedule/cancel/reschedule), [reminder_store.dart](app/lib/storage/reminder_store.dart)
+  + [reminders_api.dart](app/lib/api/reminders_api.dart) (signed-in sync),
+  [server/src/reminders.js](server/src/reminders.js) + migration `006_user_reminders.sql`,
+  [main.dart](app/lib/main.dart) (init + `onAuthChanged`). Android manifest + Gradle
+  desugaring (see [Local notifications](#local-notifications)).
 
 ### Mobile gotchas
 

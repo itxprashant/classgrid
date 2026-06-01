@@ -28,4 +28,10 @@ class AppConfig {
   static String get browserLoginUrl => usesDesktopLogin
       ? '$apiBase/auth/login?app=1&desktop=1'
       : '$apiBase/auth/login?app=1';
+
+  /// Skip GET /api/app/version (local dev only).
+  static const bool skipVersionCheck = bool.fromEnvironment(
+    'SKIP_VERSION_CHECK',
+    defaultValue: false,
+  );
 }

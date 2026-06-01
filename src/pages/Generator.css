@@ -100,6 +100,186 @@
     color: var(--danger);
 }
 
+/* Android app — compact strip above planner toolbar */
+.gen__android {
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow var(--t), transform var(--t);
+}
+
+.gen__android:hover {
+    box-shadow: var(--shadow-card);
+    transform: translateY(-0.35px);
+}
+
+.gen__android-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+}
+
+.gen__android-copy {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.gen__android .gen__eyebrow {
+    margin-bottom: 6px;
+}
+
+.gen__android-title {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: var(--fs-16);
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    margin: 0 0 8px;
+}
+
+.gen__android-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-width: 52ch;
+}
+
+.gen__android-list li {
+    position: relative;
+    padding-left: 1em;
+    font-size: var(--fs-13);
+    color: var(--ink-2);
+    line-height: 1.45;
+}
+
+.gen__android-list li::before {
+    content: '·';
+    position: absolute;
+    left: 0;
+    font-family: var(--font-mono);
+    color: var(--ink-3);
+}
+
+.gen__android-list li + li {
+    margin-top: 4px;
+}
+
+.gen__android-phone {
+    flex-shrink: 0;
+    width: 52px;
+    height: 88px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--surface);
+    position: relative;
+    box-shadow: var(--shadow-card);
+    transition: transform 0.45s var(--ease-out);
+    transform: rotate(-1.8deg);
+}
+
+.gen__android:hover .gen__android-phone {
+    transform: rotate(1.8deg) translateY(-2px);
+}
+
+.gen__android-phone-screen {
+    position: absolute;
+    inset: 8px 6px 10px;
+    border-radius: 4px;
+    background: linear-gradient(
+        180deg,
+        var(--lecture-tint) 0 38%,
+        var(--tutorial-tint) 38% 68%,
+        var(--lab-tint) 68% 100%
+    );
+    border: 1px solid var(--line);
+}
+
+.gen__android-phone-notch {
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    width: 18px;
+    height: 3px;
+    margin-left: -9px;
+    border-radius: 2px;
+    background: var(--line-strong);
+}
+
+.gen__android-btn {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 0;
+    min-height: 38px;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r);
+    background: var(--paper-2);
+    text-decoration: none;
+    overflow: hidden;
+    flex-shrink: 0;
+    align-self: center;
+    transition: border-color var(--t-fast), transform var(--t-fast);
+}
+
+.gen__android-btn:hover {
+    border-color: var(--accent);
+    transform: translateX(0.8px);
+}
+
+.gen__android-btn-meta {
+    padding: 6px 12px 6px 14px;
+    border-right: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: var(--fs-12);
+    color: var(--ink-2);
+    line-height: 1.25;
+    text-align: left;
+}
+
+.gen__android-btn-meta strong {
+    display: block;
+    font-size: var(--fs-13);
+    color: var(--ink);
+    font-weight: 600;
+    font-family: var(--font-sans);
+}
+
+.gen__android-btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px;
+    height: 100%;
+    min-height: 38px;
+    color: var(--accent-ink);
+    font-weight: 600;
+    font-size: var(--fs-14);
+    background: var(--accent-tint);
+    transition: background var(--t-fast), color var(--t-fast);
+}
+
+.gen__android-btn:hover .gen__android-btn-action {
+    background: var(--accent);
+    color: var(--surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gen__android-btn {
+        transition: border-color var(--t-fast);
+    }
+
+    .gen__android-btn:hover {
+        transform: none;
+    }
+}
+
 /* Toolbar */
 .gen__toolbar {
     display: flex;
@@ -653,6 +833,16 @@
     .gen__autofetch-toggle {
         width: 100%;
         justify-content: center;
+    }
+
+    .gen__android-body {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .gen__android-btn {
+        width: 100%;
+        align-self: stretch;
     }
 
     .gen__dialog-backdrop {
