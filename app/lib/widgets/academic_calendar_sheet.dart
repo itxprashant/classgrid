@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../core/semester_schedule.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import 'common.dart';
@@ -24,6 +25,7 @@ class AcademicCalendarSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final swaps = kScheduleExceptions.keys.toList()..sort();
     final holidays = kHolidays.keys.toList()..sort();
 
@@ -50,7 +52,7 @@ class AcademicCalendarSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Holidays & timetable changes',
-                      style: AppText.serif(size: T.fs21)),
+                      style: AppText.serif(size: T.fs21, color: T.ink)),
                   const SizedBox(height: 2),
                   Text(
                     '${Semester.label} · ${_fmt(Semester.classesStart)} – ${_fmt(Semester.lastTeachingDay)}',

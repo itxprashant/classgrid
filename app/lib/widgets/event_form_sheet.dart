@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/calendar_events.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import 'common.dart';
@@ -71,6 +72,7 @@ class _EventFormSheetState extends State<EventFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final submittable = isDraftSubmittable(d);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -86,7 +88,7 @@ class _EventFormSheetState extends State<EventFormSheet> {
                   Expanded(
                     child: Text(
                       '${_editing ? 'Edit' : 'New'} ${d.isPersonal ? 'personal' : 'course'} event',
-                      style: AppText.serif(size: T.fs18),
+                      style: AppText.serif(size: T.fs18, color: T.ink),
                     ),
                   ),
                   Text(d.date, style: AppText.mono(size: T.fs12, color: T.ink3)),

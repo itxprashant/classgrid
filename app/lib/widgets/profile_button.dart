@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../config.dart';
+import '../screens/settings_screen.dart';
 import '../state/auth_provider.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import 'desktop_login_dialog.dart';
@@ -39,6 +41,7 @@ class ProfileButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final auth = context.watch<AuthProvider>();
     if (auth.loading) {
       return const Padding(
@@ -76,7 +79,13 @@ class ProfileButton extends StatelessWidget {
       tooltip: 'Account',
       offset: const Offset(0, 48),
       onSelected: (value) {
-        if (value == 'logout') auth.logout();
+        if (value == 'settings') {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+          );
+        } else if (value == 'logout') {
+          auth.logout();
+        }
       },
       itemBuilder: (context) => [
         PopupMenuItem<String>(
@@ -91,6 +100,15 @@ class ProfileButton extends StatelessWidget {
           ),
         ),
         const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'settings',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.settings_outlined, size: 18),
+            title: Text('Settings'),
+          ),
+        ),
         const PopupMenuItem<String>(
           value: 'logout',
           child: ListTile(

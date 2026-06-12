@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/timetable_layout.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -12,6 +13,7 @@ class TimetableHourRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final label = hour <= 12 ? '$hour' : '${hour - 12}';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -31,7 +33,7 @@ class TimetableHourRail extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.only(top: 7),
             child: CustomPaint(
-              painter: _DashedLinePainter(),
+              painter: _DashedLinePainter(T.line),
               size: const Size(double.infinity, 1),
             ),
           ),
@@ -42,10 +44,14 @@ class TimetableHourRail extends StatelessWidget {
 }
 
 class _DashedLinePainter extends CustomPainter {
+  _DashedLinePainter(this.color);
+
+  final Color color;
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = T.line
+      ..color = color
       ..strokeWidth = 1;
     const dash = 4.0, gap = 4.0;
     double x = 0;
@@ -56,5 +62,6 @@ class _DashedLinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _DashedLinePainter oldDelegate) =>
+      oldDelegate.color != color;
 }

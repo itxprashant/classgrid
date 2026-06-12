@@ -50,7 +50,7 @@ String generateICS(
 
   lines.add('BEGIN:VCALENDAR');
   lines.add('VERSION:2.0');
-  lines.add('PRODID:-//IITD Timetable//EN');
+  lines.add('PRODID:-//ClassGrid//EN');
   lines.add('CALSCALE:GREGORIAN');
   lines.add('METHOD:PUBLISH');
 
@@ -123,7 +123,7 @@ String generateICS(
       final summary =
           '${course.courseCode} $type${loc.isNotEmpty ? ' ($loc)' : ''}';
       final uid =
-          '${course.courseCode}-$type-${event.day}-${event.start}@iitd-timetable';
+          '${course.courseCode}-$type-${event.day}-${event.start}@classgrid.devclub.in';
 
       lines.add('BEGIN:VEVENT');
       lines.add('UID:$uid');
@@ -144,7 +144,7 @@ String generateICS(
       for (final d in extras) {
         lines.add('BEGIN:VEVENT');
         lines.add(
-            'UID:${course.courseCode}-$type-swap-$d-${event.start}@iitd-timetable');
+            'UID:${course.courseCode}-$type-swap-$d-${event.start}@classgrid.devclub.in');
         lines.add('DTSTAMP:$dtstamp');
         lines.add('SUMMARY:${_escapeIcsText(summary)}');
         lines.add('DTSTART;TZID=Asia/Kolkata:${d}T$startTime');

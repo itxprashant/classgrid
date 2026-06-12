@@ -207,6 +207,27 @@ String? academicCellLabel(AcademicDay info) {
   }
 }
 
+/// Label under day headers in calendar week view. Mirrors web `academicHeadNote`.
+String? academicWeekHeadLabel(AcademicDay info) {
+  switch (info.type) {
+    case AcademicType.holiday:
+      return info.name;
+    case AcademicType.swapped:
+      final day = info.effectiveDay;
+      return day != null ? '→ $day TT' : null;
+    case AcademicType.breakPeriod:
+      return info.name;
+    case AcademicType.weekend:
+      return 'Weekend';
+    case AcademicType.beforeTerm:
+      return 'Before term';
+    case AcademicType.afterTerm:
+      return 'After term';
+    default:
+      return null;
+  }
+}
+
 /// Whether a day should show institute calendar info in the day dialog.
 bool showAcademicInDayDialog(AcademicDay info) {
   return info.type == AcademicType.holiday ||

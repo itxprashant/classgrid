@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
@@ -25,22 +27,26 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('About', style: AppText.serif(size: T.fs18, weight: FontWeight.w600)),
+        title: Text(
+          'About',
+          style: AppText.serif(size: T.fs18, weight: FontWeight.w600, color: T.ink),
+        ),
       ),
       body: Material(
         color: T.paper,
         child: ListView(
           children: [
-            const PageHeader(
+            PageHeader(
               eyebrow: 'ClassGrid',
               title: 'Your semester, on one grid.',
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'A timetable planner for IIT Delhi students. Build a weekly plan from '
+                'ClassGrid helps IIT Delhi students build a weekly plan from '
                 'the offered-courses catalog, spot clashes, find free rooms, and keep '
                 'course and personal events on one calendar.',
                 style: AppText.sans(size: T.fs14, color: T.ink2, height: 1.45),
@@ -55,30 +61,30 @@ class AboutScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            const _AboutFeature(
+            _AboutFeature(
               icon: Icons.login,
               title: 'Sign in with IITD',
               body: 'OAuth pulls your registered courses onto the plan (synced when signed in).',
             ),
-            const _AboutFeature(
+            _AboutFeature(
               icon: Icons.grid_view,
               title: 'Weekly timetable',
               body: 'Color-coded lecture, tutorial, and lab slots with clash detection.',
             ),
-            const _AboutFeature(
+            _AboutFeature(
               icon: Icons.meeting_room_outlined,
               title: 'Empty halls & rooms',
               body: 'See which campus rooms are free at a chosen date and time.',
             ),
-            const _AboutCalendarSection(),
-            const _AboutFeature(
+            _AboutCalendarSection(),
+            _AboutFeature(
               icon: Icons.notifications_outlined,
               title: 'Local reminders',
               body: 'On the Calendar tab, tap a day and use the bell beside a class or timed event. '
-                  'You get a local notification 30 minutes before it starts (Android/iOS). '
+                  'You get a local notification before it starts (timing is configurable in Settings). '
                   'When signed in, reminders sync to your account via the API.',
             ),
-            const _AboutFeature(
+            _AboutFeature(
               icon: Icons.ios_share_outlined,
               title: 'ICS export',
               body: 'Share your plan as a calendar file from the Plan tab.',
@@ -116,9 +122,18 @@ class AboutScreen extends StatelessWidget {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-              child: Text(
-                'Mobile app v1.0.0 · API ${AppConfig.apiBase.replaceFirst('https://', '')}',
-                style: AppText.mono(size: T.fs12, color: T.ink4),
+              child: FutureBuilder<PackageInfo>(
+                future: PackageInfo.fromPlatform(),
+                builder: (context, snap) {
+                  final info = snap.data;
+                  final appLabel = info == null
+                      ? 'Mobile app'
+                      : 'Mobile app v${info.version}+${info.buildNumber}';
+                  return Text(
+                    '$appLabel · API ${AppConfig.apiBase.replaceFirst('https://', '')}',
+                    style: AppText.mono(size: T.fs12, color: T.ink4),
+                  );
+                },
               ),
             ),
           ],
@@ -134,6 +149,7 @@ class _AboutCalendarSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Column(
@@ -175,18 +191,18 @@ class _AboutCalendarSection extends StatelessWidget {
                   style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1.1),
                 ),
                 const SizedBox(height: 8),
-                const _AboutBullet(
+                _AboutBullet(
                   'Course events are shared for a course code — quizzes, deadlines, exams, '
                   'extra classes, presentations, and more. Anyone planning or enrolled in '
                   'that course can see them. Sign in to add or edit; they are stored on the '
                   'ClassGrid server.',
                 ),
-                const _AboutBullet(
+                _AboutBullet(
                   'Personal events are private to you — study blocks, reminders, anything '
                   'not tied to a course. Signed-in users sync them to your account; as a '
                   'guest they stay on this device only.',
                 ),
-                const _AboutBullet(
+                _AboutBullet(
                   'The grid only loads events for courses on your plan plus your enrolled '
                   'courses (when logged in), not the entire catalog.',
                 ),
@@ -196,15 +212,15 @@ class _AboutCalendarSection extends StatelessWidget {
                   style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1.1),
                 ),
                 const SizedBox(height: 8),
-                const _AboutBullet(
+                _AboutBullet(
                   'Opens a summary for that date: institute calendar notes (holiday, '
                   'timetable swap, exam week, or break), your classes, and every event.',
                 ),
-                const _AboutBullet(
+                _AboutBullet(
                   'Add course event or Add personal event starts the form. Tap an existing '
                   'event to edit or delete it.',
                 ),
-                const _AboutBullet(
+                _AboutBullet(
                   'When creating an event, pick a schedule: All day, At a time, Timed '
                   '(start–end), or EOD (end of day). Reminders work for At and Timed only.',
                 ),
@@ -224,6 +240,7 @@ class _AboutBullet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -263,6 +280,7 @@ class _AboutFeature extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       child: Row(
@@ -274,7 +292,7 @@ class _AboutFeature extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppText.sans(size: T.fs14, weight: FontWeight.w600)),
+                Text(title, style: AppText.sans(size: T.fs14, weight: FontWeight.w600, color: T.ink)),
                 const SizedBox(height: 2),
                 Text(body, style: AppText.sans(size: T.fs13, color: T.ink3, height: 1.4)),
               ],

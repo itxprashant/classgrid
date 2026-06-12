@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -16,6 +17,7 @@ class IntroScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final versionLabel = (installedVersion != null && installedVersion!.isNotEmpty)
         ? 'v$installedVersion${installedBuild != null ? '+$installedBuild' : ''}'
         : null;
@@ -37,6 +39,7 @@ class IntroScreen extends StatelessWidget {
                     size: T.fs44,
                     weight: FontWeight.w500,
                     height: 1.05,
+                    color: T.ink,
                   ),
                   textAlign: TextAlign.center,
                 ),

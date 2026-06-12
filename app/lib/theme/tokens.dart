@@ -39,57 +39,181 @@ Color oklch(double l, double c, double h, [double opacity = 1.0]) {
   );
 }
 
+/// Full color palette for one app theme. Session tints and state colors follow
+/// the same relationships as the default paper planner in DESIGN.md.
+class AppPalette {
+  const AppPalette({
+    required this.brightness,
+    required this.paper,
+    required this.paper2,
+    required this.surface,
+    required this.surfaceSunk,
+    required this.ink,
+    required this.ink2,
+    required this.ink3,
+    required this.ink4,
+    required this.line,
+    required this.lineStrong,
+    required this.accent,
+    required this.accentInk,
+    required this.accentTint,
+    required this.accentEdge,
+    required this.accentHover,
+    required this.accentFg,
+    required this.lectureTint,
+    required this.lectureEdge,
+    required this.lectureInk,
+    required this.tutorialTint,
+    required this.tutorialEdge,
+    required this.tutorialInk,
+    required this.labTint,
+    required this.labEdge,
+    required this.labInk,
+    required this.danger,
+    required this.dangerTint,
+    required this.dangerEdge,
+    required this.success,
+    required this.successInk,
+    required this.successTint,
+    required this.successEdge,
+    required this.shadowCard,
+    required this.shadowPop,
+  });
+
+  final Brightness brightness;
+  final Color paper;
+  final Color paper2;
+  final Color surface;
+  final Color surfaceSunk;
+  final Color ink;
+  final Color ink2;
+  final Color ink3;
+  final Color ink4;
+  final Color line;
+  final Color lineStrong;
+  final Color accent;
+  final Color accentInk;
+  final Color accentTint;
+  final Color accentEdge;
+  final Color accentHover;
+  final Color accentFg;
+  final Color lectureTint;
+  final Color lectureEdge;
+  final Color lectureInk;
+  final Color tutorialTint;
+  final Color tutorialEdge;
+  final Color tutorialInk;
+  final Color labTint;
+  final Color labEdge;
+  final Color labInk;
+  final Color danger;
+  final Color dangerTint;
+  final Color dangerEdge;
+  final Color success;
+  final Color successInk;
+  final Color successTint;
+  final Color successEdge;
+  final Color shadowCard;
+  final Color shadowPop;
+}
+
 /// Design tokens ported from `src/index.css` (`:root`) and `DESIGN.md`.
+/// Color getters delegate to [active]; radii and type scale are fixed.
 class T {
   T._();
 
+  static AppPalette active = defaultPalette;
+
+  static void apply(AppPalette palette) {
+    active = palette;
+  }
+
+  /// Exact current ClassGrid default — kept verbatim for zero regression.
+  static final AppPalette defaultPalette = AppPalette(
+    brightness: Brightness.light,
+    paper: oklch(0.985, 0.008, 83),
+    paper2: oklch(0.975, 0.01, 83),
+    surface: oklch(0.995, 0.005, 83),
+    surfaceSunk: oklch(0.97, 0.012, 83),
+    ink: oklch(0.27, 0.02, 60),
+    ink2: oklch(0.48, 0.018, 60),
+    ink3: oklch(0.62, 0.015, 60),
+    ink4: oklch(0.74, 0.012, 75),
+    line: oklch(0.90, 0.012, 80),
+    lineStrong: oklch(0.84, 0.014, 80),
+    accent: oklch(0.52, 0.085, 195),
+    accentInk: oklch(0.36, 0.075, 195),
+    accentTint: oklch(0.94, 0.035, 195),
+    accentEdge: oklch(0.80, 0.06, 195),
+    accentHover: oklch(0.46, 0.09, 195),
+    accentFg: oklch(0.99, 0.01, 195),
+    lectureTint: oklch(0.94, 0.035, 195),
+    lectureEdge: oklch(0.78, 0.06, 195),
+    lectureInk: oklch(0.34, 0.07, 200),
+    tutorialTint: oklch(0.94, 0.05, 80),
+    tutorialEdge: oklch(0.80, 0.07, 80),
+    tutorialInk: oklch(0.38, 0.07, 75),
+    labTint: oklch(0.93, 0.045, 40),
+    labEdge: oklch(0.80, 0.07, 40),
+    labInk: oklch(0.40, 0.08, 35),
+    danger: oklch(0.55, 0.13, 30),
+    dangerTint: oklch(0.94, 0.04, 30),
+    dangerEdge: oklch(0.80, 0.10, 30),
+    success: oklch(0.48, 0.11, 145),
+    successInk: oklch(0.34, 0.09, 145),
+    successTint: oklch(0.94, 0.04, 145),
+    successEdge: oklch(0.78, 0.08, 145),
+    shadowCard: oklch(0.5, 0.02, 60, 0.06),
+    shadowPop: oklch(0.4, 0.02, 60, 0.08),
+  );
+
   // Paper / surfaces
-  static final Color paper = oklch(0.985, 0.008, 83);
-  static final Color paper2 = oklch(0.975, 0.01, 83);
-  static final Color surface = oklch(0.995, 0.005, 83);
-  static final Color surfaceSunk = oklch(0.97, 0.012, 83);
+  static Color get paper => active.paper;
+  static Color get paper2 => active.paper2;
+  static Color get surface => active.surface;
+  static Color get surfaceSunk => active.surfaceSunk;
 
   // Ink
-  static final Color ink = oklch(0.27, 0.02, 60);
-  static final Color ink2 = oklch(0.48, 0.018, 60);
-  static final Color ink3 = oklch(0.62, 0.015, 60);
-  static final Color ink4 = oklch(0.74, 0.012, 75);
+  static Color get ink => active.ink;
+  static Color get ink2 => active.ink2;
+  static Color get ink3 => active.ink3;
+  static Color get ink4 => active.ink4;
 
   // Lines
-  static final Color line = oklch(0.90, 0.012, 80);
-  static final Color lineStrong = oklch(0.84, 0.014, 80);
+  static Color get line => active.line;
+  static Color get lineStrong => active.lineStrong;
 
   // Accent
-  static final Color accent = oklch(0.52, 0.085, 195);
-  static final Color accentInk = oklch(0.36, 0.075, 195);
-  static final Color accentTint = oklch(0.94, 0.035, 195);
-  static final Color accentEdge = oklch(0.80, 0.06, 195);
-  static final Color accentHover = oklch(0.46, 0.09, 195);
-  static final Color accentFg = oklch(0.99, 0.01, 195);
+  static Color get accent => active.accent;
+  static Color get accentInk => active.accentInk;
+  static Color get accentTint => active.accentTint;
+  static Color get accentEdge => active.accentEdge;
+  static Color get accentHover => active.accentHover;
+  static Color get accentFg => active.accentFg;
 
   // Session tints
-  static final Color lectureTint = oklch(0.94, 0.035, 195);
-  static final Color lectureEdge = oklch(0.78, 0.06, 195);
-  static final Color lectureInk = oklch(0.34, 0.07, 200);
-  static final Color tutorialTint = oklch(0.94, 0.05, 80);
-  static final Color tutorialEdge = oklch(0.80, 0.07, 80);
-  static final Color tutorialInk = oklch(0.38, 0.07, 75);
-  static final Color labTint = oklch(0.93, 0.045, 40);
-  static final Color labEdge = oklch(0.80, 0.07, 40);
-  static final Color labInk = oklch(0.40, 0.08, 35);
+  static Color get lectureTint => active.lectureTint;
+  static Color get lectureEdge => active.lectureEdge;
+  static Color get lectureInk => active.lectureInk;
+  static Color get tutorialTint => active.tutorialTint;
+  static Color get tutorialEdge => active.tutorialEdge;
+  static Color get tutorialInk => active.tutorialInk;
+  static Color get labTint => active.labTint;
+  static Color get labEdge => active.labEdge;
+  static Color get labInk => active.labInk;
 
   // States
-  static final Color danger = oklch(0.55, 0.13, 30);
-  static final Color dangerTint = oklch(0.94, 0.04, 30);
-  static final Color dangerEdge = oklch(0.80, 0.10, 30);
-  static final Color success = oklch(0.48, 0.11, 145);
-  static final Color successInk = oklch(0.34, 0.09, 145);
-  static final Color successTint = oklch(0.94, 0.04, 145);
-  static final Color successEdge = oklch(0.78, 0.08, 145);
+  static Color get danger => active.danger;
+  static Color get dangerTint => active.dangerTint;
+  static Color get dangerEdge => active.dangerEdge;
+  static Color get success => active.success;
+  static Color get successInk => active.successInk;
+  static Color get successTint => active.successTint;
+  static Color get successEdge => active.successEdge;
 
   // Shadows
-  static final Color shadowCard = oklch(0.5, 0.02, 60, 0.06);
-  static final Color shadowPop = oklch(0.4, 0.02, 60, 0.08);
+  static Color get shadowCard => active.shadowCard;
+  static Color get shadowPop => active.shadowPop;
 
   // Radii
   static const double rSm = 4;

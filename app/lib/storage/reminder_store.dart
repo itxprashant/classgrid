@@ -10,7 +10,7 @@ import '../core/semester_schedule.dart';
 import '../models/calendar_event.dart';
 import '../notifications/class_notification_service.dart';
 
-/// Persisted reminder the OS should fire [kReminderMinutesBefore] before [eventStart].
+/// Persisted reminder the OS should fire [minutesBefore] before [eventStart].
 class ReminderEntry {
   final String key;
   final String title;
@@ -74,17 +74,40 @@ class ReminderStore extends ChangeNotifier {
   final RemindersApi? _remindersApi;
 
   static const _storageKey = 'cg_reminders';
+  static const _minutesKey = 'cg_reminder_minutes_before';
 
   final Map<String, ReminderEntry> _entries = {};
   bool _loaded = false;
   bool _syncing = false;
   bool _useApi = false;
+  int _minutesBefore = kDefaultReminderMinutesBefore;
+
+  int get minutesBefore => _minutesBefore;
 
   Future<void> load() async {
     _entries.clear();
     _useApi = false;
+    _minutesBefore = _readMinutesBefore();
     await _loadFromPrefs();
     _loaded = true;
+    await _rescheduleAll();
+    notifyListeners();
+  }
+
+  int _readMinutesBefore() {
+    final saved = _prefs.getInt(_minutesKey);
+    if (saved != null && kReminderMinutesOptions.contains(saved)) {
+      return saved;
+    }
+    return kDefaultReminderMinutesBefore;
+  }
+
+  /// Updates lead time and reschedules all active reminders.
+  Future<void> setMinutesBefore(int minutes) async {
+    if (!kReminderMinutesOptions.contains(minutes)) return;
+    if (minutes == _minutesBefore) return;
+    _minutesBefore = minutes;
+    await _prefs.setInt(_minutesKey, minutes);
     await _rescheduleAll();
     notifyListeners();
   }
@@ -200,8 +223,8 @@ class ReminderStore extends ChangeNotifier {
     required DateTime? eventStart,
   }) async {
     if (eventStart == null) return ReminderToggleResult.unsupported;
-    final notifyAt = eventStart.subtract(const Duration(minutes: kReminderMinutesBefore));
-    if (!notifyAt.isAfter(DateTime.now())) {
+    final notifyAt = reminderNotifyAt(eventStart, _minutesBefore);
+    if (notifyAt == null || !notifyAt.isAfter(DateTime.now())) {
       return ReminderToggleResult.tooLate;
     }
 
@@ -269,9 +292,8 @@ class ReminderStore extends ChangeNotifier {
     final toRemove = <String>[];
 
     for (final entry in _entries.values) {
-      final notifyAt =
-          entry.eventStart.subtract(const Duration(minutes: kReminderMinutesBefore));
-      if (!notifyAt.isAfter(now)) {
+      final notifyAt = reminderNotifyAt(entry.eventStart, _minutesBefore);
+      if (notifyAt == null || !notifyAt.isAfter(now)) {
         toRemove.add(entry.key);
         await _notifications.cancelReminder(entry.key);
         continue;

@@ -10,6 +10,7 @@ import '../models/enrolled_student.dart';
 import '../models/session.dart';
 import '../state/catalog_provider.dart';
 import '../state/planner_store.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
@@ -58,6 +59,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final catalog = context.watch<CatalogProvider>();
     final course = catalog.byCode(widget.courseCode);
 
@@ -66,7 +68,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         title: Text(widget.courseCode, style: AppText.mono(size: T.fs18, weight: FontWeight.w600)),
       ),
       body: course == null
-          ? const EmptyState(message: 'Course not found in the catalog.', icon: Icons.help_outline)
+          ? EmptyState(message: 'Course not found in the catalog.', icon: Icons.help_outline)
           : _body(context, course),
     );
   }
@@ -78,7 +80,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(course.courseName, style: AppText.serif(size: T.fs26)),
+        Text(course.courseName, style: AppText.serif(size: T.fs26, color: T.ink)),
         const SizedBox(height: 4),
         if ((course.instructor ?? '').isNotEmpty)
           Text(course.instructor!, style: AppText.sans(size: T.fs14, color: T.ink2)),

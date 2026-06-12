@@ -2,7 +2,10 @@ import 'calendar_events.dart';
 import 'planner_classes.dart';
 import '../models/calendar_event.dart';
 
-const int kReminderMinutesBefore = 30;
+const int kDefaultReminderMinutesBefore = 30;
+
+/// Allowed lead times for class/event reminders (Settings picker).
+const List<int> kReminderMinutesOptions = [5, 10, 15, 30, 45, 60];
 
 /// Stable id for [FlutterLocalNotificationsPlugin] (positive 31-bit int).
 int notificationIdForKey(String key) => key.hashCode & 0x7fffffff;
@@ -48,37 +51,45 @@ DateTime? calendarEventStart(CalendarEvent e) {
   return DateTime(y, mo, d, h, mi);
 }
 
-bool canRemindClass(PlannerClass c, DateTime day) {
+DateTime? reminderNotifyAt(DateTime eventStart, int minutesBefore) =>
+    eventStart.subtract(Duration(minutes: minutesBefore));
+
+bool canRemindClass(PlannerClass c, DateTime day, int minutesBefore) {
   final start = classEventStart(day, c);
   if (start == null) return false;
-  return start
-      .subtract(const Duration(minutes: kReminderMinutesBefore))
-      .isAfter(DateTime.now());
+  final notifyAt = reminderNotifyAt(start, minutesBefore);
+  return notifyAt != null && notifyAt.isAfter(DateTime.now());
 }
 
-bool canRemindEvent(CalendarEvent e) {
+bool canRemindEvent(CalendarEvent e, int minutesBefore) {
   final start = calendarEventStart(e);
   if (start == null) return false;
-  return start
-      .subtract(const Duration(minutes: kReminderMinutesBefore))
-      .isAfter(DateTime.now());
+  final notifyAt = reminderNotifyAt(start, minutesBefore);
+  return notifyAt != null && notifyAt.isAfter(DateTime.now());
 }
 
 String classReminderTitle(PlannerClass c) => c.courseCode;
 
 String classReminderBody(PlannerClass c, DateTime day) {
   final start = classEventStart(day, c);
-  if (start == null) return 'Class starting soon';
-  final t = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
-  return '${_kindLabel(c.kind)} at $t · reminder $kReminderMinutesBefore min before';
+  final time = start != null
+      ? '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}'
+      : c.timeLabel;
+  final parts = <String>[_kindLabel(c.kind)];
+  if (c.location.isNotEmpty) parts.add(c.location);
+  parts.add(time);
+  return parts.join(' · ');
 }
 
 String eventReminderTitle(CalendarEvent e) => e.title;
 
 String eventReminderBody(CalendarEvent e) {
   final schedule = formatEventSchedule(e);
-  final when = schedule.isNotEmpty ? schedule : 'scheduled time';
-  return '$when · reminder $kReminderMinutesBefore min before';
+  if (schedule.isEmpty) return 'Starting soon';
+  if (e.courseCode != null && e.courseCode!.isNotEmpty && !e.isPersonal) {
+    return '${e.courseCode} · $schedule';
+  }
+  return schedule;
 }
 
 String _kindLabel(String kind) {
@@ -92,4 +103,9 @@ String _kindLabel(String kind) {
     default:
       return kind;
   }
+}
+
+String formatReminderLeadTime(int minutesBefore) {
+  if (minutesBefore == 1) return '1 minute';
+  return '$minutesBefore minutes';
 }

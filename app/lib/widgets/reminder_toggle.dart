@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/reminder_schedule.dart';
 import '../storage/reminder_store.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/tokens.dart';
 
 /// Bell control for a schedulable calendar row (class or timed event).
@@ -19,14 +21,14 @@ class ReminderToggle extends StatelessWidget {
   final Future<ReminderToggleResult> Function() onToggle;
   final String tooltipDisabled;
 
-  static String messageFor(ReminderToggleResult r) {
+  String messageFor(ReminderToggleResult r, int minutesBefore) {
     switch (r) {
       case ReminderToggleResult.enabled:
-        return 'Reminder on · 30 minutes before';
+        return 'Reminder on · ${formatReminderLeadTime(minutesBefore)} before';
       case ReminderToggleResult.disabled:
         return 'Reminder off';
       case ReminderToggleResult.tooLate:
-        return 'Too late to schedule (needs 30+ minutes notice)';
+        return 'Too late to schedule (needs ${formatReminderLeadTime(minutesBefore)} notice)';
       case ReminderToggleResult.unsupported:
         return 'Reminders need a specific start time';
       case ReminderToggleResult.failed:
@@ -36,9 +38,12 @@ class ReminderToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final store = context.watch<ReminderStore>();
+    final minutesBefore = store.minutesBefore;
     final enabled = store.isEnabled(reminderKey);
     final active = enabled && canEnable;
+    final lead = formatReminderLeadTime(minutesBefore);
 
     return IconButton(
       icon: Icon(
@@ -48,7 +53,7 @@ class ReminderToggle extends StatelessWidget {
       ),
       tooltip: !canEnable
           ? tooltipDisabled
-          : (active ? 'Turn off 30‑min reminder' : 'Remind me 30 minutes before'),
+          : (active ? 'Turn off $lead reminder' : 'Remind me $lead before'),
       onPressed: !canEnable && !enabled
           ? null
           : () async {
@@ -56,7 +61,7 @@ class ReminderToggle extends StatelessWidget {
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(messageFor(result)),
+                  content: Text(messageFor(result, minutesBefore)),
                   duration: const Duration(seconds: 2),
                 ),
               );

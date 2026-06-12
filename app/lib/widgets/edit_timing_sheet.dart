@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/plan.dart';
 import '../models/session.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -100,6 +101,7 @@ class _EditTimingSheetState extends State<EditTimingSheet> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
       minChildSize: 0.5,
@@ -118,7 +120,7 @@ class _EditTimingSheetState extends State<EditTimingSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Edit sessions', style: AppText.serif(size: T.fs18)),
+                        Text('Edit sessions', style: AppText.serif(size: T.fs18, color: T.ink)),
                         Text(widget.course.courseCode, style: AppText.mono(size: T.fs12, color: T.ink3)),
                       ],
                     ),

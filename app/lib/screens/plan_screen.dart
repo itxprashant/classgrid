@@ -11,6 +11,7 @@ import '../models/course.dart';
 import '../models/plan.dart';
 import '../state/catalog_provider.dart';
 import '../state/planner_store.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/academic_calendar_sheet.dart';
@@ -73,12 +74,12 @@ class _PlanScreenState extends State<PlanScreen> {
     final ics = generateICS(planner.selectedCourses, planner.timetableData);
     try {
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/iitd-timetable.ics');
+      final file = File('${dir.path}/classgrid-timetable.ics');
       await file.writeAsString(ics);
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path, mimeType: 'text/calendar')],
-          subject: 'IITD Timetable',
+          subject: 'ClassGrid timetable',
         ),
       );
     } catch (e) {
@@ -92,6 +93,7 @@ class _PlanScreenState extends State<PlanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final planner = context.watch<PlannerStore>();
     final credits = totalCredits(planner.selectedCourses);
     final conflicts = countConflicts(planner.selectedCourses, planner.timetableData);
@@ -144,7 +146,7 @@ class _PlanScreenState extends State<PlanScreen> {
           ),
         ),
         if (conflicts > 0)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: StatusBanner(
               kind: 'err',
@@ -166,7 +168,7 @@ class _PlanScreenState extends State<PlanScreen> {
               style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1.2)),
         ),
         if (planner.selectedCourses.isEmpty)
-          const EmptyState(
+          EmptyState(
             message: 'No courses yet. Add a course or auto-fetch your registered courses.',
             icon: Icons.event_available_outlined,
           )
@@ -285,7 +287,7 @@ class _AddCourseSheetState extends State<_AddCourseSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Add a course', style: AppText.serif(size: T.fs18)),
+              Text('Add a course', style: AppText.serif(size: T.fs18, color: T.ink)),
               const SizedBox(height: 12),
               TextField(
                 autofocus: true,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'tokens.dart';
@@ -87,14 +88,16 @@ class AppTheme {
   AppTheme._();
 
   static ThemeData build() {
+    final brightness = T.active.brightness;
+    final isDark = brightness == Brightness.dark;
     final base = ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: brightness,
       scaffoldBackgroundColor: T.paper,
       canvasColor: T.paper,
       cardColor: T.surface,
       colorScheme: ColorScheme(
-        brightness: Brightness.light,
+        brightness: brightness,
         primary: T.accent,
         onPrimary: T.accentFg,
         secondary: T.accentInk,
@@ -121,7 +124,10 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         foregroundColor: T.ink,
-        titleTextStyle: AppText.serif(size: T.fs21, weight: FontWeight.w600),
+        systemOverlayStyle: isDark
+            ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent)
+            : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
+        titleTextStyle: AppText.serif(size: T.fs21, weight: FontWeight.w600, color: T.ink),
         shape: Border(bottom: BorderSide(color: T.line)),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -181,7 +187,7 @@ class AppTheme {
         backgroundColor: T.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(T.rLg)),
-        titleTextStyle: AppText.serif(size: T.fs18, weight: FontWeight.w600),
+        titleTextStyle: AppText.serif(size: T.fs18, weight: FontWeight.w600, color: T.ink),
         contentTextStyle: AppText.sans(color: T.ink2),
       ),
       bottomSheetTheme: BottomSheetThemeData(

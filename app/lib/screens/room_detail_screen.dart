@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../core/room_schedule.dart';
 import '../state/catalog_provider.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
@@ -51,6 +52,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final catalog = context.watch<CatalogProvider>();
     final normalized = normalizeRoomName(widget.roomName);
 
@@ -102,13 +104,21 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
           style: AppText.sans(size: T.fs13, color: T.ink2),
         ),
         const SizedBox(height: 16),
-        SegmentedButton<_ViewMode>(
+        AppSegmentedFilters<_ViewMode>(
+          selected: _view,
+          onChanged: (v) => setState(() => _view = v),
           segments: const [
-            ButtonSegment(value: _ViewMode.list, label: Text('List')),
-            ButtonSegment(value: _ViewMode.calendar, label: Text('Calendar')),
+            AppFilterSegment(
+              value: _ViewMode.list,
+              label: 'List',
+              icon: Icons.format_list_bulleted_rounded,
+            ),
+            AppFilterSegment(
+              value: _ViewMode.calendar,
+              label: 'Calendar',
+              icon: Icons.calendar_view_week_rounded,
+            ),
           ],
-          selected: {_view},
-          onSelectionChanged: (s) => setState(() => _view = s.first),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -120,7 +130,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         ),
         const SizedBox(height: 16),
         if (sessions.isEmpty)
-          const EmptyState(
+          EmptyState(
             message: 'No classes scheduled in this room in the current catalog.',
             icon: Icons.event_busy,
           )

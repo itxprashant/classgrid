@@ -8,6 +8,7 @@ import '../core/app_version.dart';
 import '../models/app_version_info.dart';
 import '../screens/intro_screen.dart';
 import '../screens/update_required_screen.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -108,6 +109,7 @@ class _VersionGateState extends State<VersionGate> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     switch (_phase) {
       case _VersionGatePhase.intro:
         return IntroScreen(
@@ -134,7 +136,7 @@ class _VersionGateState extends State<VersionGate> {
                 children: [
                   Text(
                     'Could not verify app version',
-                    style: AppText.serif(size: T.fs26, weight: FontWeight.w500),
+                    style: AppText.serif(size: T.fs26, weight: FontWeight.w500, color: T.ink),
                   ),
                   const SizedBox(height: 12),
                   Text(

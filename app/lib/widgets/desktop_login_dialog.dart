@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../core/auth_token.dart';
 import '../state/auth_provider.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -69,8 +70,9 @@ class _DesktopLoginDialogState extends State<DesktopLoginDialog> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     return AlertDialog(
-      title: Text('IITD login', style: AppText.serif(size: T.fs18, weight: FontWeight.w600)),
+      title: Text('IITD login', style: AppText.serif(size: T.fs18, weight: FontWeight.w600, color: T.ink)),
       content: SizedBox(
         width: 420,
         child: Column(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/auth_provider.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 
@@ -21,19 +22,25 @@ class AppDrawer extends StatelessWidget {
     required this.selectedIndex,
     required this.onTabSelected,
     this.onOpenEmptyHalls,
+    this.onOpenAttendance,
+    this.onOpenCgpaCalculator,
+    this.onOpenSettings,
     this.onOpenAbout,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
   final VoidCallback? onOpenEmptyHalls;
+  final VoidCallback? onOpenAttendance;
+  final VoidCallback? onOpenCgpaCalculator;
+  final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenAbout;
 
   static const _tabs = [
-    _NavItem(0, 'Plan', Icons.grid_view_outlined, Icons.grid_view),
-    _NavItem(1, 'Courses', Icons.menu_book_outlined, Icons.menu_book),
-    _NavItem(2, 'Rooms', Icons.domain_outlined, Icons.domain),
-    _NavItem(3, 'Calendar', Icons.calendar_month_outlined, Icons.calendar_month),
+    _NavItem(0, 'Calendar', Icons.calendar_month_outlined, Icons.calendar_month),
+    _NavItem(1, 'Plan', Icons.grid_view_outlined, Icons.grid_view),
+    _NavItem(2, 'Courses', Icons.menu_book_outlined, Icons.menu_book),
+    _NavItem(3, 'Rooms', Icons.domain_outlined, Icons.domain),
   ];
 
   void _closeAndSelect(BuildContext context, int index) {
@@ -43,6 +50,7 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final auth = context.watch<AuthProvider>();
 
     return Drawer(
@@ -56,10 +64,10 @@ class AppDrawer extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('ClassGrid', style: AppText.serif(size: T.fs26, weight: FontWeight.w600)),
+                  Text('ClassGrid', style: AppText.serif(size: T.fs26, weight: FontWeight.w600, color: T.ink)),
                   const SizedBox(height: 4),
                   Text(
-                    'IIT Delhi timetable',
+                    'IIT Delhi · semester planner',
                     style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 0.04),
                   ),
                 ],
@@ -102,6 +110,24 @@ class AppDrawer extends StatelessWidget {
                       onOpenEmptyHalls?.call();
                     },
                   ),
+                  _DrawerTile(
+                    label: 'Attendance',
+                    icon: Icons.fact_check_outlined,
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpenAttendance?.call();
+                    },
+                  ),
+                  _DrawerTile(
+                    label: 'CGPA calculator',
+                    icon: Icons.school_outlined,
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpenCgpaCalculator?.call();
+                    },
+                  ),
                   const SizedBox(height: 8),
                   Divider(height: 1, indent: 20, endIndent: 20, color: T.line),
                   Padding(
@@ -110,6 +136,15 @@ class AppDrawer extends StatelessWidget {
                       'App',
                       style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 0.12),
                     ),
+                  ),
+                  _DrawerTile(
+                    label: 'Settings',
+                    icon: Icons.settings_outlined,
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpenSettings?.call();
+                    },
                   ),
                   _DrawerTile(
                     label: 'About',

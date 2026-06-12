@@ -6,7 +6,9 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../core/reminder_schedule.dart';
 
-/// Local notifications for class reminders.
+typedef NotificationTapHandler = void Function(String? payload);
+
+/// Local notifications for class reminders and attendance prompts.
 class ClassNotificationService {
   ClassNotificationService._();
 
@@ -14,10 +16,16 @@ class ClassNotificationService {
 
   static const _channelId = 'class_reminders';
   static const _channelName = 'Class reminders';
+  static const _attendanceChannelId = 'class_attendance_prompts';
+  static const _attendanceChannelName = 'Attendance prompts';
+
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
+  NotificationTapHandler? onNotificationTap;
+  final Set<String> _scheduledAttendPromptKeys = {};
 
-  Future<void> init() async {
+  Future<void> init({NotificationTapHandler? onTap}) async {
+    if (onTap != null) onNotificationTap = onTap;
     if (_ready) return;
 
     tz_data.initializeTimeZones();
@@ -46,6 +54,9 @@ class ClassNotificationService {
         iOS: darwinInit,
         macOS: darwinInit,
       ),
+      onDidReceiveNotificationResponse: (response) {
+        onNotificationTap?.call(response.payload);
+      },
     );
 
     final android = _plugin.resolvePlatformSpecificImplementation<
@@ -55,6 +66,14 @@ class ClassNotificationService {
         _channelId,
         _channelName,
         description: 'Reminders before your planned classes',
+        importance: Importance.high,
+      ),
+    );
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _attendanceChannelId,
+        _attendanceChannelName,
+        description: 'Remind you to mark attendance after class',
         importance: Importance.high,
       ),
     );
@@ -129,5 +148,64 @@ class ClassNotificationService {
   Future<void> cancelReminder(String key) async {
     if (!_ready) return;
     await _plugin.cancel(id: notificationIdForKey(key));
+    _scheduledAttendPromptKeys.remove(key);
+  }
+
+  NotificationDetails get attendanceDetails => const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _attendanceChannelId,
+          _attendanceChannelName,
+          channelDescription: 'Remind you to mark attendance after class',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
+
+  Future<bool> scheduleAttendancePrompt({
+    required String key,
+    required String title,
+    required String body,
+    required DateTime notifyAt,
+    required String payload,
+  }) async {
+    if (!_ready) await init();
+    if (!notifyAt.isAfter(DateTime.now())) return false;
+
+    final id = notificationIdForKey(key);
+    try {
+      var mode = AndroidScheduleMode.inexactAllowWhileIdle;
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final android = _plugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+        if (await android?.canScheduleExactNotifications() ?? false) {
+          mode = AndroidScheduleMode.exactAllowWhileIdle;
+        }
+      }
+
+      await _plugin.zonedSchedule(
+        id: id,
+        scheduledDate: localTzDateTime(notifyAt),
+        notificationDetails: attendanceDetails,
+        androidScheduleMode: mode,
+        title: title,
+        body: body,
+        payload: payload,
+      );
+      _scheduledAttendPromptKeys.add(key);
+      return true;
+    } catch (e) {
+      debugPrint('[ClassNotificationService] attendance schedule failed: $e');
+      return false;
+    }
+  }
+
+  Future<void> cancelAttendPromptsExcept(Set<String> keepKeys) async {
+    if (!_ready) return;
+    final toCancel = _scheduledAttendPromptKeys.where((k) => !keepKeys.contains(k)).toList();
+    for (final key in toCancel) {
+      await _plugin.cancel(id: notificationIdForKey(key));
+      _scheduledAttendPromptKeys.remove(key);
+    }
   }
 }

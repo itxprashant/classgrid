@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/clashes.dart';
 import '../core/timetable_layout.dart';
 import '../models/plan.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import 'timetable_hour_rail.dart';
@@ -46,6 +47,7 @@ class TimetableGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final sessions = flattenSessions(courses, timetableData);
     final conflicts = conflictIndices(sessions);
     final plotHeight = TimetableLayout.plotHeight;

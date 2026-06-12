@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/course.dart';
 import '../state/catalog_provider.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
@@ -63,6 +64,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final catalog = context.watch<CatalogProvider>();
 
     if (catalog.loading && !catalog.isReady) {
@@ -105,7 +107,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
         ),
         const SizedBox(height: 8),
         SizedBox(
-          height: 36,
+          height: 40,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -122,7 +124,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
         const SizedBox(height: 4),
         Expanded(
           child: filtered.isEmpty
-              ? const EmptyState(message: 'No courses match your search.', icon: Icons.search_off)
+              ? EmptyState(message: 'No courses match your search.', icon: Icons.search_off)
               : ListView.builder(
                   controller: _scroll,
                   itemCount: visible.length + (visible.length < filtered.length ? 1 : 0),
@@ -147,6 +149,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
           label: label,
           selected: selected,
           onSelected: (_) => onTap(),
+          compact: true,
         ),
       );
 

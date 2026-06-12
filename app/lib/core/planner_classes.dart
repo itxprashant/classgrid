@@ -17,6 +17,7 @@ class PlannerClass {
   final String start;
   final String end;
   final String timeLabel; // HH:MM
+  final String location;
 
   const PlannerClass({
     required this.id,
@@ -26,6 +27,7 @@ class PlannerClass {
     required this.start,
     required this.end,
     required this.timeLabel,
+    this.location = '',
   });
 }
 
@@ -49,6 +51,14 @@ List<PlannerClass> getClassesForDate(
     final data = timetableData[course.courseCode];
     if (data == null) continue;
 
+    String resolveLocation(Session slot, String kind) {
+      if (slot.location != null && slot.location!.isNotEmpty) return slot.location!;
+      if (kind == 'lecture' && (course.lectureHall?.isNotEmpty ?? false)) {
+        return course.lectureHall!;
+      }
+      return '';
+    }
+
     void addFrom(List<Session>? slots, String kind) {
       if (slots == null) return;
       for (final slot in slots) {
@@ -61,6 +71,7 @@ List<PlannerClass> getClassesForDate(
           start: slot.start,
           end: slot.end,
           timeLabel: _formatSessionTime(slot.start),
+          location: resolveLocation(slot, kind),
         ));
       }
     }

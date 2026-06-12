@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../core/room_schedule.dart';
 import '../state/catalog_provider.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
@@ -64,6 +65,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final catalog = context.watch<CatalogProvider>();
 
     if (catalog.loading && !catalog.isReady) {
@@ -145,7 +147,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
         ),
         const SizedBox(height: 8),
         SizedBox(
-          height: 36,
+          height: 40,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -166,7 +168,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
         const SizedBox(height: 4),
         Expanded(
           child: filtered.isEmpty
-              ? const EmptyState(
+              ? EmptyState(
                   message: 'No rooms match your search.',
                   icon: Icons.meeting_room_outlined,
                 )
@@ -195,6 +197,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
           label: label,
           selected: selected,
           onSelected: (_) => onTap(),
+          compact: true,
         ),
       );
 

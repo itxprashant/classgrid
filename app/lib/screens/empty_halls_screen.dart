@@ -14,6 +14,7 @@ import '../models/academic_day.dart';
 import '../models/occupied_room.dart';
 import '../state/auth_provider.dart';
 import '../state/catalog_provider.dart';
+import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/common.dart';
@@ -179,7 +180,7 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
           }
 
           return AlertDialog(
-            title: Text('Mark $room occupied', style: AppText.serif(size: T.fs18)),
+            title: Text('Mark $room occupied', style: AppText.serif(size: T.fs18, color: T.ink)),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,7 +230,7 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(m.room, style: AppText.serif(size: T.fs18)),
+        title: Text(m.room, style: AppText.serif(size: T.fs18, color: T.ink)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,11 +280,12 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
     final catalog = context.watch<CatalogProvider>();
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Empty halls', style: AppText.serif(size: T.fs18, weight: FontWeight.w600)),
+        title: Text('Empty halls', style: AppText.serif(size: T.fs18, weight: FontWeight.w600, color: T.ink)),
       ),
       body: Material(
         color: T.paper,
@@ -313,7 +315,7 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
       onRefresh: _loadMarkings,
       child: ListView(
         children: [
-          const PageHeader(eyebrow: 'Right now · live', title: 'Free rooms'),
+          PageHeader(eyebrow: 'Right now · live', title: 'Free rooms'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(

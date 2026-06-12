@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'api/api_client.dart';
+import 'api/attendance_api.dart';
 import 'api/calendar_events_api.dart';
 import 'api/occupied_rooms_api.dart';
 import 'api/personal_events_api.dart';
@@ -12,8 +13,11 @@ import 'api/reminders_api.dart';
 import 'state/auth_provider.dart';
 import 'state/catalog_provider.dart';
 import 'state/planner_store.dart';
+import 'state/theme_controller.dart';
+import 'storage/attendance_store.dart';
 import 'storage/local_store.dart';
 import 'storage/reminder_store.dart';
+import 'theme/app_palette_scope.dart';
 import 'theme/app_theme.dart';
 import 'notifications/class_notification_service.dart';
 import 'screens/home_shell.dart';
@@ -41,10 +45,23 @@ Future<void> main() async {
   );
   await reminderStore.load();
 
+  final attendanceStore = AttendanceStore(
+    prefs,
+    ClassNotificationService.instance,
+    attendanceApi: AttendanceApi(apiClient),
+  );
+  await attendanceStore.load();
+  ClassNotificationService.instance.onNotificationTap =
+      attendanceStore.handleNotificationPayload;
+
+  final themeController = ThemeController(prefs);
+
   runApp(ClassGridApp(
     apiClient: apiClient,
     localStore: localStore,
     reminderStore: reminderStore,
+    attendanceStore: attendanceStore,
+    themeController: themeController,
   ));
 }
 
@@ -54,11 +71,15 @@ class ClassGridApp extends StatelessWidget {
     required this.apiClient,
     required this.localStore,
     required this.reminderStore,
+    required this.attendanceStore,
+    required this.themeController,
   });
 
   final ApiClient apiClient;
   final LocalStore localStore;
   final ReminderStore reminderStore;
+  final AttendanceStore attendanceStore;
+  final ThemeController themeController;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +97,7 @@ class ClassGridApp extends StatelessWidget {
       if (!auth.loading) {
         planner.onUserChanged(auth.user);
         reminderStore.onAuthChanged(isLoggedIn: auth.isLoggedIn);
+        attendanceStore.onAuthChanged(isLoggedIn: auth.isLoggedIn);
       }
     });
     auth.init();
@@ -92,26 +114,42 @@ class ClassGridApp extends StatelessWidget {
         ChangeNotifierProvider<AuthProvider>.value(value: auth),
         ChangeNotifierProvider<PlannerStore>.value(value: planner),
         ChangeNotifierProvider<ReminderStore>.value(value: reminderStore),
+        ChangeNotifierProvider<AttendanceStore>.value(value: attendanceStore),
+        ChangeNotifierProvider<ThemeController>.value(value: themeController),
       ],
-      child: AuthDeepLinkListener(
-        child: MaterialApp(
-          title: 'ClassGrid',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.build(),
-          themeMode: ThemeMode.light,
-          builder: (context, child) {
-            final mq = MediaQuery.of(context);
-            return MediaQuery(
-              data: mq.copyWith(platformBrightness: Brightness.light),
-              child: DefaultTextStyle(
-                style: AppText.sans(),
-                child: child ?? const SizedBox.shrink(),
-              ),
-            );
-          },
-          home: VersionGate(
-            apiClient: apiClient,
-            child: const HomeShell(),
+      child: AppPaletteScope(
+        notifier: themeController,
+        child: AuthDeepLinkListener(
+          child: Consumer<ThemeController>(
+            builder: (context, theme, _) {
+              final brightness = theme.palette.brightness;
+              return MaterialApp(
+                title: 'ClassGrid',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.build(),
+                themeMode:
+                    brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
+                builder: (context, child) {
+                  final mq = MediaQuery.of(context);
+                  return MediaQuery(
+                    data: mq.copyWith(platformBrightness: brightness),
+                    child: DefaultTextStyle(
+                      style: AppText.sans(),
+                      // New key forces the navigator + routes to rebuild so every
+                      // widget that reads [T] picks up the active palette.
+                      child: KeyedSubtree(
+                        key: ValueKey(theme.currentId),
+                        child: child ?? const SizedBox.shrink(),
+                      ),
+                    ),
+                  );
+                },
+                home: VersionGate(
+                  apiClient: apiClient,
+                  child: const HomeShell(),
+                ),
+              );
+            },
           ),
         ),
       ),

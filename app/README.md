@@ -10,17 +10,21 @@ flutter run -d linux                           # desktop login: paste token from
 flutter analyze && flutter test && flutter build apk --release
 ```
 
-**Sideload APK on Google Drive** (same link as the web “Download APK” button): from repo root, with [gdrive](https://github.com/glotlabs/gdrive) logged in (`gdrive account list`):
+**Release APK** (hosted on the ClassGrid VM at `https://classgrid.devclub.in/app/classgrid.apk`, same URL as the web “Get APK” button and `GET /api/app/version`):
 
 ```bash
-./scripts/release-android-apk.sh              # upload existing APK
-./scripts/release-android-apk.sh --build      # flutter build apk --release, then upload
+./scripts/release-android-apk.sh              # stage + deploy existing release APK
+./scripts/release-android-apk.sh --build      # flutter build apk --release, then deploy
 ```
 
-Bump `version:` in `app/pubspec.yaml` before each release, then `./scripts/release-android-apk.sh` (uploads Drive APK, bumps `android-version.json` + `Generator.jsx`, runs `./deploy.sh --api` and `./deploy.sh --static`). Use `--no-deploy` to skip deploy; `--build` to rebuild the APK first. The app calls `GET /api/app/version` at startup and blocks until the installed build is current.
+Bump `version:` in `app/pubspec.yaml` before each release. The script stages `dist/app/classgrid.apk`, updates `server/data/android-version.json` and `src/pages/Generator.jsx`, then runs `./deploy.sh --api`, `--apk`, and `--static`. Use `--no-deploy` to skip deploy; `--build` to rebuild the APK first. The app calls `GET /api/app/version` at startup and blocks until the installed build is current.
 
-Local dev without the check: `flutter run --dart-define=SKIP_VERSION_CHECK=true`. The upload is named `ClassGrid_<version>.apk` (version name before `+`, e.g. `ClassGrid_1.0.0.apk`). Override the Drive file with `GOOGLE_DRIVE_APK_FILE_ID=…` if needed.
+Local dev without the check: `flutter run --dart-define=SKIP_VERSION_CHECK=true`.
 
 Linux desktop: if the project has no `linux/` folder yet, run `flutter create --platforms=linux .` from `app/`. IITD login opens the browser, then paste the token from the success page (no `classgrid://` handler). Requires API with `GET /auth/login?app=1&desktop=1` (deploy `./deploy.sh --api` for prod).
+
+**Attendance** (drawer → Tools): mark present/absent/excused per planned session; syncs via `GET/PUT/PATCH /api/me/attendance` when signed in. Requires migration `007_user_course_attendance.sql` on Postgres (`./deploy.sh --api` does not run migrations).
+
+**CGPA calculator** (drawer → Tools): compute semester SGPA and projected CGPA from 10-point grades; import credits from the plan; prior CGPA/credits and rows persist in SharedPreferences (`cg_prior_cgpa`, `cg_prior_credits`, `cg_semester_rows`). Client-only — no API.
 
 See the root [README](../README.md) and [AGENTS.md § Mobile app](../AGENTS.md#mobile-app-app) for auth, catalog caching, and deploy notes.
