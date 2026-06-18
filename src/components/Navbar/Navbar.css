@@ -153,6 +153,7 @@
 .nav__auth {
     display: inline-flex;
     align-items: center;
+    gap: 8px;
     margin-left: 12px;
     padding-left: 12px;
     border-left: 1px solid var(--line);
@@ -224,7 +225,7 @@
     background: var(--paper);
     border: 1px solid var(--line);
     border-radius: var(--r-md, 8px);
-    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--shadow-pop);
     padding: 6px;
     z-index: 110;
 }
@@ -266,6 +267,63 @@
 .nav__user-menu-item:hover {
     background: var(--paper-2);
     color: var(--ink);
+}
+
+.nav__user-menu-link {
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
+.nav__explore {
+    position: relative;
+}
+
+.nav__explore-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.nav__explore-chevron {
+    font-size: 0.65rem;
+    color: var(--ink-3);
+    line-height: 1;
+}
+
+.nav__explore-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 160px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 8px);
+    box-shadow: var(--shadow-pop);
+    padding: 6px;
+    z-index: 110;
+}
+
+.nav__explore-menu-item {
+    display: block;
+    padding: 8px 10px;
+    font-size: var(--fs-14);
+    color: var(--ink-2);
+    text-decoration: none;
+    border-radius: var(--r-sm);
+    transition: background var(--t-fast), color var(--t-fast);
+}
+
+.nav__explore-menu-item:hover {
+    background: var(--paper-2);
+    color: var(--ink);
+}
+
+.nav__explore-mobile {
+    display: none;
 }
 
 .nav__link {
@@ -366,6 +424,34 @@
         bottom: 8px;
     }
 
+    .nav__explore-menu {
+        display: none;
+    }
+
+    .nav__explore-btn {
+        display: none;
+    }
+
+    .nav__explore-mobile {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 4px 0 8px;
+        border-bottom: 1px solid var(--line);
+        margin-bottom: 4px;
+    }
+
+    .nav__explore-mobile-label {
+        padding: 8px 14px 4px;
+        font-size: 0.68rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .nav__explore-mobile-link {
+        padding-left: 22px;
+    }
+
     .nav__auth {
         margin: 12px 0 0;
         padding: 12px 0 0;
@@ -409,7 +495,7 @@
         z-index: 1;
         border: 0;
         padding: 0;
-        background: oklch(0.25 0.02 60 / 0.35);
+        background: var(--scrim);
         cursor: pointer;
     }
 }

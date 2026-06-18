@@ -1,12 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/occupied_rooms_api.dart';
+import '../core/feedback.dart';
 import '../core/empty_halls.dart';
 import '../core/room_schedule.dart';
 import '../core/semester_schedule.dart';
@@ -14,10 +12,13 @@ import '../models/academic_day.dart';
 import '../models/occupied_room.dart';
 import '../state/auth_provider.dart';
 import '../state/catalog_provider.dart';
+import '../state/semester_data_provider.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_navigation.dart';
 import '../widgets/common.dart';
+import '../widgets/report_content_sheet.dart';
 import 'room_detail_screen.dart';
 
 /// Free-room finder. Mirrors the web Empty Lecture Halls page.
@@ -33,15 +34,32 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
   TimeOfDay _time = TimeOfDay.now();
   bool _custom = false;
   List<OccupiedRoom> _markings = [];
-  List<dynamic> _extraOccupied = [];
   bool _loading = false;
   bool _initialized = false;
+  String? _markingsError;
+  EmptyHallsResult? _cachedResult;
+  String? _resultCacheKey;
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     _calendarDate = DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime _termFirst(SemesterScheduleConfig schedule) =>
+      _parseYmd(schedule.classesStart);
+
+  DateTime _termLast(SemesterScheduleConfig schedule) =>
+      _parseYmd(schedule.lastTeachingDay);
+
+  DateTime _clampToTerm(DateTime date, SemesterScheduleConfig schedule) {
+    final d = DateTime(date.year, date.month, date.day);
+    final first = _termFirst(schedule);
+    final last = _termLast(schedule);
+    if (d.isBefore(first)) return first;
+    if (d.isAfter(last)) return last;
+    return d;
   }
 
   DateTime get _at => DateTime(
@@ -63,40 +81,55 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final schedule = context.watch<SemesterDataProvider>().schedule;
+    if (schedule != null) {
+      final clamped = _clampToTerm(_calendarDate, schedule);
+      if (clamped != _calendarDate) {
+        _calendarDate = clamped;
+      }
+    }
     if (!_initialized) {
       _initialized = true;
-      _loadExtra();
       _loadMarkings();
     }
   }
 
-  Future<void> _loadExtra() async {
-    try {
-      final raw = await rootBundle.loadString('assets/extra_occupied.json');
-      final parsed = jsonDecode(raw);
-      if (parsed is List && mounted) setState(() => _extraOccupied = parsed);
-    } catch (_) {}
-  }
-
   Future<void> _loadMarkings() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _markingsError = null;
+    });
     final api = context.read<OccupiedRoomsApi>();
     try {
       final m = await api.fetchOccupiedRooms(date: _dateKey, time: _timeValue);
-      if (mounted) setState(() => _markings = m);
-    } catch (_) {
-      if (mounted) setState(() => _markings = []);
+      if (mounted) {
+        setState(() {
+          _markings = m;
+          _markingsError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _markings = [];
+          _markingsError = e is ApiException
+              ? e.message
+              : 'Could not load manual room markings. Results may be incomplete.';
+        });
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _pickDate() async {
+  Future<void> _pickDate(SemesterScheduleConfig schedule) async {
+    final first = _termFirst(schedule);
+    final last = _termLast(schedule);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _calendarDate,
-      firstDate: _parseYmd(Semester.classesStart),
-      lastDate: _parseYmd(Semester.lastTeachingDay),
+      initialDate: _clampToTerm(_calendarDate, schedule),
+      firstDate: first,
+      lastDate: last,
     );
     if (picked != null) {
       setState(() {
@@ -118,10 +151,10 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
     }
   }
 
-  void _resetSchedule() {
+  void _resetSchedule(SemesterScheduleConfig schedule) {
     final now = DateTime.now();
     setState(() {
-      _calendarDate = DateTime(now.year, now.month, now.day);
+      _calendarDate = _clampToTerm(DateTime(now.year, now.month, now.day), schedule);
       _time = TimeOfDay.fromDateTime(now);
       _custom = false;
     });
@@ -129,11 +162,24 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
   }
 
   void _openSchedule(String room) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => RoomDetailScreen(roomName: normalizeRoomName(room)),
-      ),
+    pushAppRoute<void>(
+      context,
+      RoomDetailScreen(roomName: normalizeRoomName(room)),
     );
+  }
+
+  EmptyHallsResult _resultFor(CatalogProvider catalog, List<dynamic> extraOccupied) {
+    final key = '$_dateKey|$_timeValue|${_markings.length}|${extraOccupied.length}|${catalog.courses.length}';
+    if (_resultCacheKey == key && _cachedResult != null) return _cachedResult!;
+    final r = computeEmptyHalls(
+      courses: catalog.courses,
+      extraOccupied: extraOccupied,
+      manualMarkings: _markings,
+      at: _at,
+    );
+    _resultCacheKey = key;
+    _cachedResult = r;
+    return r;
   }
 
   void _onMarkTap(EmptyHallEntry entry) {
@@ -162,8 +208,14 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
           Future<void> submit() async {
-            final api = context.read<OccupiedRoomsApi>();
             final endHHMM = '${endTime.hour.toString().padLeft(2, '0')}${endTime.minute.toString().padLeft(2, '0')}';
+            final startMins = _time.hour * 60 + _time.minute;
+            final endMins = endTime.hour * 60 + endTime.minute;
+            if (endMins <= startMins) {
+              setLocal(() => error = 'End time must be after the selected time.');
+              return;
+            }
+            final api = context.read<OccupiedRoomsApi>();
             try {
               await api.createOccupiedRoom(
                 room: room,
@@ -244,6 +296,18 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
               },
               child: const Text('Weekly schedule'),
             ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                ReportContentSheet.show(
+                  context,
+                  targetKind: 'occupied_room',
+                  targetId: m.id,
+                  contextLabel: reportContextForOccupiedRoom(room: m.room, date: m.date),
+                );
+              },
+              child: const Text('Report marking'),
+            ),
             const SizedBox(height: 8),
             _metaRow('Date', m.date),
             _metaRow('Time', '${m.start.substring(0, 2)}:${m.start.substring(2)}–${m.end.substring(0, 2)}:${m.end.substring(2)}'),
@@ -255,12 +319,28 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
           if (canDelete)
             TextButton(
               onPressed: () async {
-                final api = context.read<OccupiedRoomsApi>();
+                final confirmed = await confirmDestructive(
+                  ctx,
+                  title: 'Remove marking?',
+                  message: 'This removes your manual occupancy for ${m.room} on ${m.date}.',
+                );
+                if (!confirmed || !ctx.mounted) return;
+                final api = ctx.read<OccupiedRoomsApi>();
                 try {
                   await api.removeOccupiedRoom(m.id);
                   if (ctx.mounted) Navigator.pop(ctx);
                   await _loadMarkings();
-                } catch (_) {}
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          e is ApiException ? e.message : 'Could not remove marking.',
+                        ),
+                      ),
+                    );
+                  }
+                }
               },
               child: Text('Remove marking', style: AppText.sans(color: T.danger)),
             ),
@@ -282,27 +362,31 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     final catalog = context.watch<CatalogProvider>();
+    final semester = context.watch<SemesterDataProvider>();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Empty halls', style: AppText.serif(size: T.fs18, weight: FontWeight.w600, color: T.ink)),
-      ),
-      body: Material(
-        color: T.paper,
-        child: catalog.loading && !catalog.isReady
-            ? const Center(child: CircularProgressIndicator())
-            : _buildBody(context, catalog),
-      ),
+    return ScreenShell(
+      eyebrow: 'Right now · live',
+      title: 'Free rooms',
+      body: (catalog.loading && !catalog.isReady) || (semester.loading && !semester.isReady)
+          ? const Center(child: CircularProgressIndicator())
+          : semester.schedule == null
+              ? EmptyState(
+                  message: semester.error ?? 'Semester data is not available.',
+                  icon: Icons.cloud_off_outlined,
+                  action: FilledButton(onPressed: semester.load, child: const Text('Retry')),
+                )
+              : _buildBody(context, catalog, semester),
     );
   }
 
-  Widget _buildBody(BuildContext context, CatalogProvider catalog) {
-    final r = computeEmptyHalls(
-      courses: catalog.courses,
-      extraOccupied: _extraOccupied,
-      manualMarkings: _markings,
-      at: _at,
-    );
+  Widget _buildBody(
+    BuildContext context,
+    CatalogProvider catalog,
+    SemesterDataProvider semester,
+  ) {
+    final schedule = semester.schedule!;
+    final extraOccupied = semester.extraOccupied;
+    final r = _resultFor(catalog, extraOccupied);
 
     final groups = <String, List<EmptyHallEntry>>{};
     for (final e in r.entries) {
@@ -315,14 +399,13 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
       onRefresh: _loadMarkings,
       child: ListView(
         children: [
-          PageHeader(eyebrow: 'Right now · live', title: 'Free rooms'),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: T.space16),
             child: Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _pickDate,
+                    onPressed: () => _pickDate(schedule),
                     style: OutlinedButton.styleFrom(alignment: Alignment.centerLeft),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,10 +426,17 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
                   label: Text(_time.format(context), style: AppText.mono(size: T.fs14)),
                 ),
                 if (_custom)
-                  TextButton(onPressed: _resetSchedule, child: const Text('Now')),
+                  TextButton(onPressed: () => _resetSchedule(schedule), child: const Text('Now')),
               ],
             ),
           ),
+          if (_markingsError != null)
+            StatusBannerWithRetry(
+              kind: 'err',
+              text: _markingsError!,
+              onRetry: _loadMarkings,
+              onClose: () => setState(() => _markingsError = null),
+            ),
           if (r.academic.type != AcademicType.normal)
             StatusBanner(
               kind: r.academic.hasClasses ? 'warn' : 'ok',
@@ -363,7 +453,13 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
             ]),
           ),
           if (_loading) const LinearProgressIndicator(minHeight: 2),
-          if (r.entries.isEmpty)
+          if (_markingsError != null)
+            EmptyState(
+              message: 'Could not verify manual markings. Retry before trusting free-room results.',
+              icon: Icons.cloud_off_outlined,
+              action: FilledButton(onPressed: _loadMarkings, child: const Text('Retry')),
+            )
+          else if (r.entries.isEmpty)
             EmptyState(
               message: catalog.courses.every((c) => c.lectureHall == null)
                   ? 'No rooms are tracked yet. The catalog has no venue data this semester, so only manually-marked rooms appear here.'
@@ -442,9 +538,8 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
                     TextButton(
                       onPressed: () => _onMarkTap(e),
                       style: TextButton.styleFrom(
-                        minimumSize: Size.zero,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        minimumSize: const Size(48, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: T.space12),
                       ),
                       child: Text(
                         e.marked ? 'Details' : (context.read<AuthProvider>().isLoggedIn ? 'Mark' : 'Sign in'),

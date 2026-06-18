@@ -1,12 +1,12 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../models/course.dart';
 import '../storage/local_store.dart';
 
-/// Loads and caches the course catalog. Mirrors the web app's static
-/// `courses.json` import, but sourced from `GET /api/catalog` with an offline
-/// SharedPreferences cache fallback.
+/// Loads and caches the course catalog from `GET /api/catalog` with offline
+/// SharedPreferences cache fallback and ETag revalidation.
 class CatalogProvider extends ChangeNotifier {
   CatalogProvider(this._client, this._store);
 
@@ -30,21 +30,45 @@ class CatalogProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    // Seed from cache first for instant render / offline support.
     final cached = _store.loadCatalogCache();
     if (cached != null && _courses.isEmpty) {
       _ingest(cached);
     }
 
     try {
-      final data = await _client.requestJson('/api/catalog');
-      final raw = data['courses'];
-      if (raw is List) {
-        _ingest(raw);
-        await _store.saveCatalogCache(raw, data['etag']?.toString());
+      final etag = _store.loadCatalogEtag();
+      final headers = <String, dynamic>{};
+      if (etag != null && etag.isNotEmpty) {
+        headers['If-None-Match'] = etag;
+      }
+
+      final res = await _client.dio.get<dynamic>(
+        '/api/catalog',
+        options: Options(headers: headers),
+      );
+
+      if (res.statusCode == 304) {
+        // Cached catalog is still current.
+      } else if (res.statusCode != null &&
+          res.statusCode! >= 200 &&
+          res.statusCode! < 300) {
+        final data = res.data;
+        if (data is Map) {
+          final map = Map<String, dynamic>.from(data);
+          final raw = map['courses'];
+          if (raw is List) {
+            _ingest(raw);
+            final newEtag = res.headers.value('etag') ?? res.headers.value('ETag');
+            await _store.saveCatalogCache(raw, newEtag);
+          }
+        }
+      } else {
+        throw ApiException(
+          'catalog_load_failed',
+          status: res.statusCode,
+        );
       }
     } catch (e) {
-      // Keep any cached data; only surface an error if we have nothing.
       if (_courses.isEmpty) {
         _error = e is ApiException ? e.message : 'Could not load catalog';
       }

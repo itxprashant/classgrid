@@ -47,6 +47,7 @@ class AttendanceStore extends ChangeNotifier {
   bool _useApi = false;
   bool _markNotifyEnabled = false;
   AttendanceNavTarget? _pendingNav;
+  String? _syncError;
 
   Timer? _patchTimer;
   String? _patchCourse;
@@ -56,6 +57,13 @@ class AttendanceStore extends ChangeNotifier {
 
   Map<String, AttendanceBucket> get buckets => Map.unmodifiable(_buckets);
   bool get markNotifyEnabled => _markNotifyEnabled;
+  String? get syncError => _syncError;
+
+  void clearSyncError() {
+    if (_syncError == null) return;
+    _syncError = null;
+    notifyListeners();
+  }
 
   int thresholdFor(String courseCode) =>
       _courseThresholds[courseCode] ?? kDefaultAttendanceThreshold;
@@ -242,10 +250,13 @@ class AttendanceStore extends ChangeNotifier {
           status: status,
         );
         _buckets[updated.bucketKey()] = updated;
+        _syncError = null;
         await _persistLocal();
         notifyListeners();
       } catch (e) {
         debugPrint('[AttendanceStore] patch failed: $e');
+        _syncError = 'Could not sync attendance mark. Saved on this device.';
+        notifyListeners();
       }
     }
   }

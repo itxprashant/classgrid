@@ -5,10 +5,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../config.dart';
 import '../core/clashes.dart';
 import '../core/ics.dart';
 import '../models/course.dart';
 import '../models/plan.dart';
+import '../state/auth_provider.dart';
 import '../state/catalog_provider.dart';
 import '../state/planner_store.dart';
 import '../theme/app_palette_scope.dart';
@@ -27,7 +29,28 @@ class PlanScreen extends StatefulWidget {
 }
 
 class _PlanScreenState extends State<PlanScreen> {
-  String? _expandedCode;
+  Future<void> _startLogin() async {
+    if (AppConfig.usesDesktopLogin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Use IITD login in the app bar to sign in.')),
+      );
+      return;
+    }
+    final auth = context.read<AuthProvider>();
+    final opened = await auth.startBrowserLogin();
+    if (!mounted) return;
+    if (opened) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sign in on ClassGrid in your browser, then return here.'),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the browser.')),
+      );
+    }
+  }
 
   Future<void> _openAddCourse() async {
     final catalog = context.read<CatalogProvider>();
@@ -35,16 +58,32 @@ class _PlanScreenState extends State<PlanScreen> {
     final code = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _AddCourseSheet(catalog: catalog),
+      builder: (_) => _AddCourseSheet(
+        catalog: catalog,
+        existingCodes: planner.selectedCourses.map((c) => c.courseCode).toSet(),
+      ),
     );
-    if (code != null) planner.addCourses([code]);
+    if (code == null || !mounted) return;
+    if (planner.selectedCourses.any((c) => c.courseCode == code)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$code is already on your plan.')),
+      );
+      return;
+    }
+    planner.addCourses([code]);
   }
 
   Future<void> _confirmAutoFetch() async {
     final planner = context.read<PlannerStore>();
     if (!planner.isLoggedIn) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sign in with IITD to auto-fetch your courses.')),
+        SnackBar(
+          content: const Text('Sign in with IITD to auto-fetch your courses.'),
+          action: SnackBarAction(
+            label: 'Log in',
+            onPressed: _startLogin,
+          ),
+        ),
       );
       return;
     }
@@ -91,12 +130,43 @@ class _PlanScreenState extends State<PlanScreen> {
     }
   }
 
+  Future<void> _openEditTiming(SelectedCourse course, PlannerStore planner) async {
+    final td = planner.timetableData[course.courseCode];
+    if (td == null) return;
+    final result = await EdTimingSheet.show(context, course: course, current: td);
+    if (result != null) {
+      planner.updateCourseTimings(
+        course.courseCode,
+        tutorial: result['tutorial'],
+        lab: result['lab'],
+        setTutorial: result.containsKey('tutorial'),
+        setLab: result.containsKey('lab'),
+      );
+    }
+  }
+
+  Future<void> _confirmRemoveCourse(SelectedCourse course, PlannerStore planner) async {
+    final ok = await confirmDestructive(
+      context,
+      title: 'Remove ${course.courseCode}?',
+      message: 'This course will be removed from your plan.',
+    );
+    if (ok) planner.removeCourse(course.courseCode);
+  }
+
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     final planner = context.watch<PlannerStore>();
+
+    if (!planner.planReady) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     final credits = totalCredits(planner.selectedCourses);
     final conflicts = countConflicts(planner.selectedCourses, planner.timetableData);
+    final gridSessions = flattenSessions(planner.selectedCourses, planner.timetableData);
+    final gridConflicts = conflictIndices(gridSessions);
 
     return ListView(
       children: [
@@ -123,10 +193,10 @@ class _PlanScreenState extends State<PlanScreen> {
           ),
         // Toolbar.
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: T.space16),
           child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: T.space8,
+            runSpacing: T.space8,
             children: [
               FilledButton.icon(onPressed: _openAddCourse, icon: const Icon(Icons.add, size: 18), label: const Text('Add course')),
               OutlinedButton.icon(
@@ -147,26 +217,23 @@ class _PlanScreenState extends State<PlanScreen> {
         ),
         if (conflicts > 0)
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: T.space16, vertical: T.space8),
             child: StatusBanner(
               kind: 'err',
               text: 'Some sessions clash. Conflicting blocks are hatched on the grid.',
             ),
           ),
-        const SizedBox(height: 12),
+        const SizedBox(height: T.space12),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: T.space16),
           child: TimetableGrid(
             courses: planner.selectedCourses,
             timetableData: planner.timetableData,
+            sessions: gridSessions,
+            conflicts: gridConflicts,
           ),
         ),
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-          child: Text('SELECTED COURSES',
-              style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1.2)),
-        ),
+        const SectionHeader('Selected courses'),
         if (planner.selectedCourses.isEmpty)
           EmptyState(
             message: 'No courses yet. Add a course or auto-fetch your registered courses.',
@@ -174,85 +241,57 @@ class _PlanScreenState extends State<PlanScreen> {
           )
         else
           ...planner.selectedCourses.map((c) => _courseTile(c, planner)),
-        const SizedBox(height: 32),
+        const SizedBox(height: T.space32),
       ],
     );
   }
 
   Widget _courseTile(SelectedCourse course, PlannerStore planner) {
-    final expanded = _expandedCode == course.courseCode;
     final td = planner.timetableData[course.courseCode];
     final canEdit = course.tutorial || course.lab;
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      margin: const EdgeInsets.fromLTRB(T.space16, 0, T.space16, T.space8),
       decoration: BoxDecoration(
         color: T.surface,
         border: Border.all(color: T.line),
         borderRadius: BorderRadius.circular(T.r),
       ),
-      child: Column(
-        children: [
-          ListTile(
-            title: Row(
-              children: [
-                Text(course.courseCode, style: AppText.mono(size: T.fs14, weight: FontWeight.w600)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(course.courseName,
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.sans(size: T.fs13, color: T.ink2)),
-                ),
-              ],
+      child: ListTile(
+        title: Row(
+          children: [
+            Text(course.courseCode, style: AppText.mono(size: T.fs14, weight: FontWeight.w600)),
+            const SizedBox(width: T.space8),
+            Expanded(
+              child: Text(course.courseName,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.sans(size: T.fs13, color: T.ink2)),
             ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Wrap(spacing: 6, runSpacing: 4, children: [
-                Pill(course.creditStructure, tint: T.surfaceSunk, edge: T.line, ink: T.ink2),
-                if (course.tutorial)
-                  Pill(td?.tutorial != null ? 'Tut set' : 'Tut needed',
-                      tint: T.tutorialTint, edge: T.tutorialEdge, ink: T.tutorialInk),
-                if (course.lab)
-                  Pill(td?.lab != null ? 'Lab set' : 'Lab needed',
-                      tint: T.labTint, edge: T.labEdge, ink: T.labInk),
-              ]),
+          ],
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: T.space4),
+          child: Wrap(spacing: 6, runSpacing: 4, children: [
+            Pill(course.creditStructure, tint: T.surfaceSunk, edge: T.line, ink: T.ink2),
+            if (course.tutorial)
+              Pill(td?.tutorial != null ? 'Tut set' : 'Tut needed',
+                  tint: T.tutorialTint, edge: T.tutorialEdge, ink: T.tutorialInk),
+            if (course.lab)
+              Pill(td?.lab != null ? 'Lab set' : 'Lab needed',
+                  tint: T.labTint, edge: T.labEdge, ink: T.labInk),
+          ]),
+        ),
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (canEdit)
+            IconButton(
+              tooltip: 'Edit sessions',
+              icon: const Icon(Icons.edit_calendar_outlined, size: 20),
+              onPressed: () => _openEditTiming(course, planner),
             ),
-            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (canEdit)
-                IconButton(
-                  tooltip: 'Edit sessions',
-                  icon: Icon(expanded ? Icons.expand_less : Icons.edit_calendar_outlined, size: 20),
-                  onPressed: () => setState(() => _expandedCode = expanded ? null : course.courseCode),
-                ),
-              IconButton(
-                tooltip: 'Remove',
-                icon: const Icon(Icons.delete_outline, size: 20),
-                onPressed: () {
-                  planner.removeCourse(course.courseCode);
-                  if (expanded) setState(() => _expandedCode = null);
-                },
-              ),
-            ]),
+          IconButton(
+            tooltip: 'Remove',
+            icon: const Icon(Icons.delete_outline, size: 20),
+            onPressed: () => _confirmRemoveCourse(course, planner),
           ),
-          if (expanded && canEdit && td != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.tune, size: 18),
-                label: const Text('Edit tutorial / lab sessions'),
-                onPressed: () async {
-                  final result = await EditTimingSheet.show(context, course: course, current: td);
-                  if (result != null) {
-                    planner.updateCourseTimings(
-                      course.courseCode,
-                      tutorial: result['tutorial'],
-                      lab: result['lab'],
-                      setTutorial: result.containsKey('tutorial'),
-                      setLab: result.containsKey('lab'),
-                    );
-                  }
-                },
-              ),
-            ),
-        ],
+        ]),
       ),
     );
   }
@@ -261,8 +300,10 @@ class _PlanScreenState extends State<PlanScreen> {
 /// Bottom-sheet course search: uppercase substring match on course code,
 /// capped at 10 results (parity with the web add-course modal).
 class _AddCourseSheet extends StatefulWidget {
-  const _AddCourseSheet({required this.catalog});
+  const _AddCourseSheet({required this.catalog, required this.existingCodes});
+
   final CatalogProvider catalog;
+  final Set<String> existingCodes;
 
   @override
   State<_AddCourseSheet> createState() => _AddCourseSheetState();
@@ -282,13 +323,13 @@ class _AddCourseSheetState extends State<_AddCourseSheet> {
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(T.space16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Add a course', style: AppText.serif(size: T.fs18, color: T.ink)),
-              const SizedBox(height: 12),
+              const SizedBox(height: T.space12),
               TextField(
                 autofocus: true,
                 textCapitalization: TextCapitalization.characters,
@@ -299,10 +340,10 @@ class _AddCourseSheetState extends State<_AddCourseSheet> {
                 ),
                 onChanged: (v) => setState(() => _query = v.trim()),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: T.space8),
               if (q.isNotEmpty && results.isEmpty)
                 Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(T.space16),
                   child: Text('No courses match "$q".', style: AppText.sans(size: T.fs13, color: T.ink3)),
                 ),
               ConstrainedBox(
@@ -315,14 +356,24 @@ class _AddCourseSheetState extends State<_AddCourseSheet> {
                         dense: true,
                         title: Row(children: [
                           Text(c.courseCode, style: AppText.mono(size: T.fs14, weight: FontWeight.w600)),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: T.space8),
                           Expanded(
                             child: Text(c.courseName,
                                 maxLines: 1, overflow: TextOverflow.ellipsis, style: AppText.sans(size: T.fs13, color: T.ink2)),
                           ),
+                          if (widget.existingCodes.contains(c.courseCode))
+                            Pill('On plan', tint: T.surfaceSunk, edge: T.line, ink: T.ink3),
                         ]),
                         subtitle: Text(c.instructor ?? '', style: AppText.sans(size: T.fs12, color: T.ink3)),
-                        onTap: () => Navigator.pop(context, c.courseCode),
+                        onTap: () {
+                          if (widget.existingCodes.contains(c.courseCode)) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('${c.courseCode} is already on your plan.')),
+                            );
+                            return;
+                          }
+                          Navigator.pop(context, c.courseCode);
+                        },
                       ),
                   ],
                 ),

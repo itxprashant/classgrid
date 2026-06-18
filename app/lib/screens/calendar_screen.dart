@@ -15,6 +15,7 @@ import '../state/auth_provider.dart';
 import '../state/catalog_provider.dart';
 import '../state/planner_store.dart';
 import '../storage/local_store.dart';
+import '../theme/academic_day_colors.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -25,6 +26,7 @@ import '../widgets/calendar_week_grid.dart';
 import '../widgets/common.dart';
 import '../widgets/event_form_sheet.dart';
 import '../widgets/reminder_toggle.dart';
+import '../widgets/sheet_scaffold.dart';
 
 enum _CalendarViewMode { month, week }
 
@@ -47,6 +49,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   bool _loading = false;
   bool _showClasses = false;
   String? _error;
+  bool _enrolledFetchFailed = false;
   bool _initialized = false;
 
   @override
@@ -99,13 +102,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   List<DateTime> _gridDays() => _gridDaysFor(_month);
 
-  Future<void> _reload() async {
+  Future<void> _reload({bool showProgress = true}) async {
     final days = _visibleDays();
     final from = formatDateKey(days.first);
     final to = formatDateKey(days.last);
 
     setState(() {
-      _loading = true;
+      if (showProgress) _loading = true;
       _error = null;
     });
 
@@ -121,7 +124,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
       if (auth.isLoggedIn && _enrolledCodes.isEmpty) {
         try {
           _enrolledCodes = await PlannerApi(apiClient).fetchEnrolledCourses();
-        } catch (_) {}
+          _enrolledFetchFailed = false;
+        } catch (_) {
+          _enrolledFetchFailed = true;
+        }
       }
       final plannerCodes =
           planner.selectedCourses.map((c) => c.courseCode).toList();
@@ -163,7 +169,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _slideDirection = delta > 0 ? 1 : -1;
       _month = DateTime(_month.year, _month.month + delta, 1);
     });
-    _reload();
+    _reload(showProgress: false);
   }
 
   void _changePeriod(int delta) {
@@ -173,7 +179,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _slideDirection = delta > 0 ? 1 : -1;
         _weekAnchor = _startOfWeek(_weekAnchor).add(Duration(days: 7 * delta));
       });
-      _reload();
+      _reload(showProgress: false);
       return;
     }
     _changeMonth(delta);
@@ -185,7 +191,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       _weekAnchor = DateTime(now.year, now.month, now.day);
       _month = DateTime(now.year, now.month, 1);
     });
-    _reload();
+    _reload(showProgress: false);
   }
 
   void _switchView(_CalendarViewMode mode) {
@@ -206,7 +212,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _viewMode = mode;
       });
     }
-    _reload();
+    _reload(showProgress: false);
   }
 
   void _onPeriodSwipeEnd(DragEndDetails details) {
@@ -259,13 +265,45 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final academic = getAcademicDay(day);
 
     if (!mounted) return;
-    final action = await showDialog<_DayDialogResult>(
+    final action = await SheetScaffold.show<_DayDialogResult>(
       context: context,
-      builder: (ctx) => _DayEventsDialog(
-        day: day,
-        academic: academic,
-        events: events,
-        classes: classes,
+      child: SheetScaffold(
+        title: DateFormat('EEEE, d MMMM').format(day),
+        body: _DayEventsSheetBody(
+          day: day,
+          academic: academic,
+          events: events,
+          classes: classes,
+        ),
+        primaryAction: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Course events sync for everyone who has that course. '
+              'Personal events are only visible to you.',
+              style: AppText.sans(size: T.fs12, color: T.ink3, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, _DayDialogAdd('personal')),
+                    child: const Text('Personal event'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context, _DayDialogAdd('shared')),
+                    child: const Text('Course event'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
     if (action == null || !mounted) return;
@@ -340,7 +378,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           await sharedApi.createEvent(payload);
         }
       }
-      await _reload();
+      await _reload(showProgress: false);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -370,7 +408,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         : DateFormat('MMMM yyyy').format(_month);
 
     return RefreshIndicator(
-      onRefresh: _reload,
+      onRefresh: () => _reload(showProgress: false),
       child: ListView(
         children: [
           PageHeader(
@@ -396,9 +434,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
               children: [
                 Expanded(
                   child: Wrap(spacing: 8, children: [
-                    _legendDot('Course', T.accent),
-                    _legendDot('Personal', T.labEdge),
-                    _legendDot('Holiday', T.success),
+                    _legendDot('Course', AcademicDayColors.legendDot('course')),
+                    _legendDot('Personal', AcademicDayColors.legendDot('personal')),
+                    _legendDot('Holiday', AcademicDayColors.legendDot('holiday')),
                   ]),
                 ),
                 TextButton.icon(
@@ -419,14 +457,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     onChanged: _switchView,
                     segments: const [
                       AppFilterSegment(
-                        value: _CalendarViewMode.month,
-                        label: 'Month',
-                        icon: Icons.calendar_month_outlined,
-                      ),
-                      AppFilterSegment(
                         value: _CalendarViewMode.week,
                         label: 'Week',
                         icon: Icons.view_week_outlined,
+                      ),
+                      AppFilterSegment(
+                        value: _CalendarViewMode.month,
+                        label: 'Month',
+                        icon: Icons.calendar_month_outlined,
                       ),
                     ],
                   ),
@@ -484,8 +522,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
               text:
                   'No courses on your planner yet — add them on the Plan tab to see classes here.',
             ),
+          if (_enrolledFetchFailed)
+            StatusBannerWithRetry(
+              kind: 'warn',
+              text: 'Could not load your enrolled courses — shared events may be incomplete.',
+              onClose: () => setState(() => _enrolledFetchFailed = false),
+              onRetry: _reload,
+            ),
           if (_error != null)
-            StatusBanner(kind: 'err', text: _error!, onClose: () => setState(() => _error = null)),
+            StatusBannerWithRetry(
+              kind: 'err',
+              text: _error!,
+              onClose: () => setState(() => _error = null),
+              onRetry: _reload,
+            ),
           if (_loading) const LinearProgressIndicator(minHeight: 2),
           if (_viewMode == _CalendarViewMode.month)
             _animatedMonth(byDate, classesByDate, periodKey)
@@ -693,13 +743,12 @@ class _DayCell extends StatelessWidget {
   final void Function(CalendarEvent) onEventTap;
 
   Color? get _dayTint {
+    final style = AcademicDayColors.forDay(academic);
     switch (academic.type) {
       case AcademicType.holiday:
-        return T.successTint;
       case AcademicType.swapped:
-        return T.accentTint;
       case AcademicType.breakPeriod:
-        return isExamPeriod(academic.name) ? T.dangerTint : T.surfaceSunk;
+        return style.tint;
       case AcademicType.weekend:
         return T.surfaceSunk;
       default:
@@ -708,15 +757,12 @@ class _DayCell extends StatelessWidget {
   }
 
   ({Color tint, Color ink})? get _academicChipColors {
+    final style = AcademicDayColors.forDay(academic);
     switch (academic.type) {
       case AcademicType.holiday:
-        return (tint: T.successTint, ink: T.successInk);
       case AcademicType.swapped:
-        return (tint: T.tutorialTint, ink: T.tutorialInk);
       case AcademicType.breakPeriod:
-        return isExamPeriod(academic.name)
-            ? (tint: T.dangerTint, ink: T.danger)
-            : (tint: T.surfaceSunk, ink: T.ink3);
+        return (tint: style.tint, ink: style.ink);
       default:
         return null;
     }
@@ -772,7 +818,7 @@ class _DayCell extends StatelessWidget {
                       () => onEventTap(e),
                     ),
                   if (events.length > 3)
-                    Text('+${events.length - 3}', style: AppText.sans(size: 8, color: T.ink3)),
+                    Text('+${events.length - 3}', style: AppText.sans(size: T.fs10, color: T.ink3)),
                 ],
               ),
             ),
@@ -799,7 +845,7 @@ class _DayCell extends StatelessWidget {
           text,
           maxLines: maxLines,
           overflow: TextOverflow.ellipsis,
-          style: AppText.sans(size: 8, color: ink, height: 1.2),
+          style: AppText.sans(size: T.fs10, color: ink, height: 1.2),
         ),
       ),
     );
@@ -818,9 +864,9 @@ class _DayDialogAdd extends _DayDialogResult {
   final String mode; // shared | personal
 }
 
-/// Day tap: lists classes and events on that date; tap an event to edit.
-class _DayEventsDialog extends StatelessWidget {
-  const _DayEventsDialog({
+/// Day tap sheet body: lists classes and events on that date; tap an event to edit.
+class _DayEventsSheetBody extends StatelessWidget {
+  const _DayEventsSheetBody({
     required this.day,
     required this.academic,
     required this.events,
@@ -837,18 +883,20 @@ class _DayEventsDialog extends StatelessWidget {
   ) {
     switch (info.type) {
       case AcademicType.holiday:
+        final holidayStyle = AcademicDayColors.forType(AcademicType.holiday);
         return (
           title: info.name ?? 'Holiday',
           subtitle: 'Institute holiday · No classes',
           icon: Icons.event_busy_outlined,
-          iconColor: T.successInk,
+          iconColor: holidayStyle.ink,
         );
       case AcademicType.swapped:
+        final swapStyle = AcademicDayColors.forType(AcademicType.swapped);
         return (
           title: 'Timetable swap',
           subtitle: describeAcademicDay(info),
           icon: Icons.swap_horiz,
-          iconColor: T.tutorialInk,
+          iconColor: swapStyle.ink,
         );
       case AcademicType.breakPeriod:
         return (
@@ -969,6 +1017,7 @@ class _DayEventsDialog extends StatelessWidget {
         final typeLabel = kEventTypeLabels[e.type] ?? e.type;
         if (i > 0) items.add(const Divider(height: 1));
         final eKey = eventReminderKey(e);
+        final addedBy = !e.isPersonal ? formatEventActor(e.createdBy) : null;
         items.add(
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -986,6 +1035,7 @@ class _DayEventsDialog extends StatelessWidget {
                 if (!e.isPersonal && (e.courseCode?.isNotEmpty ?? false)) e.courseCode!,
                 typeLabel,
                 if (schedule.isNotEmpty) schedule,
+                if (addedBy != null) 'Added by ${addedBy.who}',
               ].join(' · '),
               style: AppText.sans(size: T.fs12, color: T.ink3),
             ),
@@ -1014,29 +1064,9 @@ class _DayEventsDialog extends StatelessWidget {
       ));
     }
 
-    return AlertDialog(
-      title: Text(DateFormat('EEEE, d MMMM').format(day), style: AppText.serif(size: T.fs18, color: T.ink)),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView(
-          shrinkWrap: true,
-          children: items,
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, _DayDialogAdd('shared')),
-          child: const Text('Add course event'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context, _DayDialogAdd('personal')),
-          child: const Text('Add personal event'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: items,
     );
   }
 }

@@ -35,20 +35,11 @@ const config = {
         redirectUri: required('OIDC_REDIRECT_URI'),
         discoveryUrl: (process.env.OIDC_DISCOVERY_URL || '').trim()
             || 'https://auth.devclub.in/api/oauth/.well-known/openid-configuration',
-        scope: (process.env.OIDC_SCOPE || 'openid profile email kerberos').trim(),
+        scope: (process.env.OIDC_SCOPE || 'openid profile email kerberos hostel').trim(),
     },
 
     sessionSecret: required('SESSION_SECRET'),
     frontendOrigin: (process.env.FRONTEND_ORIGIN || 'http://localhost:3000').trim(),
-
-    studentCoursesPath: (process.env.STUDENT_COURSES_PATH
-        || path.join(repoRoot, 'src', 'studentCourses.json')).trim(),
-
-    catalogPath: (process.env.CATALOG_PATH
-        || path.join(repoRoot, 'src', 'courses.json')).trim(),
-
-    courseStudentsPath: (process.env.COURSE_STUDENTS_PATH
-        || path.join(repoRoot, 'src', 'courseStudents.json')).trim(),
 
     databaseUrl: (process.env.DATABASE_URL || '').trim() || null,
 
@@ -56,9 +47,10 @@ const config = {
     // (classgrid://auth/callback?token=…). Override only if the app scheme changes.
     mobileAppScheme: (process.env.MOBILE_APP_SCHEME || 'classgrid').trim(),
 
-    // Minimum Flutter APK (GET /api/app/version). Edited in server/data/android-version.json.
-    androidVersionPath: (process.env.ANDROID_VERSION_PATH
-        || path.join(__dirname, '..', 'data', 'android-version.json')).trim(),
+    adminKerberses: (process.env.ADMIN_KERBERSES || '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
 };
 
 config.isProd = config.nodeEnv === 'production';

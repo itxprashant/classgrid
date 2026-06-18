@@ -30,8 +30,9 @@ deploy.env
 *.secret
 .gitsecret/
 
-# --- student enrollment data (PII; regenerate with scripts/fetch_student_courses.js) ---
+# --- student enrollment data (PII; import with scripts/db/import_student_data.js) ---
 # Repo ships tiny stubs in studentCourses.json / courseStudents.json only.
+data/ldap_exports/
 src/studentCourses2.json
 src/courseStudents2.json
 
@@ -49,6 +50,9 @@ ANDROID.md
 
 # --- frontend build ---
 /build
+
+# --- staged Android release APK (uploaded via ./deploy.sh --apk) ---
+/dist/
 
 # --- Flutter / Android / iOS (app/) ---
 app/.dart_tool/

@@ -1,0 +1,14 @@
+.theme-toggle {
+    flex-shrink: 0;
+}
+
+.theme-toggle__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform var(--t-fast), opacity var(--t-fast);
+}
+
+.theme-toggle:active .theme-toggle__icon {
+    transform: rotate(-20deg) scale(0.92);
+}

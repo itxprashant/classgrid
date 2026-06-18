@@ -34,6 +34,30 @@ neutral is warm-tinted toward the brand hue (no `#000`/`#fff`).
 - **Danger**: `--danger`, `--danger-tint`, `--danger-edge` for conflicts and
   destructive actions. Warm red, not neon.
 
+### Dark mode
+
+Dark theme uses the Flutter app's **Midnight** palette
+(`buildDarkPalette(neutralHue: 260, accentHue: 265, paperL: 0.16)`), with
+web-specific contrast boosts for ink, lines, and surface separation. Tokens
+are overridden on `[data-theme="dark"]` in [src/index.css](src/index.css);
+light values remain on `:root`.
+
+- **Activation**: `html[data-theme="light"|"dark"]` set by an inline boot script
+  in [public/index.html](public/index.html) (prevents flash) and
+  [ThemeProvider](src/theme/ThemeProvider.jsx) at runtime.
+- **Persistence**: `localStorage` key `cg_color_scheme`. When unset, the app
+  follows `prefers-color-scheme`; toggling writes an explicit choice.
+- **Toggle**: Navbar moon/sun icon ([ThemeToggle](src/components/ThemeToggle/ThemeToggle.jsx)).
+- **Canvas (dark)**: cool violet-black (`--paper` ~`oklch(0.15 0.019 260)`).
+  Accent is violet (~265), not the light-mode teal. Lecture blocks follow the
+  accent hue; tutorial/lab keep ochre/clay hues.
+- **Shared semantic tokens**: `--scrim`, `--focus-ring`, `--btn-primary-fg`,
+  `--btn-primary-hover`, `--warn*`, `--surface-overlay*` for modals, focus
+  rings, and sticky headers across both themes.
+
+Admin and all public routes consume the same token set; no separate dark
+stylesheet.
+
 ### Typography
 
 - **Inter** for all UI, body, and data. System fallback stack is included.

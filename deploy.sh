@@ -4,15 +4,15 @@
 # - rsync the Node API to ${REMOTE_API_DIR}, npm ci, restart systemd
 #
 # Usage:
-#   cp deploy.env.example deploy.env   # fill in host, SSH key, domain (deploy.env is gitignored)
 #   ./deploy.sh                        # build + upload (static + API)
 #   ./deploy.sh --setup                # first-time nginx + certbot + systemd, then deploy
 #   ./deploy.sh --static               # SPA only
 #   ./deploy.sh --api                  # API + data files only
+#   ./deploy.sh --apk                  # upload dist/app/classgrid.apk to nginx web root
 #
-# All deploy settings can also be exported in the shell:
-#   DEPLOY_HOST=203.0.113.10 DEPLOY_USER=deploy SSH_IDENTITY=~/.ssh/id_ed25519 \
-#   DEPLOY_DOMAIN=timetable.example.edu ./deploy.sh
+# SSH: uses ~/.ssh/config Host alias mydevclub by default (same as `ssh mydevclub`).
+# Optional deploy.env: DEPLOY_SSH_HOST, DEPLOY_DOMAIN (see deploy.env.example).
+# Legacy: DEPLOY_HOST + DEPLOY_USER + SSH_IDENTITY still supported.
 
 set -euo pipefail
 
@@ -20,14 +20,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # Optional local overrides (gitignored). AZURE_* names kept as deprecated aliases.
-if [[ -f "${SCRIPT_DIR}/deploy.env" ]]; then
-    # shellcheck disable=SC1091
-    source "${SCRIPT_DIR}/deploy.env"
-fi
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/scripts/lib/deploy_ssh.sh"
+load_deploy_env "${SCRIPT_DIR}"
 
-DEPLOY_HOST="${DEPLOY_HOST:-${AZURE_HOST:-}}"
-DEPLOY_USER="${DEPLOY_USER:-${AZURE_USER:-}}"
-SSH_IDENTITY="${SSH_IDENTITY:-${AZURE_KEY:-}}"
 DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-${DOMAIN:-}}"
 
 REMOTE_WEB_DIR="${REMOTE_WEB_DIR:-/var/www/classgrid}"
@@ -36,43 +32,16 @@ API_ENV_DIR="${API_ENV_DIR:-/etc/classgrid}"
 API_ENV_FILE="${API_ENV_DIR}/api.env"
 API_PORT="${API_PORT:-4500}"
 
-STUDENT_DATA_SRC="${STUDENT_DATA_SRC:-${SCRIPT_DIR}/src/studentCourses.json}"
-CATALOG_DATA_SRC="${CATALOG_DATA_SRC:-${SCRIPT_DIR}/src/courses.json}"
-COURSE_STUDENTS_DATA_SRC="${COURSE_STUDENTS_DATA_SRC:-${SCRIPT_DIR}/src/courseStudents.json}"
-ANDROID_VERSION_SRC="${ANDROID_VERSION_SRC:-${SCRIPT_DIR}/server/data/android-version.json}"
-
-SSH=()
-RSYNC_SSH=""
+APK_SRC="${APK_SRC:-${SCRIPT_DIR}/dist/app/classgrid.apk}"
+REMOTE_APK_PATH="${REMOTE_APK_PATH:-app/classgrid.apk}"
 
 require_deploy_config() {
-    local missing=()
-    [[ -n "$DEPLOY_HOST" ]] || missing+=(DEPLOY_HOST)
-    [[ -n "$DEPLOY_USER" ]] || missing+=(DEPLOY_USER)
-    [[ -n "$SSH_IDENTITY" ]] || missing+=(SSH_IDENTITY)
-    [[ -n "$DEPLOY_DOMAIN" ]] || missing+=(DEPLOY_DOMAIN)
-
-    if ((${#missing[@]} > 0)); then
-        echo "Missing deploy settings: ${missing[*]}" >&2
-        echo "Copy deploy.env.example to deploy.env and fill in values, or export the variables." >&2
-        exit 1
-    fi
-
-    if [[ ! -f "$SSH_IDENTITY" ]]; then
-        echo "SSH identity file not found: $SSH_IDENTITY" >&2
-        exit 1
-    fi
-
-    SSH=(ssh -i "$SSH_IDENTITY" -o StrictHostKeyChecking=no)
-    RSYNC_SSH="ssh -i ${SSH_IDENTITY} -o StrictHostKeyChecking=no"
-}
-
-remote() {
-    "${SSH[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "$@"
+    require_deploy_ssh
 }
 
 setup_server() {
     require_deploy_config
-    echo "Setting up nginx + certbot + classgrid-api on ${DEPLOY_HOST}..."
+    echo "Setting up nginx + certbot + classgrid-api on ${REMOTE}..."
 
     remote "sudo mkdir -p ${REMOTE_WEB_DIR} /var/www/letsencrypt ${REMOTE_API_DIR} ${REMOTE_API_DIR}/data ${API_ENV_DIR} \
         && sudo chown ${DEPLOY_USER}:${DEPLOY_USER} ${REMOTE_WEB_DIR} ${REMOTE_API_DIR} ${REMOTE_API_DIR}/data \
@@ -87,13 +56,10 @@ OIDC_CLIENT_ID=
 OIDC_CLIENT_SECRET=
 OIDC_REDIRECT_URI=https://${DEPLOY_DOMAIN}/auth/callback
 OIDC_DISCOVERY_URL=https://auth.devclub.in/api/oauth/.well-known/openid-configuration
-OIDC_SCOPE=openid profile email kerberos
+OIDC_SCOPE=openid profile email kerberos hostel
 SESSION_SECRET=
 FRONTEND_ORIGIN=https://${DEPLOY_DOMAIN}
-STUDENT_COURSES_PATH=${REMOTE_API_DIR}/data/studentCourses.json
-CATALOG_PATH=${REMOTE_API_DIR}/data/courses.json
-COURSE_STUDENTS_PATH=${REMOTE_API_DIR}/data/courseStudents.json
-ANDROID_VERSION_PATH=${REMOTE_API_DIR}/data/android-version.json
+DATABASE_URL=postgresql://classgrid:PASSWORD@127.0.0.1:5432/classgrid
 EOF
         remote "sudo chmod 640 ${API_ENV_FILE} && sudo chown root:${DEPLOY_USER} ${API_ENV_FILE}"
         echo "Created ${API_ENV_FILE} with placeholders. Edit it on the server before starting."
@@ -133,6 +99,15 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location ~ ^/app/classgrid.*\\.apk\$ {
+        default_type application/vnd.android.package-archive;
+        add_header Content-Disposition 'attachment; filename="classgrid.apk"' always;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        add_header CDN-Cache-Control "no-store" always;
+        add_header Cloudflare-CDN-Cache-Control "no-store" always;
+        try_files \$uri =404;
     }
 
     location / {
@@ -189,57 +164,105 @@ deploy_static() {
     echo "Building production bundle..."
     npm run build
 
-    echo "Uploading static bundle to ${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_WEB_DIR}/ ..."
-    rsync -avz --delete -e "$RSYNC_SSH" build/ "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_WEB_DIR}/"
+    echo "Uploading static bundle to ${REMOTE}:${REMOTE_WEB_DIR}/ ..."
+    # Protect hosted APK from --delete (not part of the CRA build output).
+    rsync -avz --delete -e "$RSYNC_SSH" \
+        --filter 'P app/' \
+        build/ "${REMOTE}:${REMOTE_WEB_DIR}/"
+}
+
+ensure_nginx_apk_location() {
+    local redirect_target="${APK_VERSIONED_NAME:-}"
+    echo "Ensuring nginx APK location (no CDN cache) on ${REMOTE}..."
+    remote "sudo python3 -" "$redirect_target" <<'PY'
+import sys
+from pathlib import Path
+redirect_target = sys.argv[1] if len(sys.argv) > 1 else ''
+path = Path('/etc/nginx/sites-available/classgrid')
+text = path.read_text(encoding='utf-8')
+
+serve_block = r'''    location ~ ^/app/classgrid.*\.apk$ {
+        default_type application/vnd.android.package-archive;
+        add_header Content-Disposition 'attachment; filename="classgrid.apk"' always;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        add_header CDN-Cache-Control "no-store" always;
+        add_header Cloudflare-CDN-Cache-Control "no-store" always;
+        try_files $uri =404;
+    }
+
+'''
+
+redirect_block = ''
+if redirect_target:
+    redirect_block = (
+        '    location = /app/classgrid.apk {\n'
+        f'        return 302 /app/{redirect_target};\n'
+        '    }\n\n'
+    )
+
+# Drop legacy blocks from earlier patches.
+import re
+text = re.sub(
+    r'\n    location = /app/classgrid\.apk \{[^}]+\}\n',
+    '\n',
+    text,
+    flags=re.DOTALL,
+)
+text = re.sub(
+    r'\n    location ~ \^/app/classgrid[^\n]+\n(?:        [^\n]+\n)+    \}\n',
+    '\n',
+    text,
+)
+
+combined = redirect_block + serve_block
+if 'location ~ ^/app/classgrid' in text and redirect_target and f'/app/{redirect_target}' in text:
+    print('nginx APK blocks already present')
+elif '    location / {' in text:
+    text = text.replace('    location / {', combined + '    location / {', 1)
+    path.write_text(text, encoding='utf-8')
+    print('updated nginx APK location blocks')
+else:
+    raise SystemExit('could not find insertion point in classgrid nginx config')
+PY
+    remote "sudo /usr/sbin/nginx -t && sudo systemctl reload nginx"
+}
+
+deploy_apk() {
+    if [[ ! -f "$APK_SRC" ]]; then
+        echo "APK not found: $APK_SRC" >&2
+        echo "Build with: (cd app && flutter build apk --release)" >&2
+        echo "Or run: ./scripts/release-android-apk.sh --build" >&2
+        exit 1
+    fi
+
+    echo "Uploading APK to ${REMOTE}:${REMOTE_WEB_DIR}/${REMOTE_APK_PATH} ..."
+    remote "mkdir -p ${REMOTE_WEB_DIR}/$(dirname "${REMOTE_APK_PATH}")"
+    rsync -avz -e "$RSYNC_SSH" \
+        "$APK_SRC" \
+        "${REMOTE}:${REMOTE_WEB_DIR}/${REMOTE_APK_PATH}"
+
+    if [[ -n "${APK_VERSIONED_NAME:-}" ]]; then
+        local versioned_path="app/${APK_VERSIONED_NAME}"
+        echo "Uploading versioned APK to ${REMOTE_WEB_DIR}/${versioned_path} ..."
+        rsync -avz -e "$RSYNC_SSH" \
+            "$APK_SRC" \
+            "${REMOTE}:${REMOTE_WEB_DIR}/${versioned_path}"
+        echo "Versioned APK: https://${DEPLOY_DOMAIN}/${versioned_path}"
+    fi
+
+    ensure_nginx_apk_location
+    echo "APK live at https://${DEPLOY_DOMAIN}/${REMOTE_APK_PATH}"
 }
 
 deploy_api() {
-    echo "Uploading API source to ${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/ ..."
+    echo "Uploading API source to ${REMOTE}:${REMOTE_API_DIR}/ ..."
     rsync -avz --delete \
         --exclude node_modules \
         --exclude data \
         --exclude .env \
         --exclude .env.* \
         -e "$RSYNC_SSH" \
-        server/ "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/"
-
-    remote "mkdir -p ${REMOTE_API_DIR}/data"
-
-    if [[ -f "$STUDENT_DATA_SRC" ]]; then
-        echo "Uploading studentCourses data from ${STUDENT_DATA_SRC} ..."
-        rsync -avz -e "$RSYNC_SSH" \
-            "$STUDENT_DATA_SRC" \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/data/studentCourses.json"
-    else
-        echo "Skipping studentCourses upload (file not found: ${STUDENT_DATA_SRC})."
-    fi
-
-    if [[ -f "$CATALOG_DATA_SRC" ]]; then
-        echo "Uploading course catalog from ${CATALOG_DATA_SRC} ..."
-        rsync -avz -e "$RSYNC_SSH" \
-            "$CATALOG_DATA_SRC" \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/data/courses.json"
-    else
-        echo "Skipping catalog upload (file not found: ${CATALOG_DATA_SRC})."
-    fi
-
-    if [[ -f "$COURSE_STUDENTS_DATA_SRC" ]]; then
-        echo "Uploading courseStudents roster from ${COURSE_STUDENTS_DATA_SRC} ..."
-        rsync -avz -e "$RSYNC_SSH" \
-            "$COURSE_STUDENTS_DATA_SRC" \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/data/courseStudents.json"
-    else
-        echo "Skipping courseStudents upload (file not found: ${COURSE_STUDENTS_DATA_SRC})."
-    fi
-
-    if [[ -f "$ANDROID_VERSION_SRC" ]]; then
-        echo "Uploading android-version from ${ANDROID_VERSION_SRC} ..."
-        rsync -avz -e "$RSYNC_SSH" \
-            "$ANDROID_VERSION_SRC" \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_API_DIR}/data/android-version.json"
-    else
-        echo "Skipping android-version upload (file not found: ${ANDROID_VERSION_SRC})."
-    fi
+        server/ "${REMOTE}:${REMOTE_API_DIR}/"
 
     echo "Installing API deps and restarting service..."
     remote "cd ${REMOTE_API_DIR} && npm ci --omit=dev && sudo systemctl restart classgrid-api && sudo systemctl status classgrid-api --no-pager -l | head -n 20"
@@ -267,21 +290,26 @@ case "${1:-}" in
         deploy_api
         echo "API deployed."
         ;;
+    --apk)
+        require_deploy_config
+        deploy_apk
+        ;;
     --help|-h)
-        echo "Usage: $0 [--setup|--static|--api]"
+        echo "Usage: $0 [--setup|--static|--api|--apk]"
         echo ""
-        echo "Configure via deploy.env (copy from deploy.env.example) or environment:"
-        echo "  DEPLOY_HOST       SSH hostname or IP"
-        echo "  DEPLOY_USER       SSH user"
-        echo "  SSH_IDENTITY      Path to SSH private key"
-        echo "  DEPLOY_DOMAIN     Public site hostname (nginx + certbot + OAuth redirect)"
+        echo "Configure via deploy.env (optional) or environment:"
+        echo "  DEPLOY_SSH_HOST   SSH config Host alias (default: mydevclub)"
+        echo "  DEPLOY_DOMAIN     Public site hostname (default: classgrid.devclub.in)"
         echo "  API_PORT          Backend listen port (default: 4500)"
-        echo "  ANDROID_VERSION_SRC  Android minimum version JSON (default: server/data/android-version.json)"
+        echo "  APK_SRC           Local APK to upload (default: dist/app/classgrid.apk)"
+        echo ""
+        echo "Legacy explicit SSH: DEPLOY_HOST, DEPLOY_USER, SSH_IDENTITY"
         echo ""
         echo "  (no args)  build + rsync static and API"
         echo "  --setup    configure nginx + certbot + systemd, then deploy"
         echo "  --static   only build and rsync the CRA bundle"
         echo "  --api      only rsync the API and restart classgrid-api"
+        echo "  --apk      only rsync the release APK to /app/classgrid.apk on the web host"
         ;;
     "")
         deploy

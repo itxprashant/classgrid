@@ -14,31 +14,41 @@ class TimetableHourRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
-    final label = hour <= 12 ? '$hour' : '${hour - 12}';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: TimetableLayout.railWidth,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Text(
-              label,
-              textAlign: TextAlign.right,
-              style: AppText.mono(size: T.fs12, color: T.ink3),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 7),
+    final label = hour.toString().padLeft(2, '0');
+    // One-pixel anchor on the hour boundary; label centered on the line via
+    // translate (matches web `.tt__hour span { transform: translateY(-50%) }`).
+    return SizedBox(
+      height: 1,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: TimetableLayout.railWidth,
+            right: 0,
+            top: 0,
+            height: 1,
             child: CustomPaint(
               painter: _DashedLinePainter(T.line),
               size: const Size(double.infinity, 1),
             ),
           ),
-        ),
-      ],
+          Positioned(
+            top: 0,
+            width: TimetableLayout.railWidth,
+            child: Transform.translate(
+              offset: const Offset(0, -7),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Text(
+                  label,
+                  textAlign: TextAlign.right,
+                  style: AppText.mono(size: T.fs12, color: T.ink3, height: 1),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

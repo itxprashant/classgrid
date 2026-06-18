@@ -1,17 +1,18 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
 
 import '../core/room_schedule.dart';
 import '../state/catalog_provider.dart';
+import '../state/semester_data_provider.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_navigation.dart';
 import '../widgets/common.dart';
 import '../widgets/room_week_grid.dart';
+import '../core/course_routes.dart';
 import 'course_detail_screen.dart';
+import 'course_offering_screen.dart';
 import 'empty_halls_screen.dart';
 
 /// Per-room weekly schedule (list + calendar). Mirrors web `/rooms/:roomSlug`.
@@ -26,48 +27,64 @@ class RoomDetailScreen extends StatefulWidget {
 
 class _RoomDetailScreenState extends State<RoomDetailScreen> {
   _ViewMode _view = _ViewMode.list;
-  List<dynamic> _extraOccupied = const [];
-  bool _extraLoaded = false;
+  RoomCatalog? _cachedCatalog;
+  int? _cachedCoursesLen;
+  int? _cachedExtraLen;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadExtra();
-  }
-
-  Future<void> _loadExtra() async {
-    try {
-      final raw = await rootBundle.loadString('assets/extra_occupied.json');
-      final parsed = jsonDecode(raw);
-      if (parsed is List && mounted) {
-        setState(() {
-          _extraOccupied = parsed;
-          _extraLoaded = true;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _extraLoaded = true);
+  RoomCatalog _roomCatalog(CatalogProvider catalog, List<dynamic> extraOccupied) {
+    final coursesLen = catalog.courses.length;
+    final extraLen = extraOccupied.length;
+    if (_cachedCatalog != null &&
+        _cachedCoursesLen == coursesLen &&
+        _cachedExtraLen == extraLen) {
+      return _cachedCatalog!;
     }
+    _cachedCatalog = buildRoomCatalog(catalog.courses, extraOccupied: extraOccupied);
+    _cachedCoursesLen = coursesLen;
+    _cachedExtraLen = extraLen;
+    return _cachedCatalog!;
   }
 
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     final catalog = context.watch<CatalogProvider>();
+    final semester = context.watch<SemesterDataProvider>();
     final normalized = normalizeRoomName(widget.roomName);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(normalized, style: AppText.mono(size: T.fs14, weight: FontWeight.w600)),
-      ),
-      body: !_extraLoaded || (catalog.loading && !catalog.isReady)
+    return ScreenShell(
+      eyebrow: roomPrefix(normalized),
+      title: normalized,
+      subtitle: (catalog.loading && !catalog.isReady) || (semester.loading && !semester.isReady)
+          ? null
+          : Text(
+              _subtitle(catalog, semester.extraOccupied, normalized),
+              style: AppText.sans(size: T.fs13, color: T.ink2),
+            ),
+      body: (catalog.loading && !catalog.isReady) || (semester.loading && !semester.isReady)
           ? const Center(child: CircularProgressIndicator())
-          : _buildBody(catalog, normalized),
+          : _buildBody(catalog, semester.extraOccupied, normalized, semester.schedule?.code),
     );
   }
 
-  Widget _buildBody(CatalogProvider catalog, String normalized) {
-    final roomCatalog = buildRoomCatalog(catalog.courses, extraOccupied: _extraOccupied);
+  String _subtitle(CatalogProvider catalog, List<dynamic> extraOccupied, String normalized) {
+    final roomCatalog = _roomCatalog(catalog, extraOccupied);
+    final exists = roomCatalog.rooms.any((r) => r.name == normalized);
+    if (!exists) return 'Not in semester catalog';
+
+    final sessions = sessionsForRoom(roomCatalog.sessionsByRoom, normalized);
+    final conflicts = roomSessionOverlapIndices(sessions);
+    return '${sessions.length} session${sessions.length == 1 ? '' : 's'} this semester'
+        '${conflicts.isNotEmpty ? ' · ${conflicts.length} overlap${conflicts.length == 1 ? '' : 's'}' : ''}';
+  }
+
+  Widget _buildBody(
+    CatalogProvider catalog,
+    List<dynamic> extraOccupied,
+    String normalized,
+    String? activeSemesterCode,
+  ) {
+    final roomCatalog = _roomCatalog(catalog, extraOccupied);
     final exists = roomCatalog.rooms.any((r) => r.name == normalized);
 
     if (!exists) {
@@ -91,19 +108,8 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
     final byDay = groupSessionsByDay(sessions);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       children: [
-        Text(
-          roomPrefix(normalized),
-          style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1.2),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '${sessions.length} session${sessions.length == 1 ? '' : 's'} this semester'
-          '${conflicts.isNotEmpty ? ' · ${conflicts.length} overlap${conflicts.length == 1 ? '' : 's'}' : ''}',
-          style: AppText.sans(size: T.fs13, color: T.ink2),
-        ),
-        const SizedBox(height: 16),
         AppSegmentedFilters<_ViewMode>(
           selected: _view,
           onChanged: (v) => setState(() => _view = v),
@@ -122,9 +128,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const EmptyHallsScreen()),
-          ),
+          onPressed: () => pushAppRoute(context, const EmptyHallsScreen()),
           icon: const Icon(Icons.meeting_room_outlined, size: 18),
           label: const Text('Check if free now'),
         ),
@@ -134,41 +138,81 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
             message: 'No classes scheduled in this room in the current catalog.',
             icon: Icons.event_busy,
           )
-        else if (_view == _ViewMode.calendar)
-          RoomWeekGrid(sessions: sessions, conflicts: conflicts)
         else
-          ...kDayOrder.keys.map((day) {
-            final daySessions = byDay[day] ?? const [];
-            if (daySessions.isEmpty) return const SizedBox.shrink();
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: T.surface,
-                  border: Border.all(color: T.line),
-                  borderRadius: BorderRadius.circular(T.rLg),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      color: T.paper2,
-                      child: Text(day, style: AppText.sans(size: T.fs14, weight: FontWeight.w600)),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeOutCubic,
+            child: _view == _ViewMode.calendar
+                ? KeyedSubtree(
+                    key: const ValueKey('calendar'),
+                    child: RoomWeekGrid(
+                      sessions: sessions,
+                      conflicts: conflicts,
+                      onBlockTap: (session, _) => _openCourse(context, session.courseCode, activeSemesterCode),
                     ),
-                    for (var i = 0; i < daySessions.length; i++)
-                      _sessionTile(daySessions[i], sessions.indexOf(daySessions[i]), conflicts),
-                  ],
-                ),
-              ),
-            );
-          }),
+                  )
+                : KeyedSubtree(
+                    key: const ValueKey('list'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final day in kDayOrder.keys)
+                          if ((byDay[day] ?? const []).isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: T.surface,
+                                  border: Border.all(color: T.line),
+                                  borderRadius: BorderRadius.circular(T.rLg),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      color: T.paper2,
+                                      child: Text(day, style: AppText.sans(size: T.fs14, weight: FontWeight.w600)),
+                                    ),
+                                    for (var i = 0; i < (byDay[day] ?? const []).length; i++)
+                                      _sessionTile(
+                                        (byDay[day] ?? const [])[i],
+                                        sessions.indexOf((byDay[day] ?? const [])[i]),
+                                        conflicts,
+                                        activeSemesterCode,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ),
+          ),
       ],
     );
   }
 
-  Widget _sessionTile(RoomSession session, int globalIndex, Set<int> conflicts) {
+  void _openCourse(BuildContext context, String? courseCode, String? activeSemesterCode) {
+    if (courseCode == null || courseCode.isEmpty) return;
+    if (isValidSemesterCode(activeSemesterCode)) {
+      pushAppRoute(
+        context,
+        CourseOfferingScreen(courseCode: courseCode, semesterCode: activeSemesterCode!),
+      );
+    } else {
+      pushAppRoute(context, CourseDetailScreen(courseCode: courseCode));
+    }
+  }
+
+  Widget _sessionTile(
+    RoomSession session,
+    int globalIndex,
+    Set<int> conflicts,
+    String? activeSemesterCode,
+  ) {
     final conflict = conflicts.contains(globalIndex);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -197,11 +241,7 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
                   children: [
                     if (session.courseCode != null)
                       InkWell(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => CourseDetailScreen(courseCode: session.courseCode!),
-                          ),
-                        ),
+                        onTap: () => _openCourse(context, session.courseCode, activeSemesterCode),
                         child: Text(
                           session.courseCode!,
                           style: AppText.mono(size: T.fs13, weight: FontWeight.w600, color: T.accentInk),

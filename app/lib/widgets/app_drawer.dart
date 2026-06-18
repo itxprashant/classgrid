@@ -2,9 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/auth_provider.dart';
+import '../core/kerberos_meta.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+
+/// Drawer route ids for Tools / App screens pushed on top of [HomeShell].
+abstract final class AppDrawerRoute {
+  static const attendance = 'attendance';
+  static const cgpa = 'cgpa';
+  static const profExplorer = 'prof-explorer';
+  static const studentExplorer = 'student-explorer';
+  static const settings = 'settings';
+  static const feedback = 'feedback';
+  static const about = 'about';
+}
 
 class _NavItem {
   final int tabIndex;
@@ -21,20 +33,30 @@ class AppDrawer extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     required this.onTabSelected,
+    this.selectedDrawerRoute,
     this.onOpenEmptyHalls,
     this.onOpenAttendance,
     this.onOpenCgpaCalculator,
+    this.onOpenProfExplorer,
+    this.onOpenStudentExplorer,
     this.onOpenSettings,
+    this.onOpenFeedback,
     this.onOpenAbout,
+    this.onLoginTap,
   });
 
   final int selectedIndex;
+  final String? selectedDrawerRoute;
   final ValueChanged<int> onTabSelected;
   final VoidCallback? onOpenEmptyHalls;
   final VoidCallback? onOpenAttendance;
   final VoidCallback? onOpenCgpaCalculator;
+  final VoidCallback? onOpenProfExplorer;
+  final VoidCallback? onOpenStudentExplorer;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenFeedback;
   final VoidCallback? onOpenAbout;
+  final VoidCallback? onLoginTap;
 
   static const _tabs = [
     _NavItem(0, 'Calendar', Icons.calendar_month_outlined, Icons.calendar_month),
@@ -52,6 +74,7 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     final auth = context.watch<AuthProvider>();
+    final drawerRoute = selectedDrawerRoute;
 
     return Drawer(
       backgroundColor: T.paper,
@@ -88,8 +111,10 @@ class AppDrawer extends StatelessWidget {
                   for (final item in _tabs)
                     _DrawerTile(
                       label: item.label,
-                      icon: selectedIndex == item.tabIndex ? item.selectedIcon : item.icon,
-                      selected: selectedIndex == item.tabIndex,
+                      icon: selectedIndex == item.tabIndex && drawerRoute == null
+                          ? item.selectedIcon
+                          : item.icon,
+                      selected: selectedIndex == item.tabIndex && drawerRoute == null,
                       onTap: () => _closeAndSelect(context, item.tabIndex),
                     ),
                   const SizedBox(height: 8),
@@ -113,7 +138,7 @@ class AppDrawer extends StatelessWidget {
                   _DrawerTile(
                     label: 'Attendance',
                     icon: Icons.fact_check_outlined,
-                    selected: false,
+                    selected: drawerRoute == AppDrawerRoute.attendance,
                     onTap: () {
                       Navigator.pop(context);
                       onOpenAttendance?.call();
@@ -122,10 +147,28 @@ class AppDrawer extends StatelessWidget {
                   _DrawerTile(
                     label: 'CGPA calculator',
                     icon: Icons.school_outlined,
-                    selected: false,
+                    selected: drawerRoute == AppDrawerRoute.cgpa,
                     onTap: () {
                       Navigator.pop(context);
                       onOpenCgpaCalculator?.call();
+                    },
+                  ),
+                  _DrawerTile(
+                    label: 'Prof explorer',
+                    icon: Icons.person_search_outlined,
+                    selected: drawerRoute == AppDrawerRoute.profExplorer,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpenProfExplorer?.call();
+                    },
+                  ),
+                  _DrawerTile(
+                    label: 'Student explorer',
+                    icon: Icons.groups_outlined,
+                    selected: drawerRoute == AppDrawerRoute.studentExplorer,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpenStudentExplorer?.call();
                     },
                   ),
                   const SizedBox(height: 8),
@@ -140,16 +183,25 @@ class AppDrawer extends StatelessWidget {
                   _DrawerTile(
                     label: 'Settings',
                     icon: Icons.settings_outlined,
-                    selected: false,
+                    selected: drawerRoute == AppDrawerRoute.settings,
                     onTap: () {
                       Navigator.pop(context);
                       onOpenSettings?.call();
                     },
                   ),
                   _DrawerTile(
+                    label: 'Suggest a feature',
+                    icon: Icons.lightbulb_outline,
+                    selected: drawerRoute == AppDrawerRoute.feedback,
+                    onTap: () {
+                      Navigator.pop(context);
+                      onOpenFeedback?.call();
+                    },
+                  ),
+                  _DrawerTile(
                     label: 'About',
                     icon: Icons.info_outline,
-                    selected: false,
+                    selected: drawerRoute == AppDrawerRoute.about,
                     onTap: () {
                       Navigator.pop(context);
                       onOpenAbout?.call();
@@ -182,11 +234,34 @@ class AppDrawer extends StatelessWidget {
                                 auth.user!.kerberos!,
                                 style: AppText.mono(size: T.fs12, color: T.ink3),
                               ),
+                            if (auth.user!.hostel != null && auth.user!.hostel!.trim().isNotEmpty)
+                              Text(
+                                formatHostel(auth.user!.hostel),
+                                style: AppText.sans(size: T.fs12, color: T.ink3),
+                              ),
                           ],
                         )
-                      : Text(
-                          'Sign in from the app bar to sync your plan.',
-                          style: AppText.sans(size: T.fs12, color: T.ink3),
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Sign in to sync your plan and attendance.',
+                              style: AppText.sans(size: T.fs12, color: T.ink3),
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                onLoginTap?.call();
+                              },
+                              icon: const Icon(Icons.login, size: 18),
+                              label: const Text('IITD login'),
+                              style: TextButton.styleFrom(
+                                alignment: Alignment.centerLeft,
+                                padding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ],
                         ),
             ),
           ],

@@ -77,11 +77,13 @@ class AttendanceScreen extends StatefulWidget {
     this.initialCourseCode,
     this.initialSessionKind,
     this.initialDate,
+    this.onGoToPlan,
   });
 
   final String? initialCourseCode;
   final String? initialSessionKind;
   final String? initialDate;
+  final VoidCallback? onGoToPlan;
 
   @override
   State<AttendanceScreen> createState() => _AttendanceScreenState();
@@ -117,33 +119,33 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       builder: (ctx) {
         AppPaletteScope.watch(ctx);
         return AlertDialog(
-        title: Text('Attendance settings', style: AppText.serif(size: T.fs18, color: T.ink)),
-        content: Consumer<AttendanceStore>(
-          builder: (context, attendance, _) {
-            return SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'Notify after class to mark attendance',
-                style: AppText.sans(size: T.fs14, weight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                'Local reminder when a class ends',
-                style: AppText.sans(size: T.fs12, color: T.ink3),
-              ),
-              value: attendance.markNotifyEnabled,
-              onChanged: (v) async {
-                await attendance.setMarkNotifyEnabled(v);
-                await attendance.onPlannerChanged(
-                  courses: planner.selectedCourses,
-                  timetableData: planner.timetableData,
-                );
-              },
-            );
-          },
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
-        ],
+          title: Text('Attendance settings', style: AppText.serif(size: T.fs18, color: T.ink)),
+          content: Consumer<AttendanceStore>(
+            builder: (context, attendance, _) {
+              return SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Notify after class to mark attendance',
+                  style: AppText.sans(size: T.fs14, weight: FontWeight.w500),
+                ),
+                subtitle: Text(
+                  'Local reminder when a class ends',
+                  style: AppText.sans(size: T.fs12, color: T.ink3),
+                ),
+                value: attendance.markNotifyEnabled,
+                onChanged: (v) async {
+                  await attendance.setMarkNotifyEnabled(v);
+                  await attendance.onPlannerChanged(
+                    courses: planner.selectedCourses,
+                    timetableData: planner.timetableData,
+                  );
+                },
+              );
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+          ],
         );
       },
     );
@@ -200,7 +202,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         break;
       }
     }
-    if (course == null) return;
+    if (course == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$courseCode is not on your plan.')),
+      );
+      return;
+    }
     final selected = course;
 
     showModalBottomSheet<void>(
@@ -247,192 +254,198 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Attendance', style: AppText.serif(size: T.fs18, weight: FontWeight.w600, color: T.ink)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Attendance settings',
-            onPressed: () => _showAttendanceSettings(context),
-          ),
-        ],
+    return ScreenShell(
+      eyebrow: 'Tools',
+      title: 'Attendance',
+      subtitle: Text(
+        'Track present and absent against your plan',
+        style: AppText.sans(size: T.fs14, color: T.ink3),
       ),
-      body: Material(
-        color: T.paper,
-        child: ListView(
-      padding: const EdgeInsets.only(bottom: 32),
-      children: [
-        PageHeader(
-          eyebrow: 'Tools',
-          title: 'Attendance',
-          subtitle: Text(
-            'Track present and absent against your plan',
-            style: AppText.sans(size: T.fs14, color: T.ink3),
-          ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          tooltip: 'Attendance settings',
+          onPressed: () => _showAttendanceSettings(context),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                Semester.label,
-                style: AppText.mono(size: T.fs12, color: T.ink3),
-              ),
-              if (belowThreshold > 0) ...[
-                const SizedBox(height: 12),
+      ],
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: T.space32),
+        children: [
+          if (attendance.syncError != null)
+            StatusBanner(
+              kind: 'err',
+              text: attendance.syncError!,
+              onClose: attendance.clearSyncError,
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: T.space16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Text(
-                  '$belowThreshold course${belowThreshold == 1 ? '' : 's'} below required attendance',
-                  style: AppText.sans(size: T.fs13, color: T.danger, weight: FontWeight.w600),
+                  Semester.label,
+                  style: AppText.mono(size: T.fs12, color: T.ink3),
                 ),
-              ],
-              const SizedBox(height: 12),
-              AppSegmentedFilters<String?>(
-                selected: _kindFilter,
-                onChanged: (v) => setState(() => _kindFilter = v),
-                segments: [
-                  const AppFilterSegment<String?>(
-                    value: null,
-                    label: 'All',
-                    icon: Icons.grid_view_rounded,
-                  ),
-                  AppFilterSegment<String?>(
-                    value: 'lecture',
-                    label: 'Lecture',
-                    icon: Icons.menu_book_outlined,
-                    palette: AppFilterPalette.lecture,
-                  ),
-                  AppFilterSegment<String?>(
-                    value: 'tutorial',
-                    label: 'Tutorial',
-                    icon: Icons.groups_outlined,
-                    palette: AppFilterPalette.tutorial,
-                  ),
-                  AppFilterSegment<String?>(
-                    value: 'lab',
-                    label: 'Lab',
-                    icon: Icons.science_outlined,
-                    palette: AppFilterPalette.lab,
+                if (belowThreshold > 0) ...[
+                  const SizedBox(height: T.space12),
+                  Text(
+                    '$belowThreshold course${belowThreshold == 1 ? '' : 's'} below required attendance',
+                    style: AppText.sans(size: T.fs13, color: T.danger, weight: FontWeight.w600),
                   ),
                 ],
-              ),
-            ],
+                const SizedBox(height: T.space12),
+                AppSegmentedFilters<String?>(
+                  selected: _kindFilter,
+                  onChanged: (v) => setState(() => _kindFilter = v),
+                  segments: [
+                    const AppFilterSegment<String?>(
+                      value: null,
+                      label: 'All',
+                      icon: Icons.grid_view_rounded,
+                    ),
+                    AppFilterSegment<String?>(
+                      value: 'lecture',
+                      label: 'Lecture',
+                      icon: Icons.menu_book_outlined,
+                      palette: AppFilterPalette.lecture,
+                    ),
+                    AppFilterSegment<String?>(
+                      value: 'tutorial',
+                      label: 'Tutorial',
+                      icon: Icons.groups_outlined,
+                      palette: AppFilterPalette.tutorial,
+                    ),
+                    AppFilterSegment<String?>(
+                      value: 'lab',
+                      label: 'Lab',
+                      icon: Icons.science_outlined,
+                      palette: AppFilterPalette.lab,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: T.space8),
+                Text(
+                  'P = Present · A = Absent · E = Excused',
+                  style: AppText.mono(size: T.fs11, color: T.ink3),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        if (courses.isEmpty)
-          Padding(
-            padding: EdgeInsets.all(24),
-            child: EmptyState(
+          const SizedBox(height: T.space8),
+          if (courses.isEmpty)
+            EmptyState(
               message: 'Add courses on the Plan tab to track attendance.',
               icon: Icons.fact_check_outlined,
-            ),
-          )
-        else
-          ...courses.map((course) {
-            final kinds = <String>['lecture'];
-            if (course.tutorial) kinds.add('tutorial');
-            if (course.lab) kinds.add('lab');
+              action: widget.onGoToPlan != null
+                  ? FilledButton(
+                      onPressed: widget.onGoToPlan,
+                      child: const Text('Go to Plan'),
+                    )
+                  : null,
+            )
+          else
+            ...courses.map((course) {
+              final kinds = <String>['lecture'];
+              if (course.tutorial) kinds.add('tutorial');
+              if (course.lab) kinds.add('lab');
 
-            int present = 0;
-            int absent = 0;
-            double? aggPercent;
-            var worstSafe = 999;
+              int present = 0;
+              int absent = 0;
+              double? aggPercent;
+              var worstSafe = 999;
 
-            final courseThreshold = attendance.thresholdFor(course.courseCode);
+              final courseThreshold = attendance.thresholdFor(course.courseCode);
 
-            for (final kind in kinds) {
-              if (_kindFilter != null && _kindFilter != kind) continue;
-              final bucket = attendance.bucketFor(course.courseCode, kind) ??
-                  AttendanceBucket(courseCode: course.courseCode, sessionKind: kind);
-              final stats = computeBucketStats(
-                bucket: bucket,
-                scheduledCount: scheduled['${course.courseCode}|$kind'] ?? 0,
-                thresholdPercent: courseThreshold,
-              );
-              present += stats.present;
-              absent += stats.absent;
-              if (stats.safeMissesLeft < worstSafe) worstSafe = stats.safeMissesLeft;
-              if (stats.percent != null) {
-                final p = stats.percent!;
-                aggPercent = aggPercent == null ? p : (aggPercent + p) / 2;
+              for (final kind in kinds) {
+                if (_kindFilter != null && _kindFilter != kind) continue;
+                final bucket = attendance.bucketFor(course.courseCode, kind) ??
+                    AttendanceBucket(courseCode: course.courseCode, sessionKind: kind);
+                final stats = computeBucketStats(
+                  bucket: bucket,
+                  scheduledCount: scheduled['${course.courseCode}|$kind'] ?? 0,
+                  thresholdPercent: courseThreshold,
+                );
+                present += stats.present;
+                absent += stats.absent;
+                if (stats.safeMissesLeft < worstSafe) worstSafe = stats.safeMissesLeft;
+                if (stats.percent != null) {
+                  final p = stats.percent!;
+                  aggPercent = aggPercent == null ? p : (aggPercent + p) / 2;
+                }
               }
-            }
 
-            final denom = present + absent;
-            final percent = denom > 0 ? (present / denom) * 100 : aggPercent;
-            final below = percent != null && percent < courseThreshold;
+              final denom = present + absent;
+              final percent = denom > 0 ? (present / denom) * 100 : aggPercent;
+              final below = percent != null && percent < courseThreshold;
 
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Material(
-                color: T.surface,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(T.r),
-                  side: BorderSide(color: below ? T.dangerEdge : T.line),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(T.r),
-                  onTap: () => _openCourseSheet(context, courseCode: course.courseCode),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              course.courseCode,
-                              style: AppText.mono(size: T.fs14, weight: FontWeight.w600),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                course.courseName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppText.sans(size: T.fs13, color: T.ink2),
-                              ),
-                            ),
-                            if (percent != null)
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(T.space16, 0, T.space16, T.space8),
+                child: Material(
+                  color: T.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(T.r),
+                    side: BorderSide(color: below ? T.dangerEdge : T.line),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(T.r),
+                    onTap: () => _openCourseSheet(context, courseCode: course.courseCode),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
                               Text(
-                                '${percent.toStringAsFixed(0)}%',
-                                style: AppText.mono(
-                                  size: T.fs14,
-                                  weight: FontWeight.w600,
-                                  color: below ? T.danger : T.successInk,
+                                course.courseCode,
+                                style: AppText.mono(size: T.fs14, weight: FontWeight.w600),
+                              ),
+                              const SizedBox(width: T.space8),
+                              Expanded(
+                                child: Text(
+                                  course.courseName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppText.sans(size: T.fs13, color: T.ink2),
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (denom > 0)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: present / denom,
-                              minHeight: 6,
-                              backgroundColor: T.line,
-                              color: below ? T.danger : T.successInk,
-                            ),
+                              if (percent != null)
+                                Text(
+                                  '${percent.toStringAsFixed(0)}%',
+                                  style: AppText.mono(
+                                    size: T.fs14,
+                                    weight: FontWeight.w600,
+                                    color: below ? T.danger : T.successInk,
+                                  ),
+                                ),
+                            ],
                           ),
-                        const SizedBox(height: 8),
-                        Text(
-                          denom > 0
-                              ? '$present present · $absent absent · $worstSafe safe misses left · req $courseThreshold%'
-                              : 'No marks yet — tap to set threshold & log sessions',
-                          style: AppText.sans(size: T.fs12, color: T.ink3),
-                        ),
-                      ],
+                          const SizedBox(height: T.space8),
+                          if (denom > 0)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: present / denom,
+                                minHeight: 6,
+                                backgroundColor: T.line,
+                                color: below ? T.danger : T.successInk,
+                              ),
+                            ),
+                          const SizedBox(height: T.space8),
+                          Text(
+                            denom > 0
+                                ? '$present present · $absent absent · $worstSafe safe misses left · req $courseThreshold%'
+                                : 'No marks yet — tap to set threshold & log sessions',
+                            style: AppText.sans(size: T.fs12, color: T.ink3),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          }),
-      ],
-        ),
+              );
+            }),
+        ],
       ),
     );
   }
@@ -475,7 +488,7 @@ class _CourseAttendanceSheet extends StatelessWidget {
       maxChildSize: 0.95,
       builder: (context, scrollController) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          padding: const EdgeInsets.fromLTRB(T.space16, 12, T.space16, T.space16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -489,7 +502,7 @@ class _CourseAttendanceSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: T.space12),
               Text(
                 course.courseCode,
                 style: AppText.mono(size: T.fs16, weight: FontWeight.w600),
@@ -498,7 +511,7 @@ class _CourseAttendanceSheet extends StatelessWidget {
                 course.courseName,
                 style: AppText.sans(size: T.fs13, color: T.ink3),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: T.space12),
               _ThresholdStepper(
                 label: 'Required attendance',
                 value: attendance.thresholdFor(course.courseCode),
@@ -515,7 +528,12 @@ class _CourseAttendanceSheet extends StatelessWidget {
                         )
                     : null,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: T.space8),
+              Text(
+                'P = Present · A = Absent · E = Excused',
+                style: AppText.mono(size: T.fs11, color: T.ink3),
+              ),
+              const SizedBox(height: T.space12),
               Expanded(
                 child: ListView(
                   controller: scrollController,
@@ -550,10 +568,10 @@ class _CourseAttendanceSheet extends StatelessWidget {
                                   : '${stats.scheduled} scheduled · tap rows to mark',
                               style: AppText.sans(size: T.fs12, color: T.ink3),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: T.space8),
                             if (sessions.isEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.only(bottom: T.space16),
                                 child: Text(
                                   'No past sessions for this kind.',
                                   style: AppText.sans(size: T.fs13, color: T.ink3),
@@ -571,7 +589,7 @@ class _CourseAttendanceSheet extends StatelessWidget {
                                     (highlightKind == null || highlightKind == kind);
 
                                 return Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
+                                  margin: const EdgeInsets.only(bottom: T.space8),
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
                                     color: highlighted ? T.accentTint : T.surfaceSunk,
@@ -602,6 +620,7 @@ class _CourseAttendanceSheet extends StatelessWidget {
                                       ),
                                       _StatusChip(
                                         label: 'P',
+                                        semanticLabel: 'Present',
                                         selected: current == 'present',
                                         color: T.successInk,
                                         onTap: () => _setStatus(
@@ -613,6 +632,7 @@ class _CourseAttendanceSheet extends StatelessWidget {
                                       const SizedBox(width: 4),
                                       _StatusChip(
                                         label: 'A',
+                                        semanticLabel: 'Absent',
                                         selected: current == 'absent',
                                         color: T.danger,
                                         onTap: () => _setStatus(
@@ -624,6 +644,7 @@ class _CourseAttendanceSheet extends StatelessWidget {
                                       const SizedBox(width: 4),
                                       _StatusChip(
                                         label: 'E',
+                                        semanticLabel: 'Excused',
                                         selected: current == 'excused',
                                         color: T.ink3,
                                         onTap: () => _setStatus(
@@ -636,7 +657,7 @@ class _CourseAttendanceSheet extends StatelessWidget {
                                   ),
                                 );
                               }),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: T.space12),
                           ],
                         );
                       }),
@@ -708,12 +729,14 @@ class _ThresholdStepper extends StatelessWidget {
 class _StatusChip extends StatelessWidget {
   const _StatusChip({
     required this.label,
+    required this.semanticLabel,
     required this.selected,
     required this.color,
     required this.onTap,
   });
 
   final String label;
+  final String semanticLabel;
   final bool selected;
   final Color color;
   final VoidCallback onTap;
@@ -721,25 +744,29 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
-    return Material(
-      color: selected ? color.withValues(alpha: 0.15) : T.paper,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(T.rSm),
-        side: BorderSide(color: selected ? color : T.line),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(T.rSm),
-        onTap: onTap,
-        child: SizedBox(
-          width: 32,
-          height: 32,
-          child: Center(
-            child: Text(
-              label,
-              style: AppText.mono(
-                size: T.fs12,
-                weight: FontWeight.w700,
-                color: selected ? color : T.ink3,
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      selected: selected,
+      child: Material(
+        color: selected ? color.withValues(alpha: 0.15) : T.paper,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(T.rSm),
+          side: BorderSide(color: selected ? color : T.line),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(T.rSm),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Center(
+              child: Text(
+                label,
+                style: AppText.mono(
+                  size: T.fs12,
+                  weight: FontWeight.w700,
+                  color: selected ? color : T.ink3,
+                ),
               ),
             ),
           ),

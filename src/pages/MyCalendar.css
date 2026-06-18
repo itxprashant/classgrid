@@ -524,220 +524,10 @@
     cursor: default;
 }
 
-/* Week view — seven day columns with a chronological per-day agenda */
-.mycal__weekv-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -4px 32px;
-    padding: 0 4px;
-}
-
-.mycal__weekv {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(140px, 1fr));
-    gap: 1px;
-    background: var(--line);
-    border: 1px solid var(--line);
-    border-radius: var(--r-lg);
-    overflow: hidden;
-    min-width: min(100%, 980px);
-}
-
-.mycal__weekv-row {
-    display: contents;
-}
-
-.mycal__weekv-col {
-    display: flex;
-    flex-direction: column;
-    background: var(--surface);
-    min-width: 0;
-    min-height: 340px;
-}
-
-.mycal__weekv-col.is-weekend {
-    background: var(--surface-sunk);
-}
-
-.mycal__weekv-col.is-holiday {
-    background: var(--success-tint);
-}
-
-.mycal__weekv-col.is-exam {
-    background: var(--danger-tint);
-}
-
-.mycal__weekv-col.is-today {
-    background: var(--accent-tint);
-}
-
-.mycal__weekv-head {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 6px 8px;
-    padding: 10px 10px 8px;
-    border-bottom: 1px solid var(--line);
-}
-
-.mycal__weekv-dayrow {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    text-align: left;
-    font: inherit;
-    color: inherit;
-    border-radius: var(--r-sm);
-}
-
-.mycal__weekv-dayrow:hover {
-    color: var(--accent-ink);
-}
-
-.mycal__weekv-dayrow:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--accent);
-}
-
-.mycal__weekv-dow {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-}
-
-.mycal__weekv-date {
-    font-family: var(--font-mono);
-    font-size: var(--fs-16);
-    font-weight: 600;
-    color: var(--ink);
-    line-height: 1;
-    font-feature-settings: 'tnum';
-}
-
-.mycal__weekv-col.is-today .mycal__weekv-date {
-    color: var(--accent-ink);
-}
-
-.mycal__weekv-add {
-    margin-left: auto;
-    appearance: none;
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--ink-3);
-    border-radius: var(--r-sm);
-    font-size: 15px;
-    line-height: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
-}
-
-.mycal__weekv-add:hover {
-    border-color: var(--accent-edge);
-    color: var(--accent-ink);
-    background: var(--accent-tint);
-}
-
-.mycal__weekv-add:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--accent);
-}
-
-.mycal__weekv-tag {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    letter-spacing: 0.04em;
-    line-height: 1.25;
-    padding: 2px 6px;
-    border-radius: var(--r-sm);
-    border: 1px solid var(--line);
-    background: var(--paper-2);
-    color: var(--ink-3);
-    align-self: flex-start;
-    max-width: 100%;
-}
-
-.mycal__weekv-items {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px;
-    flex: 1;
-}
-
-/* In week view, chips have room to breathe and wrap their titles */
-.mycal__weekv-items .mycal__chip {
-    font-size: 12px;
-    padding: 4px 8px;
-    flex-wrap: wrap;
-}
-
-.mycal__weekv-items .mycal__chip-title {
-    white-space: normal;
-}
-
-.mycal__weekv-items .mycal__chip-time {
-    display: inline;
-}
-
-.mycal__weekv-items .mycal__class-chip {
-    font-size: 11px;
-    padding: 3px 8px;
-}
-
-.mycal__weekv-items .mycal__class-chip-meta {
-    white-space: normal;
-}
-
-.mycal__weekv-empty {
-    flex: 1;
-    appearance: none;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 80px;
-    color: var(--ink-4);
-    transition: background var(--t-fast), color var(--t-fast);
-}
-
-.mycal__weekv-empty:hover {
-    background: var(--paper-2);
-    color: var(--ink-3);
-}
-
-.mycal__weekv-empty:focus-visible {
-    outline: none;
-    box-shadow: inset 0 0 0 2px var(--accent);
-}
-
-.mycal__weekv-empty-plus {
-    font-size: 20px;
-    line-height: 1;
-    opacity: 0;
-    transition: opacity var(--t-fast);
-}
-
-.mycal__weekv-col:hover .mycal__weekv-empty-plus,
-.mycal__weekv-empty:focus-visible .mycal__weekv-empty-plus {
-    opacity: 1;
+/* Week view — same timetable board as the Plan page */
+.mycal__week-board {
+    margin-top: 16px;
+    margin-bottom: 32px;
 }
 
 /* Event modal (picker + add/edit form) */
@@ -749,7 +539,7 @@
     align-items: flex-start;
     justify-content: center;
     padding: 48px 24px 24px;
-    background: oklch(0.25 0.02 60 / 0.35);
+    background: var(--scrim);
     overflow-y: auto;
 }
 
@@ -872,7 +662,7 @@
 }
 
 .mycal__picker-option--personal:hover {
-    border-color: oklch(0.72 0.10 300);
+    border-color: var(--personal-edge);
 }
 
 .mycal__picker-option--personal .mycal__picker-option-label {
@@ -1211,27 +1001,27 @@
     border-radius: var(--r-sm);
     text-align: center;
     line-height: 1.2;
-    background: oklch(0.995 0.005 83 / 0.72);
-    border: 1px solid oklch(0.84 0.014 80 / 0.65);
+    background: var(--surface-overlay);
+    border: 1px solid var(--surface-overlay-border);
     color: var(--ink-3);
 }
 
 .mycal__day-item-kind--lecture {
     color: var(--lecture-ink);
     border-color: var(--lecture-edge);
-    background: oklch(0.995 0.005 83 / 0.8);
+    background: var(--surface-overlay-solid);
 }
 
 .mycal__day-item-kind--tutorial {
     color: var(--tutorial-ink);
     border-color: var(--tutorial-edge);
-    background: oklch(0.995 0.005 83 / 0.8);
+    background: var(--surface-overlay-solid);
 }
 
 .mycal__day-item-kind--lab {
     color: var(--lab-ink);
     border-color: var(--lab-edge);
-    background: oklch(0.995 0.005 83 / 0.8);
+    background: var(--surface-overlay-solid);
 }
 
 .mycal__day-item-main {
@@ -1521,13 +1311,38 @@
 /* Responsive */
 @media (max-width: 900px) {
     .mycal {
-        padding: 72px 16px 48px;
+        padding: 56px 16px 40px;
+    }
+
+    .mycal__head {
+        margin-bottom: 12px;
+    }
+
+    .mycal__sub {
+        display: none;
+    }
+
+    .mycal__title {
+        font-size: 1.65rem;
+    }
+
+    .mycal__status {
+        margin-bottom: 10px;
+    }
+
+    .mycal__planner-hint {
+        margin: 0 0 10px;
     }
 
     .mycal__toolbar {
         flex-direction: column;
         align-items: stretch;
-        gap: 14px;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .mycal__week-board {
+        margin-top: 8px;
     }
 
     .mycal__nav {
@@ -1569,34 +1384,9 @@
     }
 }
 
-/* Week view stacks into full-width day blocks on phones */
-@media (max-width: 760px) {
-    .mycal__weekv-scroll {
-        overflow-x: visible;
-        margin-bottom: 32px;
-    }
-
-    .mycal__weekv {
-        grid-template-columns: 1fr;
-        min-width: 0;
-    }
-
-    .mycal__weekv-col {
-        min-height: 0;
-    }
-
-    .mycal__weekv-empty {
-        min-height: 44px;
-    }
-}
-
 @media (max-width: 560px) {
     .mycal__title {
-        font-size: 1.75rem;
-    }
-
-    .mycal__sub {
-        font-size: 0.9375rem;
+        font-size: 1.45rem;
     }
 
     .mycal__grid {

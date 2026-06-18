@@ -13,6 +13,7 @@ Live site: [classgrid.devclub.in](https://classgrid.devclub.in)
 - **Empty Lecture Halls:** See free LH rooms at a chosen date/time.
 - **Calendar:** Shared course events (quizzes, deadlines) and private personal events.
 - **Export:** Download the plan as `.ics` (web and Android); PNG export on web only.
+- **Course & prof history:** Past-semester offerings and instructor search (web **Professors** nav; Android drawer → Prof explorer) after importing [`data/courses_offered_historical/`](data/courses_offered_historical/) via [`scripts/db/import_historical_catalog.js`](scripts/db/import_historical_catalog.js).
 
 ## Repository structure
 
@@ -109,14 +110,7 @@ More detail (auth flow, state, parity gaps): [AGENTS.md § Mobile app](AGENTS.md
 
 ## Production deployment
 
-Deploys to a remote Linux host (nginx + systemd) via [deploy.sh](deploy.sh). **No host or SSH key is hardcoded** — copy the example config first:
-
-```bash
-cp deploy.env.example deploy.env
-# edit deploy.env: DEPLOY_HOST, DEPLOY_USER, SSH_IDENTITY, DEPLOY_DOMAIN
-```
-
-Then:
+Deploys to a remote Linux host (nginx + systemd) via [deploy.sh](deploy.sh). SSH uses your **`~/.ssh/config` Host alias** `mydevclub` by default (same as `ssh mydevclub`). Optional [deploy.env.example](deploy.env.example) → `deploy.env` for `DEPLOY_DOMAIN` overrides.
 
 ```bash
 ./deploy.sh             # build + rsync SPA + rsync API + restart service
@@ -129,78 +123,71 @@ Production URLs depend on your `DEPLOY_DOMAIN` (live site: [classgrid.devclub.in
 
 ## Course catalog
 
-The offered-courses list lives in [src/courses.json](src/courses.json). It is built from IITD’s [`data/Courses_Offered.csv`](data/Courses_Offered.csv) plus venue fields from the room-allotment PDF ([scripts/csv_to_json.py](scripts/csv_to_json.py), then [scripts/sync_venues.py](scripts/sync_venues.py)).
+The offered-courses list and all semester reference data live in **Postgres**, imported via [`scripts/db/`](scripts/db/) from IITD inputs such as [`data/Courses_Offered.csv`](data/Courses_Offered.csv) and the room-allotment PDF.
 
-Three clients read that file differently:
+All clients fetch from the API (local cache is offline fallback only):
 
-| Client | How it gets the catalog | When it updates |
+| Client | How it gets semester data | When it updates |
 | --- | --- | --- |
-| **Web SPA** | Bundled at build time — CRA imports `src/courses.json` into the JS bundle | After you rebuild and deploy the static site |
-| **Backend API** | Reads a JSON file from disk (`CATALOG_PATH`) and serves it at `GET /api/catalog` | After the file on disk changes **and** the API process restarts |
-| **Android app** | Downloads `GET /api/catalog` on launch (cached offline in SharedPreferences) | After the backend serves a new catalog; pull-to-refresh / next cold start |
+| **Web SPA** | `SemesterDataProvider` → `/api/catalog`, `/api/semester/schedule`, `/api/extra-occupied` | After DB refresh + API restart |
+| **Backend API** | Postgres via `semesterData.js` (in-memory cache per process) | After import scripts + `./deploy.sh --api` |
+| **Android app** | Same endpoints (SharedPreferences cache; catalog sends `If-None-Match`) | After backend update; next cold start |
 
-**Local dev:** with no `CATALOG_PATH` set, the API defaults to `src/courses.json` in the repo ([server/src/config.js](server/src/config.js)). Restart `npm start` in `server/` after regenerating the file.
+**Local dev:** set `DATABASE_URL` in `server/.env`, run migrations, then `node scripts/db/seed_from_files.js` (one-time from legacy `src/*.json` stubs).
 
-**Production:** `deploy.sh` rsyncs `src/courses.json` to `data/courses.json` on the API host. Production `api.env` sets `CATALOG_PATH` to that path. The catalog router loads the file once at startup ([server/src/catalog.js](server/src/catalog.js)), so uploading a new JSON without restarting the service will not change live responses.
+**Production:** run `./scripts/db/refresh_semester.sh` (or individual importers) against prod `DATABASE_URL`, then `./deploy.sh --api`.
 
-To publish an updated catalog:
-
-```bash
-# 1. Regenerate src/courses.json (see “Updating for a New Semester” below)
-python3 scripts/csv_to_json.py
-python3 scripts/sync_venues.py
-
-# 2. Web — rebundle into the SPA
-./deploy.sh --static
-
-# 3. Backend + Android — upload JSON and restart classgrid-api
-./deploy.sh --api
-```
-
-Or run `./deploy.sh` to do both. Override the upload source if your catalog file lives elsewhere:
-
-```bash
-CATALOG_DATA_SRC=/path/to/courses.json ./deploy.sh --api
-```
-
-Cheap revalidation without downloading the full payload: `GET /api/catalog/meta` returns `{ semesterCode, count, etag }`.
+Cheap revalidation without downloading the full catalog: `GET /api/catalog/meta` returns `{ semesterCode, count, etag }`.
 
 ## Updating for a New Semester
 
-Refresh the data files below from the repo root, then deploy (see [Course catalog](#course-catalog) for what each deploy target picks up).
+Full operator guide: **[scripts/README.md](scripts/README.md)** (inputs, each script, prod runbook).
 
-1. **Update the course list** ([src/courses.json](src/courses.json))
-  - Download the new `Courses_Offered.csv` from the IITD Timetable site into [`data/`](data/).
-  - Regenerate the JSON:
-    ```bash
-    python3 scripts/csv_to_json.py
-    ```
-2. **Update venue / lecture-hall allotment**
-  - Find the new "Room Allotment Chart" PDF URL.
-  - Edit `PDF_URL` in [scripts/sync_venues.py](scripts/sync_venues.py).
-  - Run:
-    ```bash
-    python3 scripts/sync_venues.py
-    ```
-3. **Update student course registrations** ([src/studentCourses.json](src/studentCourses.json), [src/courseStudents.json](src/courseStudents.json))
-  - Edit `SEMESTER_PREFIX` in [scripts/fetch_student_courses.js](scripts/fetch_student_courses.js) (e.g. `'2601-'` for Sem 2601).
-  - Run:
-    ```bash
-    node scripts/fetch_student_courses.js
-    ```
-  - These files are large (multi-MB) when populated. The repo ships **stubs** so the bundle stays small. Don't commit regenerated blobs unless you are intentionally refreshing semester data.
-  - `studentCourses.json` → OAuth auto-fetch (`GET /api/me/courses`). `courseStudents.json` → course rosters (`GET /api/courses/:code/students`; web bundle + Android API).
-4. **Update semester labels in the planner**
-  - Web: in [src/pages/Generator.jsx](src/pages/Generator.jsx) bump `SEMESTER_LABEL`, `SEMESTER_START`, and `SEMESTER_END`.
-  - Android: match the same window in [app/lib/core/semester_schedule.dart](app/lib/core/semester_schedule.dart) and [app/lib/core/ics.dart](app/lib/core/ics.dart).
-5. **Deploy**
-  - **Web catalog** (bundled JSON): `./deploy.sh --static`
-  - **Backend catalog** (`GET /api/catalog` for Android) **+ enrollment + roster data**: `./deploy.sh --api` — uploads `src/courses.json`, `src/studentCourses.json`, and `src/courseStudents.json`, then restarts the API. Override paths if needed:
-    ```bash
-    CATALOG_DATA_SRC=/path/to/courses.json \
-    STUDENT_DATA_SRC=/path/to/populated/studentCourses.json \
-    COURSE_STUDENTS_DATA_SRC=/path/to/courseStudents.json \
-    ./deploy.sh --api
-    ```
-  - **Both:** `./deploy.sh`
+Run from repo root with `DATABASE_URL` pointing at your target database (local or prod via SSH tunnel).
+
+**One-shot orchestrator** (edit semester code and inputs first):
+
+```bash
+export DATABASE_URL=postgresql://classgrid:PASSWORD@127.0.0.1:5432/classgrid
+./scripts/db/refresh_semester.sh 2602
+./deploy.sh --api   # prod: restart API after DB writes
+```
+
+**Step by step:**
+
+1. **Academic calendar** — edit [`data/academic_calendar.json`](data/academic_calendar.json), then:
+   ```bash
+   node scripts/db/import_academic_calendar.js
+   ```
+2. **Course catalog** — download `Courses_Offered.csv` into [`data/`](data/), then:
+   ```bash
+   node scripts/db/import_catalog.js --semester 2602 --csv data/Courses_Offered.csv
+   ```
+3. **Venue / lecture-hall allotment** — set `ROOM_ALLOTMENT_PDF_URL` (see [`scripts/extract_venue_map.py`](scripts/extract_venue_map.py)), then:
+   ```bash
+   node scripts/db/sync_venues.js --semester 2602
+   ```
+4. **Student enrollments + rosters** — LDAP prefix defaults to `{semester}-`; run:
+   ```bash
+   node scripts/db/import_student_data.js --semester 2602
+   ```
+5. **Extra occupied overlay** — edit [`data/extra_occupied.json`](data/extra_occupied.json), then:
+   ```bash
+   node scripts/db/import_extra_occupied.js --semester 2602
+   ```
+6. **Activate semester** (exactly one `is_active` row):
+   ```bash
+   node scripts/db/activate_semester.js --semester 2602
+   ./deploy.sh --api
+   ```
+
+**First-time migration from legacy JSON files:**
+
+```bash
+source /etc/classgrid/db.env && /opt/classgrid-db/migrate.sh   # prod
+node scripts/db/seed_from_files.js
+./deploy.sh --api
+```
+
+Legacy `src/*.json` stubs are only for one-time `seed_from_files.js`; use [`scripts/db/`](scripts/db/) for all semester refreshes.
 

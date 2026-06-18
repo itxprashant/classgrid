@@ -12,7 +12,14 @@ const plannerRouter = require('./planner');
 const occupiedRoomsRouter = require('./occupiedRooms');
 const personalEventsRouter = require('./personalEvents');
 const appVersionRouter = require('./appVersion');
+const semesterRoutesRouter = require('./semesterRoutes');
 const remindersRouter = require('./reminders');
+const attendanceRouter = require('./attendance');
+const historyRouter = require('./history');
+const coursePoliciesRouter = require('./coursePolicies');
+const feedbackRouter = require('./feedback');
+const reportsRouter = require('./reports');
+const adminRouter = require('./admin');
 
 const app = express();
 
@@ -28,7 +35,14 @@ app.use('/api', plannerRouter);
 app.use('/api', occupiedRoomsRouter);
 app.use('/api', personalEventsRouter);
 app.use('/api', appVersionRouter);
+app.use('/api', semesterRoutesRouter);
 app.use('/api', remindersRouter);
+app.use('/api', attendanceRouter);
+app.use('/api', historyRouter);
+app.use('/api', coursePoliciesRouter);
+app.use('/api', feedbackRouter);
+app.use('/api', reportsRouter);
+app.use('/api/admin', adminRouter);
 
 app.get('/', (req, res) => {
     res.json({ name: 'classgrid-api', ok: true });

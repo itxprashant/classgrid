@@ -1,0 +1,28 @@
+{
+  "semester": {
+    "code": "2601",
+    "label": "Semester 1, 2026–2027",
+    "classesStart": "2026-07-23",
+    "lastTeachingDay": "2026-11-17"
+  },
+  "scheduleExceptions": {
+    "2026-09-03": "Friday",
+    "2026-10-10": "Wednesday"
+  },
+  "holidays": {
+    "2026-08-15": "Independence Day",
+    "2026-08-26": "Milad-un-Nabi",
+    "2026-09-04": "Janmashtami",
+    "2026-10-02": "Gandhi's Birthday",
+    "2026-10-20": "Dussehra",
+    "2026-11-08": "Diwali",
+    "2026-11-09": "Govardhan Puja",
+    "2026-11-24": "Guru Nanak's Birthday",
+    "2026-12-25": "Christmas"
+  },
+  "noClassPeriods": [
+    { "name": "Mid-semester examinations", "start": "2026-09-12", "end": "2026-09-18" },
+    { "name": "Semester break", "start": "2026-09-28", "end": "2026-10-04" },
+    { "name": "End-semester examinations", "start": "2026-11-18", "end": "2026-11-26" }
+  ]
+}

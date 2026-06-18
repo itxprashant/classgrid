@@ -29,4 +29,11 @@ class TimetableLayout {
     final em = int.parse(end.substring(2, 4));
     return (eh - sh) + (em - sm) / 60.0;
   }
+
+  /// Top edge of a timed block — aligned to hour gridlines (no vertical inset).
+  static double blockTop(String start) => hourOffset(start) * rowHeight;
+
+  /// Height of a timed block spanning [start]–[end].
+  static double blockHeight(String start, String end) =>
+      durationHours(start, end) * rowHeight;
 }

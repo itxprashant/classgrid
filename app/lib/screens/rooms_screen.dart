@@ -1,14 +1,15 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
 
 import '../core/room_schedule.dart';
 import '../state/catalog_provider.dart';
+import '../state/semester_data_provider.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../widgets/app_navigation.dart';
 import '../widgets/common.dart';
 import 'empty_halls_screen.dart';
 import 'room_detail_screen.dart';
@@ -25,11 +26,28 @@ class RoomsScreen extends StatefulWidget {
 
 class _RoomsScreenState extends State<RoomsScreen> {
   final _scroll = ScrollController();
+  final _searchController = TextEditingController();
+  Timer? _debounce;
   String _query = '';
   String? _building;
   int _limit = _pageSize;
-  List<dynamic> _extraOccupied = const [];
-  bool _extraLoaded = false;
+  RoomCatalog? _cachedCatalog;
+  int? _cachedCoursesLen;
+  int? _cachedExtraLen;
+
+  RoomCatalog _roomCatalog(CatalogProvider catalog, List<dynamic> extraOccupied) {
+    final coursesLen = catalog.courses.length;
+    final extraLen = extraOccupied.length;
+    if (_cachedCatalog != null &&
+        _cachedCoursesLen == coursesLen &&
+        _cachedExtraLen == extraLen) {
+      return _cachedCatalog!;
+    }
+    _cachedCatalog = buildRoomCatalog(catalog.courses, extraOccupied: extraOccupied);
+    _cachedCoursesLen = coursesLen;
+    _cachedExtraLen = extraLen;
+    return _cachedCatalog!;
+  }
 
   @override
   void initState() {
@@ -39,36 +57,34 @@ class _RoomsScreenState extends State<RoomsScreen> {
         setState(() => _limit += _pageSize);
       }
     });
-    _loadExtra();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      setState(() {
+        _query = value;
+        _limit = _pageSize;
+      });
+    });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
     _scroll.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadExtra() async {
-    try {
-      final raw = await rootBundle.loadString('assets/extra_occupied.json');
-      final parsed = jsonDecode(raw);
-      if (parsed is List && mounted) {
-        setState(() {
-          _extraOccupied = parsed;
-          _extraLoaded = true;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _extraLoaded = true);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     final catalog = context.watch<CatalogProvider>();
+    final semester = context.watch<SemesterDataProvider>();
 
-    if (catalog.loading && !catalog.isReady) {
+    if ((catalog.loading && !catalog.isReady) || (semester.loading && !semester.isReady)) {
       return const Center(child: CircularProgressIndicator());
     }
     if (catalog.error != null && !catalog.isReady) {
@@ -79,11 +95,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
       );
     }
 
-    if (!_extraLoaded) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final roomCatalog = buildRoomCatalog(catalog.courses, extraOccupied: _extraOccupied);
+    final roomCatalog = _roomCatalog(catalog, semester.extraOccupied);
     final buildings = roomBuildingCounts(roomCatalog.rooms);
     final filtered = filterRooms(
       roomCatalog.rooms,
@@ -109,9 +121,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               FilledButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const EmptyHallsScreen()),
-                ),
+                onPressed: () => pushAppRoute(context, const EmptyHallsScreen()),
                 icon: const Icon(Icons.meeting_room_outlined, size: 20),
                 label: const Text('Empty halls right now'),
               ),
@@ -131,16 +141,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
               text: 'Venues are not in the catalog yet. Wait for Room Allotment Chart of the current semester to be released.',
             ),
           ),
-          
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            decoration: const InputDecoration(
-              hintText: 'Search by room name',
-              prefixIcon: Icon(Icons.search),
-            ),
-            onChanged: (v) => setState(() {
-              _query = v;
+          child: AppSearchField(
+            controller: _searchController,
+            hint: 'Search by room name',
+            onChanged: _onSearchChanged,
+            onClear: () => setState(() {
+              _query = '';
               _limit = _pageSize;
             }),
           ),
@@ -203,8 +211,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
 
   Widget _roomRow(RoomInfo room) {
     return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => RoomDetailScreen(roomName: room.name)),
+      onTap: () => pushAppRoute(
+        context,
+        RoomDetailScreen(roomName: room.name),
       ),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

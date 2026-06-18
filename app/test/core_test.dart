@@ -14,6 +14,9 @@ import 'package:classgrid/core/planner_classes.dart';
 import 'package:classgrid/core/attendance.dart';
 import 'package:classgrid/core/app_version.dart';
 import 'package:classgrid/core/cgpa.dart';
+import 'package:classgrid/core/course_policy.dart';
+import 'package:classgrid/core/feedback.dart';
+import 'package:classgrid/models/course_policy.dart';
 import 'package:classgrid/models/calendar_event.dart';
 import 'package:classgrid/models/course.dart';
 import 'package:classgrid/models/academic_day.dart';
@@ -22,6 +25,10 @@ import 'package:classgrid/models/plan.dart';
 import 'package:classgrid/models/session.dart';
 
 void main() {
+  setUpAll(() {
+    setActiveSemesterSchedule(testSemesterScheduleConfig());
+  });
+
   group('parseTimingStr', () {
     test('parses comma-separated DHHMMHHMM chunks', () {
       final sessions = parseTimingStr('209001000,309001000,509001000');
@@ -653,6 +660,38 @@ void main() {
       expect(normalizeGradeSelection('F'), 'F');
       expect(normalizeGradeSelection('3'), isNull);
       expect(normalizeGradeSelection('11'), isNull);
+    });
+  });
+
+  group('course policy', () {
+    test('isPolicySubmittable requires at least one non-empty field', () {
+      final empty = CoursePolicyDraft();
+      expect(isPolicySubmittable(empty), isFalse);
+
+      empty.markingScheme = '  Midsem 30%  ';
+      expect(isPolicySubmittable(empty), isTrue);
+    });
+
+    test('policyPayload trims fields', () {
+      final draft = CoursePolicyDraft()
+        ..markingScheme = '  A  '
+        ..attendancePolicy = ''
+        ..auditWithdrawalPolicy = ' B '
+        ..otherNotes = '  ';
+      expect(policyPayload(draft), {
+        'markingScheme': 'A',
+        'attendancePolicy': '',
+        'auditWithdrawalPolicy': 'B',
+        'otherNotes': '',
+      });
+    });
+  });
+
+  group('feedback', () {
+    test('isFeedbackSubmittable enforces min length', () {
+      expect(isFeedbackSubmittable(''), isFalse);
+      expect(isFeedbackSubmittable('123456789'), isFalse);
+      expect(isFeedbackSubmittable('1234567890'), isTrue);
     });
   });
 }

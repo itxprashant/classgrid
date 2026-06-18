@@ -17,7 +17,7 @@ flutter analyze && flutter test && flutter build apk --release
 ./scripts/release-android-apk.sh --build      # flutter build apk --release, then deploy
 ```
 
-Bump `version:` in `app/pubspec.yaml` before each release. The script stages `dist/app/classgrid.apk`, updates `server/data/android-version.json` and `src/pages/Generator.jsx`, then runs `./deploy.sh --api`, `--apk`, and `--static`. Use `--no-deploy` to skip deploy; `--build` to rebuild the APK first. The app calls `GET /api/app/version` at startup and blocks until the installed build is current.
+Bump `version:` in `app/pubspec.yaml` before each release. The script stages `dist/app/classgrid.apk`, upserts `app_release_config` in Postgres via `import_app_version.js`, then runs `./deploy.sh --api` and `--apk`. Use `--no-deploy` to skip deploy; `--build` to rebuild the APK first. The app calls `GET /api/app/version` at startup and blocks until the installed build is current.
 
 Local dev without the check: `flutter run --dart-define=SKIP_VERSION_CHECK=true`.
 

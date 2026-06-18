@@ -143,7 +143,7 @@
 .edit-timing__cell input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px oklch(0.85 0.06 195 / 0.3);
+    box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .edit-timing__venue {

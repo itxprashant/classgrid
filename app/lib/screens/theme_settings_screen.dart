@@ -17,45 +17,30 @@ class ThemeSettingsScreen extends StatelessWidget {
     AppPaletteScope.watch(context);
     final theme = context.watch<ThemeController>();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Theme',
-          style: AppText.serif(size: T.fs18, weight: FontWeight.w600, color: T.ink),
-        ),
+    return ScreenShell(
+      eyebrow: 'Appearance',
+      title: 'Color theme',
+      subtitle: Text(
+        'Pick a palette for the whole app. Your choice is saved on this device.',
+        style: AppText.sans(size: T.fs14, color: T.ink2, height: 1.45),
       ),
-      body: Material(
-        color: T.paper,
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 32),
-          children: [
-            PageHeader(
-              eyebrow: 'Appearance',
-              title: 'Color theme',
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text(
-                'Pick a palette for the whole app. Your choice is saved on this device.',
-                style: AppText.sans(size: T.fs14, color: T.ink2, height: 1.45),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _ThemeSection(
-              label: 'LIGHT',
-              options: AppPalettes.lightThemes,
-              selectedId: theme.currentId,
-              onSelect: (id) => _selectTheme(context, theme, id),
-            ),
-            const SizedBox(height: 16),
-            _ThemeSection(
-              label: 'DARK',
-              options: AppPalettes.darkThemes,
-              selectedId: theme.currentId,
-              onSelect: (id) => _selectTheme(context, theme, id),
-            ),
-          ],
-        ),
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: T.space32),
+        children: [
+          _ThemeSection(
+            label: 'Light',
+            options: AppPalettes.lightThemes,
+            selectedId: theme.currentId,
+            onSelect: (id) => _selectTheme(context, theme, id),
+          ),
+          const SizedBox(height: T.space16),
+          _ThemeSection(
+            label: 'Dark',
+            options: AppPalettes.darkThemes,
+            selectedId: theme.currentId,
+            onSelect: (id) => _selectTheme(context, theme, id),
+          ),
+        ],
       ),
     );
   }
@@ -94,15 +79,9 @@ class _ThemeSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SectionHeader(label),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Text(
-            label,
-            style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1.2),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: T.space12),
           child: LayoutBuilder(
             builder: (context, constraints) {
               const gap = 10.0;
@@ -152,9 +131,9 @@ class _ThemePreviewTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(T.rLg),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.all(12),
+          duration: T.tBase,
+          curve: T.easeOut,
+          padding: const EdgeInsets.all(T.space12),
           decoration: BoxDecoration(
             color: T.surface,
             borderRadius: BorderRadius.circular(T.rLg),
@@ -168,7 +147,7 @@ class _ThemePreviewTile extends StatelessWidget {
             children: [
               Container(
                 height: 72,
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(T.space8),
                 decoration: BoxDecoration(
                   color: p.paper,
                   borderRadius: BorderRadius.circular(T.r),

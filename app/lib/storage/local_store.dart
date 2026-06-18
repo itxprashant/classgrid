@@ -18,6 +18,8 @@ class LocalStore {
   static const _kCalendarEvents = 'cg_calendar_events';
   static const _kCatalog = 'cg_catalog_cache';
   static const _kCatalogEtag = 'cg_catalog_etag';
+  static const _kScheduleCache = 'cg_schedule_cache';
+  static const _kExtraOccupiedCache = 'cg_extra_occupied_cache';
 
   static Future<LocalStore> create() async =>
       LocalStore(await SharedPreferences.getInstance());
@@ -139,8 +141,44 @@ class LocalStore {
     }
   }
 
+  String? loadCatalogEtag() => _prefs.getString(_kCatalogEtag);
+
   Future<void> saveCatalogCache(List<dynamic> coursesJson, String? etag) async {
     await _prefs.setString(_kCatalog, jsonEncode(coursesJson));
     if (etag != null) await _prefs.setString(_kCatalogEtag, etag);
+  }
+
+  Map<String, dynamic>? loadScheduleCache() {
+    try {
+      final raw = _prefs.getString(_kScheduleCache);
+      if (raw == null) return null;
+      final parsed = jsonDecode(raw);
+      return parsed is Map ? Map<String, dynamic>.from(parsed) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveScheduleCache(Map<String, dynamic> scheduleJson) async {
+    await _prefs.setString(_kScheduleCache, jsonEncode(scheduleJson));
+  }
+
+  List<Map<String, dynamic>>? loadExtraOccupiedCache() {
+    try {
+      final raw = _prefs.getString(_kExtraOccupiedCache);
+      if (raw == null) return null;
+      final parsed = jsonDecode(raw);
+      if (parsed is! List) return null;
+      return parsed
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveExtraOccupiedCache(List<Map<String, dynamic>> slots) async {
+    await _prefs.setString(_kExtraOccupiedCache, jsonEncode(slots));
   }
 }

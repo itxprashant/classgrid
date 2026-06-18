@@ -101,71 +101,104 @@ class _VersionGateState extends State<VersionGate> {
       await _waitMinIntro(started);
       if (!mounted) return;
       setState(() {
-        _checkError = e.toString();
+        _checkError = _friendlyCheckError(e);
         _phase = _VersionGatePhase.checkFailed;
       });
+    }
+  }
+
+  String _friendlyCheckError(Object e) {
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('socket') || msg.contains('network') || msg.contains('connection')) {
+      return 'Network connection failed.';
+    }
+    if (msg.contains('timeout')) return 'The request timed out.';
+    return 'Something went wrong while checking for updates.';
+  }
+
+  Widget _phaseWidget() {
+    switch (_phase) {
+      case _VersionGatePhase.intro:
+        return IntroScreen(
+          key: const ValueKey('intro'),
+          installedVersion: _installedVersion.isEmpty ? null : _installedVersion,
+          installedBuild: _installedBuild == 0 ? null : _installedBuild,
+        );
+      case _VersionGatePhase.ready:
+        return KeyedSubtree(
+          key: const ValueKey('ready'),
+          child: widget.child,
+        );
+      case _VersionGatePhase.updateRequired:
+        return KeyedSubtree(
+          key: const ValueKey('update'),
+          child: UpdateRequiredScreen(
+            installedVersion: _installedVersion,
+            installedBuild: _installedBuild,
+            required: _required!,
+            onRetry: _runCheck,
+          ),
+        );
+      case _VersionGatePhase.checkFailed:
+        return KeyedSubtree(
+          key: const ValueKey('failed'),
+          child: Scaffold(
+            backgroundColor: T.paper,
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(T.space24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Could not verify app version',
+                      style: AppText.serif(size: T.fs26, weight: FontWeight.w500, color: T.ink),
+                    ),
+                    const SizedBox(height: T.space12),
+                    Text(
+                      'ClassGrid needs to check for updates before you can sign in. '
+                      'Check your connection and try again.',
+                      style: AppText.sans(size: T.fs14, color: T.ink2),
+                    ),
+                    if (_checkError != null) ...[
+                      const SizedBox(height: T.space16),
+                      Text(
+                        _checkError!,
+                        style: AppText.mono(size: T.fs12, color: T.ink3),
+                      ),
+                    ],
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: _runCheck,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: T.accent,
+                        foregroundColor: T.paper,
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
-    switch (_phase) {
-      case _VersionGatePhase.intro:
-        return IntroScreen(
-          installedVersion: _installedVersion.isEmpty ? null : _installedVersion,
-          installedBuild: _installedBuild == 0 ? null : _installedBuild,
-        );
-      case _VersionGatePhase.ready:
-        return widget.child;
-      case _VersionGatePhase.updateRequired:
-        return UpdateRequiredScreen(
-          installedVersion: _installedVersion,
-          installedBuild: _installedBuild,
-          required: _required!,
-          onRetry: _runCheck,
-        );
-      case _VersionGatePhase.checkFailed:
-        return Scaffold(
-          backgroundColor: T.paper,
-          body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Could not verify app version',
-                    style: AppText.serif(size: T.fs26, weight: FontWeight.w500, color: T.ink),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'ClassGrid needs to check for updates before you can sign in. '
-                    'Check your connection and try again.',
-                    style: AppText.sans(size: T.fs14, color: T.ink2),
-                  ),
-                  if (_checkError != null) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      _checkError!,
-                      style: AppText.mono(size: T.fs12, color: T.ink3),
-                    ),
-                  ],
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: _runCheck,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: T.accent,
-                      foregroundColor: T.paper,
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-    }
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    return AnimatedSwitcher(
+      duration: disableAnimations ? Duration.zero : T.tSlow,
+      switchInCurve: T.easeOut,
+      switchOutCurve: T.easeOut,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: child,
+      ),
+      child: _phaseWidget(),
+    );
   }
 }

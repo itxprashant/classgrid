@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './Navbar.css';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import ThemeToggle from '../ThemeToggle/ThemeToggle';
 
 function initialsFromName(name) {
     if (!name) return '?';
@@ -10,22 +11,42 @@ function initialsFromName(name) {
 }
 
 const NAV_ITEMS = [
-    { to: '/', end: true, label: 'Plan' },
-    { to: '/course-explorer', label: 'Courses' },
+    { to: '/calendar', end: true, label: 'Calendar' },
+    { to: '/plan', label: 'Plan' },
     { to: '/rooms', label: 'Rooms' },
-    { to: '/calendar', label: 'Calendar' },
 ];
+
+const EXPLORE_ITEMS = [
+    { to: '/course-explorer', label: 'Courses' },
+    { to: '/professors', label: 'Professors' },
+    { to: '/students', label: 'Students' },
+];
+
+function isExplorePath(pathname) {
+    return (
+        pathname.startsWith('/course-explorer')
+        || pathname.startsWith('/professors')
+        || pathname.startsWith('/professor/')
+        || pathname.startsWith('/students')
+        || pathname.startsWith('/student/')
+    );
+}
 
 export default function Navbar() {
     const { user, loading, login, logout } = useAuth();
     const location = useLocation();
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [exploreMenuOpen, setExploreMenuOpen] = useState(false);
     const [navOpen, setNavOpen] = useState(false);
     const userMenuRef = useRef(null);
+    const exploreMenuRef = useRef(null);
+
+    const exploreActive = isExplorePath(location.pathname);
 
     useEffect(() => {
         setNavOpen(false);
         setUserMenuOpen(false);
+        setExploreMenuOpen(false);
     }, [location.pathname]);
 
     useEffect(() => {
@@ -47,6 +68,17 @@ export default function Navbar() {
         document.addEventListener('mousedown', onClick);
         return () => document.removeEventListener('mousedown', onClick);
     }, [userMenuOpen]);
+
+    useEffect(() => {
+        if (!exploreMenuOpen) return undefined;
+        const onClick = (e) => {
+            if (exploreMenuRef.current && !exploreMenuRef.current.contains(e.target)) {
+                setExploreMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', onClick);
+        return () => document.removeEventListener('mousedown', onClick);
+    }, [exploreMenuOpen]);
 
     const authBlock = loading ? null : user ? (
         <div className="nav__user" ref={userMenuRef}>
@@ -75,7 +107,18 @@ export default function Navbar() {
                         {user.email && (
                             <div className="nav__user-menu-sub mono">{user.email}</div>
                         )}
+                        {user.hostel && (
+                            <div className="nav__user-menu-sub">{user.hostel}</div>
+                        )}
                     </div>
+                    <Link
+                        to="/feedback"
+                        className="nav__user-menu-item nav__user-menu-link"
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
+                    >
+                        Suggest a feature
+                    </Link>
                     <button
                         type="button"
                         className="nav__user-menu-item"
@@ -108,7 +151,7 @@ export default function Navbar() {
     return (
         <nav className="nav">
             <div className="nav__inner">
-                <Link to="/" className="nav__brand" aria-label="IIT Delhi Timetable, home">
+                <Link to="/calendar" className="nav__brand" aria-label="ClassGrid, home">
                     <span className="nav__mark" aria-hidden="true" />
                     <span className="nav__wordmark">
                         <span className="nav__wordmark-serif">ClassGrid</span>
@@ -132,7 +175,68 @@ export default function Navbar() {
                     className={'nav__panel' + (navOpen ? ' is-open' : '')}
                 >
                     <div className="nav__links">
-                        {NAV_ITEMS.map(({ to, end, label }) => (
+                        {NAV_ITEMS.slice(0, 2).map(({ to, end, label }) => (
+                            <NavLink
+                                key={to}
+                                to={to}
+                                end={end}
+                                className={({ isActive }) =>
+                                    'nav__link' + (isActive ? ' is-active' : '')
+                                }
+                                onClick={() => setNavOpen(false)}
+                            >
+                                {label}
+                            </NavLink>
+                        ))}
+
+                        <div className="nav__explore" ref={exploreMenuRef}>
+                            <button
+                                type="button"
+                                className={'nav__link nav__explore-btn' + (exploreActive ? ' is-active' : '')}
+                                onClick={() => setExploreMenuOpen((v) => !v)}
+                                aria-expanded={exploreMenuOpen}
+                                aria-haspopup="menu"
+                            >
+                                Explore
+                                <span className="nav__explore-chevron" aria-hidden="true">▾</span>
+                            </button>
+                            {exploreMenuOpen && (
+                                <div className="nav__explore-menu" role="menu">
+                                    {EXPLORE_ITEMS.map(({ to, label }) => (
+                                        <Link
+                                            key={to}
+                                            to={to}
+                                            className="nav__explore-menu-item"
+                                            role="menuitem"
+                                            onClick={() => {
+                                                setExploreMenuOpen(false);
+                                                setNavOpen(false);
+                                            }}
+                                        >
+                                            {label}
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="nav__explore-mobile">
+                            <div className="nav__explore-mobile-label mono muted">Explore</div>
+                            {EXPLORE_ITEMS.map(({ to, label }) => (
+                                <NavLink
+                                    key={to}
+                                    to={to}
+                                    className={({ isActive }) =>
+                                        'nav__link nav__explore-mobile-link' + (isActive ? ' is-active' : '')
+                                    }
+                                    onClick={() => setNavOpen(false)}
+                                >
+                                    {label}
+                                </NavLink>
+                            ))}
+                        </div>
+
+                        {NAV_ITEMS.slice(2).map(({ to, end, label }) => (
                             <NavLink
                                 key={to}
                                 to={to}
@@ -147,7 +251,10 @@ export default function Navbar() {
                         ))}
                     </div>
 
-                    <div className="nav__auth">{authBlock}</div>
+                    <div className="nav__auth">
+                        <ThemeToggle />
+                        {authBlock}
+                    </div>
                 </div>
             </div>
 

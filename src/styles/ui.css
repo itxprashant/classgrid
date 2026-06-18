@@ -141,13 +141,13 @@
 
 .btn--primary {
     --btn-bg: var(--accent);
-    --btn-fg: oklch(0.99 0.01 195);
+    --btn-fg: var(--btn-primary-fg);
     --btn-bd: var(--accent);
 }
 
 .btn--primary:hover {
-    --btn-bg: oklch(0.46 0.09 195);
-    --btn-bd: oklch(0.46 0.09 195);
+    --btn-bg: var(--btn-primary-hover);
+    --btn-bd: var(--btn-primary-hover);
 }
 
 .btn--ghost {
@@ -207,7 +207,7 @@
 .field:focus-visible {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px oklch(0.85 0.06 195 / 0.35);
+    box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .field--lg {
@@ -241,6 +241,31 @@ select.field {
     color: var(--ink-2);
     margin-bottom: 6px;
     letter-spacing: 0.01em;
+}
+
+/* Label + control stack — prefer FormField.jsx over hand-rolled markup */
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.form-field .field-label {
+    margin-bottom: 0;
+}
+
+.form-field--wide {
+    width: 100%;
+    max-width: none;
+}
+
+.form-field--fixed {
+    width: min(220px, 100%);
+}
+
+.form-field--sm {
+    width: min(160px, 100%);
 }
 
 /* Badge */

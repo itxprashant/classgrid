@@ -51,6 +51,28 @@
     --personal-edge: oklch(0.82 0.08 300);
     --personal-ink: oklch(0.42 0.12 300);
 
+    /* Overlays & focus */
+    --scrim: oklch(0.25 0.02 60 / 0.35);
+    --focus-ring: oklch(0.85 0.06 195 / 0.35);
+
+    /* Primary button */
+    --btn-primary-fg: oklch(0.99 0.01 195);
+    --btn-primary-hover: oklch(0.46 0.09 195);
+
+    /* Warning */
+    --warn: oklch(0.72 0.12 80);
+    --warn-ink: oklch(0.45 0.12 40);
+    --warn-tint: oklch(0.94 0.05 80);
+
+    /* Body grain washes */
+    --body-wash-a: oklch(0.96 0.018 75 / 0.55);
+    --body-wash-b: oklch(0.97 0.014 195 / 0.45);
+
+    /* Frosted sticky surfaces */
+    --surface-overlay: oklch(0.995 0.005 83 / 0.72);
+    --surface-overlay-solid: oklch(0.995 0.005 83 / 0.8);
+    --surface-overlay-border: oklch(0.84 0.014 80 / 0.65);
+
     /* Radii */
     --r-sm: 4px;
     --r: 6px;
@@ -82,6 +104,86 @@
     --t: 180ms var(--ease-out);
 }
 
+[data-theme="dark"] {
+    color-scheme: dark;
+
+    /* Midnight canvas — Flutter buildDarkPalette(260, 265, paperL: 0.16) + web contrast */
+    --paper: oklch(0.15 0.019 260);
+    --paper-2: oklch(0.12 0.022 260);
+    --surface: oklch(0.24 0.016 260);
+    --surface-sunk: oklch(0.10 0.024 260);
+
+    /* Ink */
+    --ink: oklch(0.95 0.014 270);
+    --ink-2: oklch(0.84 0.016 268);
+    --ink-3: oklch(0.72 0.014 265);
+    --ink-4: oklch(0.58 0.012 260);
+
+    /* Lines */
+    --line: oklch(0.38 0.020 260);
+    --line-strong: oklch(0.48 0.024 260);
+
+    /* Accent — violet */
+    --accent: oklch(0.68 0.088 265);
+    --accent-ink: oklch(0.82 0.08 265);
+    --accent-tint: oklch(0.28 0.035 265);
+    --accent-edge: oklch(0.42 0.055 265);
+
+    /* Session tints */
+    --lecture-tint: oklch(0.28 0.03 265);
+    --lecture-edge: oklch(0.42 0.055 265);
+    --lecture-ink: oklch(0.88 0.07 270);
+
+    --tutorial-tint: oklch(0.28 0.05 80);
+    --tutorial-edge: oklch(0.42 0.072 80);
+    --tutorial-ink: oklch(0.88 0.065 75);
+
+    --lab-tint: oklch(0.27 0.045 40);
+    --lab-edge: oklch(0.41 0.068 40);
+    --lab-ink: oklch(0.88 0.07 35);
+
+    /* States */
+    --danger: oklch(0.70 0.15 30);
+    --danger-tint: oklch(0.26 0.055 30);
+    --danger-edge: oklch(0.40 0.09 30);
+
+    --success: oklch(0.66 0.12 145);
+    --success-ink: oklch(0.84 0.095 145);
+    --success-tint: oklch(0.26 0.045 145);
+    --success-edge: oklch(0.40 0.08 145);
+
+    /* Personal events */
+    --personal-tint: oklch(0.28 0.045 300);
+    --personal-edge: oklch(0.44 0.09 300);
+    --personal-ink: oklch(0.88 0.11 300);
+
+    /* Overlays & focus */
+    --scrim: oklch(0.06 0.014 260 / 0.62);
+    --focus-ring: oklch(0.68 0.088 265 / 0.48);
+
+    /* Primary button */
+    --btn-primary-fg: oklch(0.16 0.02 265);
+    --btn-primary-hover: oklch(0.72 0.089 265);
+
+    /* Warning */
+    --warn: oklch(0.78 0.12 80);
+    --warn-ink: oklch(0.88 0.09 75);
+    --warn-tint: oklch(0.26 0.045 80);
+
+    /* Body grain washes — cool violet */
+    --body-wash-a: oklch(0.22 0.024 260 / 0.42);
+    --body-wash-b: oklch(0.24 0.03 265 / 0.34);
+
+    /* Frosted sticky surfaces */
+    --surface-overlay: oklch(0.24 0.016 260 / 0.88);
+    --surface-overlay-solid: oklch(0.24 0.016 260 / 0.94);
+    --surface-overlay-border: oklch(0.48 0.024 260 / 0.75);
+
+    /* Elevation */
+    --shadow-card: 0 1px 2px oklch(0.02 0.012 260 / 0.45);
+    --shadow-pop: 0 4px 16px oklch(0.01 0.012 260 / 0.6), 0 1px 2px oklch(0.01 0.012 260 / 0.4);
+}
+
 * {
     box-sizing: border-box;
 }
@@ -111,9 +213,10 @@ body {
     min-height: 100vh;
     /* Subtle paper grain via overlapping low-chroma radial washes (no glass, no gradients on text) */
     background-image:
-        radial-gradient(at 100% 0%, oklch(0.96 0.018 75 / 0.55) 0, transparent 45%),
-        radial-gradient(at 0% 100%, oklch(0.97 0.014 195 / 0.45) 0, transparent 50%);
+        radial-gradient(at 100% 0%, var(--body-wash-a) 0, transparent 45%),
+        radial-gradient(at 0% 100%, var(--body-wash-b) 0, transparent 50%);
     background-attachment: fixed;
+    transition: background-color var(--t), color var(--t);
 }
 
 h1,

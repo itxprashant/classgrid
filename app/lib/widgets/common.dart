@@ -414,7 +414,7 @@ class PageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(T.space16, T.space16, T.space16, T.space8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -435,13 +435,375 @@ class PageHeader extends StatelessWidget {
                   ),
                 ),
                 if (subtitle != null) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: T.space4),
                   subtitle!,
                 ],
               ],
             ),
           ),
           if (trailing != null) trailing!,
+        ],
+      ),
+    );
+  }
+}
+
+/// Screen shell: transparent AppBar (back only) + [PageHeader] body pattern.
+class ScreenShell extends StatelessWidget {
+  const ScreenShell({
+    super.key,
+    required this.eyebrow,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.actions,
+    required this.body,
+    this.floatingActionButton,
+  });
+
+  final String eyebrow;
+  final String title;
+  final Widget? subtitle;
+  final Widget? trailing;
+  final List<Widget>? actions;
+  final Widget body;
+  final Widget? floatingActionButton;
+
+  @override
+  Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
+    return Scaffold(
+      backgroundColor: T.paper,
+      appBar: AppBar(
+        title: const SizedBox.shrink(),
+        actions: actions,
+      ),
+      floatingActionButton: floatingActionButton,
+      body: Material(
+        color: T.paper,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PageHeader(
+              eyebrow: eyebrow,
+              title: title,
+              subtitle: subtitle,
+              trailing: trailing,
+            ),
+            Expanded(child: body),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Raised surface card matching design-system panels.
+class AppCard extends StatelessWidget {
+  const AppCard({
+    super.key,
+    required this.child,
+    this.padding,
+    this.margin,
+    this.onTap,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
+    final card = Container(
+      margin: margin,
+      padding: padding ?? const EdgeInsets.all(T.space12),
+      decoration: BoxDecoration(
+        color: T.surface,
+        border: Border.all(color: T.line),
+        borderRadius: BorderRadius.circular(T.rLg),
+        boxShadow: [
+          BoxShadow(
+            color: T.shadowCard,
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: child,
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(T.rLg),
+        child: card,
+      ),
+    );
+  }
+}
+
+/// Mono eyebrow section label (APPEARANCE, SELECTED COURSES, etc.).
+class SectionHeader extends StatelessWidget {
+  const SectionHeader(this.label, {super.key, this.padding});
+
+  final String label;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
+    return Padding(
+      padding: padding ?? const EdgeInsets.fromLTRB(T.space16, 0, T.space16, T.space8),
+      child: Text(
+        label.toUpperCase(),
+        style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1.2),
+      ),
+    );
+  }
+}
+
+/// Settings-style navigation row inside a grouped card.
+class SettingsRow extends StatelessWidget {
+  const SettingsRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
+    return Semantics(
+      button: true,
+      label: subtitle != null ? '$title, $subtitle' : title,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: T.space12),
+              child: Row(
+                children: [
+                  Icon(icon, size: 22, color: T.accentInk),
+                  const SizedBox(width: T.space12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: AppText.sans(size: T.fs14, weight: FontWeight.w600, color: T.ink),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle!,
+                            style: AppText.mono(size: T.fs12, color: T.ink3),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  trailing ?? Icon(Icons.chevron_right, size: 20, color: T.ink4),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Grouped settings section with [SectionHeader] + bordered card.
+class SettingsSection extends StatelessWidget {
+  const SettingsSection({
+    super.key,
+    required this.label,
+    required this.children,
+  });
+
+  final String label;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeader(label),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: T.space16),
+          child: Container(
+            decoration: BoxDecoration(
+              color: T.surface,
+              border: Border.all(color: T.line),
+              borderRadius: BorderRadius.circular(T.rLg),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                for (var i = 0; i < children.length; i++) ...[
+                  if (i > 0) Divider(height: 1, color: T.line),
+                  children[i],
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Confirm a destructive action. Returns true if confirmed.
+Future<bool> confirmDestructive(
+  BuildContext context, {
+  required String title,
+  required String message,
+  String confirmLabel = 'Remove',
+}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title, style: AppText.serif(size: T.fs18, color: T.ink)),
+      content: Text(message, style: AppText.sans(color: T.ink2)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: T.danger),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+  return result == true;
+}
+
+/// Search field with clear button and optional debounce handled by caller.
+class AppSearchField extends StatelessWidget {
+  const AppSearchField({
+    super.key,
+    required this.controller,
+    required this.hint,
+    this.onChanged,
+    this.onClear,
+    this.textInputAction = TextInputAction.search,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onClear;
+  final TextInputAction textInputAction;
+
+  @override
+  Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        return TextField(
+          controller: controller,
+          onChanged: onChanged,
+          textInputAction: textInputAction,
+          decoration: InputDecoration(
+            hintText: hint,
+            prefixIcon: Icon(Icons.search, size: 20, color: T.ink3),
+            suffixIcon: value.text.isNotEmpty
+                ? IconButton(
+                    icon: Icon(Icons.close, size: 18, color: T.ink3),
+                    tooltip: 'Clear search',
+                    onPressed: () {
+                      controller.clear();
+                      onClear?.call();
+                      onChanged?.call('');
+                    },
+                  )
+                : null,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Status banner with optional retry action.
+class StatusBannerWithRetry extends StatelessWidget {
+  StatusBannerWithRetry({
+    super.key,
+    required this.kind,
+    required this.text,
+    this.onClose,
+    this.onRetry,
+  });
+
+  final String kind;
+  final String text;
+  final VoidCallback? onClose;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
+    Color tint, edge, ink;
+    switch (kind) {
+      case 'ok':
+        tint = T.successTint;
+        edge = T.successEdge;
+        ink = T.successInk;
+        break;
+      case 'err':
+        tint = T.dangerTint;
+        edge = T.dangerEdge;
+        ink = T.danger;
+        break;
+      default:
+        tint = T.tutorialTint;
+        edge = T.tutorialEdge;
+        ink = T.tutorialInk;
+    }
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: T.space16, vertical: T.space8),
+      padding: const EdgeInsets.fromLTRB(T.space12, 10, T.space8, 10),
+      decoration: BoxDecoration(
+        color: tint,
+        border: Border.all(color: edge),
+        borderRadius: BorderRadius.circular(T.r),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text(text, style: AppText.sans(size: T.fs13, color: ink))),
+          if (onRetry != null)
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(foregroundColor: ink, padding: const EdgeInsets.symmetric(horizontal: 8)),
+              child: const Text('Retry'),
+            ),
+          if (onClose != null)
+            InkWell(
+              onTap: onClose,
+              child: Icon(Icons.close, size: 16, color: ink),
+            ),
         ],
       ),
     );

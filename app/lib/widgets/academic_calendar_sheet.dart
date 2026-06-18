@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../core/semester_schedule.dart';
+import '../models/academic_day.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
+import '../theme/academic_day_colors.dart';
 import '../theme/tokens.dart';
 import 'common.dart';
 
@@ -28,6 +30,7 @@ class AcademicCalendarSheet extends StatelessWidget {
     AppPaletteScope.watch(context);
     final swaps = kScheduleExceptions.keys.toList()..sort();
     final holidays = kHolidays.keys.toList()..sort();
+    final holidayStyle = AcademicDayColors.forType(AcademicType.holiday);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.8,
@@ -78,15 +81,20 @@ class AcademicCalendarSheet extends StatelessWidget {
                   _section('Holidays', [
                     for (final key in holidays)
                       _row(_fmt(key), kHolidays[key]!,
-                          tint: T.dangerTint, edge: T.dangerEdge, ink: T.danger),
+                          tint: holidayStyle.tint,
+                          edge: holidayStyle.edge,
+                          ink: holidayStyle.ink),
                   ]),
                   const SizedBox(height: 16),
                   _section('Breaks & examinations', [
                     for (final p in kNoClassPeriods)
-                      _row('${_fmt(p.start)} – ${_fmt(p.end)}', p.name,
-                          tint: isExamPeriod(p.name) ? T.tutorialTint : T.surfaceSunk,
-                          edge: isExamPeriod(p.name) ? T.tutorialEdge : T.line,
-                          ink: isExamPeriod(p.name) ? T.tutorialInk : T.ink2),
+                      _row(
+                        '${_fmt(p.start)} – ${_fmt(p.end)}',
+                        p.name,
+                        tint: isExamPeriod(p.name) ? T.dangerTint : T.surfaceSunk,
+                        edge: isExamPeriod(p.name) ? T.dangerEdge : T.line,
+                        ink: isExamPeriod(p.name) ? T.danger : T.ink2,
+                      ),
                   ]),
                   const SizedBox(height: 16),
                   Text(

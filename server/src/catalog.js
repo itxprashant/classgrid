@@ -1,74 +1,78 @@
 'use strict';
 
-const crypto = require('crypto');
-const fs = require('fs');
 const express = require('express');
 const config = require('./config');
+const semesterData = require('./semesterData');
 
 const router = express.Router();
 
-// Loaded once at boot and cached in memory. The catalog is a static, multi-MB
-// JSON file refreshed only at semester boundaries, so we keep the parsed array,
-// its raw body length, and a strong ETag for conditional requests.
-let catalog = [];
-let etag = null;
-let semesterCode = null;
-let loadedPath = null;
+function dbUnavailable(_req, res) {
+    res.status(503).json({ error: 'database_unavailable' });
+}
 
-function loadCatalog() {
-    const p = config.catalogPath;
-    try {
-        const raw = fs.readFileSync(p, 'utf8');
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-            catalog = parsed;
-            loadedPath = p;
-            etag = '"' + crypto.createHash('sha1').update(raw).digest('hex') + '"';
-            semesterCode = (parsed.find((c) => c && c.semesterCode) || {}).semesterCode || null;
-            console.log(`[catalog] loaded ${catalog.length} courses from ${p}`);
-        } else {
-            console.warn(`[catalog] ${p} did not contain an array; using empty data`);
-            catalog = [];
-            loadedPath = p;
-            etag = '"empty"';
-            semesterCode = null;
+function withDb(handler) {
+    if (!config.databaseUrl) {
+        return dbUnavailable;
+    }
+    return async (req, res, next) => {
+        try {
+            await handler(req, res);
+        } catch (e) {
+            if (e.message === 'database_not_configured') {
+                dbUnavailable(req, res);
+                return;
+            }
+            next(e);
         }
-    } catch (e) {
-        console.warn(`[catalog] could not load ${p}: ${e.message}`);
-        catalog = [];
-        loadedPath = null;
-        etag = '"empty"';
-        semesterCode = null;
-    }
+    };
 }
 
-loadCatalog();
-
-function notModified(req) {
-    const inm = req.headers['if-none-match'];
-    if (!inm || !etag) return false;
-    // Handle comma-separated lists and weak validators defensively.
-    return inm.split(',').map((s) => s.trim()).some((tag) => tag === etag || tag === 'W/' + etag);
-}
-
-router.get('/catalog', (req, res) => {
-    res.set('ETag', etag);
+router.get('/catalog', withDb(async (req, res) => {
+    const semester = (req.query.semester || '').trim() || undefined;
+    const catalog = await semesterData.loadCatalog(semester);
+    res.set('ETag', catalog.etag);
     res.set('Cache-Control', 'public, max-age=0, must-revalidate');
-    if (notModified(req)) {
+    if (semesterData.notModified(req, catalog.etag)) {
         res.status(304).end();
         return;
     }
-    res.json({ courses: catalog, semesterCode, count: catalog.length });
-});
+    res.json({
+        courses: catalog.courses,
+        semesterCode: catalog.semesterCode,
+        count: catalog.count,
+    });
+}));
 
-router.get('/catalog/meta', (req, res) => {
-    res.set('ETag', etag);
+router.get('/catalog/explorer', withDb(async (req, res) => {
+    const catalog = await semesterData.loadCatalogExplorer();
+    res.set('ETag', catalog.etag);
     res.set('Cache-Control', 'public, max-age=0, must-revalidate');
-    if (notModified(req)) {
+    if (semesterData.notModified(req, catalog.etag)) {
         res.status(304).end();
         return;
     }
-    res.json({ semesterCode, count: catalog.length, etag });
-});
+    res.json({
+        courses: catalog.courses,
+        semesterCode: catalog.semesterCode,
+        count: catalog.count,
+        offeredCount: catalog.offeredCount,
+    });
+}));
+
+router.get('/catalog/meta', withDb(async (req, res) => {
+    const semester = (req.query.semester || '').trim() || undefined;
+    const catalog = await semesterData.loadCatalog(semester);
+    res.set('ETag', catalog.etag);
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
+    if (semesterData.notModified(req, catalog.etag)) {
+        res.status(304).end();
+        return;
+    }
+    res.json({
+        semesterCode: catalog.semesterCode,
+        count: catalog.count,
+        etag: catalog.etag,
+    });
+}));
 
 module.exports = router;

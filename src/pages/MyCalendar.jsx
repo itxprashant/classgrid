@@ -39,8 +39,13 @@ import {
     eventActorFromUser,
 } from '../utils/calendarEvents';
 import AcademicCalendarButton from '../components/AcademicCalendar/AcademicCalendarButton';
+import AndroidAppPromo from '../components/AndroidAppPromo/AndroidAppPromo';
+import CalendarWeekGrid from '../components/Calendar/CalendarWeekGrid';
 import { useAuth, apiFetch } from '../auth/AuthContext';
-import coursesData from '../courses.json';
+import { useSemesterData } from '../data/SemesterDataContext';
+import SemesterDataGate from '../data/SemesterDataGate';
+import ReportContentPanel from '../components/ReportContent/ReportContentPanel';
+import FormField from '../components/FormField/FormField';
 import './MyCalendar.css';
 
 const MONTH_NAMES = [
@@ -223,12 +228,12 @@ function loadPlannerCourses() {
     }
 }
 
-function buildCourseOptions() {
+function buildCourseOptions(catalogCourses) {
     const planner = loadPlannerCourses();
     const source =
         planner.length > 0
             ? planner
-            : coursesData.filter((c) => c && c.courseCode);
+            : catalogCourses.filter((c) => c && c.courseCode);
 
     return source
         .map((c) => ({
@@ -281,7 +286,8 @@ function MycalDayModalContent({
         const kb = eventSortKey(b);
         return ka < kb ? -1 : ka > kb ? 1 : 0;
     });
-    const dayClasses = showClasses ? classesByDate.get(key) || [] : [];
+    const dayClasses =
+        showClasses && academic.hasClasses ? classesByDate.get(key) || [] : [];
     const delight = dayDelightClass ? ` ${dayDelightClass}` : '';
     const useTimeline =
         timelineLists ||
@@ -543,7 +549,7 @@ function MycalDayModalContent({
                                 Course event
                             </span>
                             <span className="mycal__picker-option-desc">
-                                Visible to everyone in that course: quiz,
+                                Synced for everyone on that course — quiz,
                                 deadline, exam, …
                             </span>
                         </span>
@@ -590,8 +596,9 @@ function emptyDraft(dateKey, defaultCourseCode = '', mode = 'shared') {
 
 export default function MyCalendar() {
     const { user, login } = useAuth();
+    const { courses: catalogCourses } = useSemesterData();
     const today = todayMidnight();
-    const [viewMode, setViewMode] = useState('month');
+    const [viewMode, setViewMode] = useState('week');
     const [viewYear, setViewYear] = useState(today.getFullYear());
     const [viewMonth, setViewMonth] = useState(today.getMonth());
     const [weekAnchor, setWeekAnchor] = useState(today);
@@ -601,12 +608,14 @@ export default function MyCalendar() {
     const [eventsError, setEventsError] = useState(null);
     const [saving, setSaving] = useState(false);
     const [modal, setModal] = useState(null);
+    const [eventFormView, setEventFormView] = useState('form');
+    const [reportingEvent, setReportingEvent] = useState(null);
     const [showClasses, setShowClasses] = useState(false);
     const [enrolledCodes, setEnrolledCodes] = useState([]);
     const migratedLocalRef = useRef(false);
 
     const plannerCourses = useMemo(() => loadPlannerCourses(), []);
-    const courseOptions = useMemo(() => buildCourseOptions(), []);
+    const courseOptions = useMemo(() => buildCourseOptions(catalogCourses), [catalogCourses]);
     const usesPlannerCourses = plannerCourses.length > 0;
     const defaultCourseCode = courseOptions[0]?.courseCode || '';
 
@@ -660,6 +669,8 @@ export default function MyCalendar() {
                 : weeks.flat().map((c) => c.date),
         [viewMode, weekDates, weeks]
     );
+
+    const includePlannerClasses = viewMode === 'week' || showClasses;
 
     const fetchRange = useMemo(() => {
         if (gridDates.length === 0) return null;
@@ -732,15 +743,15 @@ export default function MyCalendar() {
     }, [user, reloadEvents]);
 
     const classesByDate = useMemo(() => {
-        if (!showClasses) return new Map();
+        if (!includePlannerClasses) return new Map();
         const { courses, timetableData } = loadPlannerState();
         return buildClassesByDate(gridDates, courses, timetableData);
-    }, [showClasses, gridDates]);
+    }, [includePlannerClasses, gridDates]);
 
     const plannerCourseCount = useMemo(() => {
-        if (!showClasses) return 0;
+        if (!includePlannerClasses) return 0;
         return loadPlannerState().courses.length;
-    }, [showClasses]);
+    }, [includePlannerClasses]);
 
     // Index events by date key for O(1) cell lookup.
     const eventsByDate = useMemo(() => {
@@ -804,7 +815,10 @@ export default function MyCalendar() {
         setViewMode(mode);
     };
 
-    const closeModal = () => setModal(null);
+    const closeModal = () => {
+        setModal(null);
+        setEventFormView('form');
+    };
 
     const updateModalDraft = (updater) => {
         setModal((prev) => {
@@ -846,6 +860,7 @@ export default function MyCalendar() {
     }, [modal]);
 
     const openEdit = (evt, dayCtx = null) => {
+        setEventFormView('form');
         setModal({
             type: 'form',
             pickCtx: dayCtx,
@@ -1100,6 +1115,7 @@ export default function MyCalendar() {
     );
 
     return (
+        <SemesterDataGate>
         <div className="mycal">
             <header className="mycal__head">
                 <div className="mycal__eyebrow">Calendar</div>
@@ -1114,6 +1130,8 @@ export default function MyCalendar() {
                     swaps and breaks.
                 </p>
             </header>
+
+            <AndroidAppPromo />
 
             {eventsError && (
                 <p className="mycal__status status status--err" role="alert">
@@ -1203,21 +1221,23 @@ export default function MyCalendar() {
                         </button>
                     </div>
                     <AcademicCalendarButton />
-                    <label className="mycal__show-classes">
-                        <input
-                            type="checkbox"
-                            checked={showClasses}
-                            onChange={(e) => setShowClasses(e.target.checked)}
-                        />
-                        <span>Show classes</span>
-                    </label>
+                    {viewMode === 'month' && (
+                        <label className="mycal__show-classes">
+                            <input
+                                type="checkbox"
+                                checked={showClasses}
+                                onChange={(e) => setShowClasses(e.target.checked)}
+                            />
+                            <span>Show classes</span>
+                        </label>
+                    )}
                     <button type="button" className="btn btn--sm" onClick={goToday}>
                         Today
                     </button>
                 </div>
             </div>
 
-            {showClasses && plannerCourseCount === 0 && (
+            {(viewMode === 'week' || showClasses) && plannerCourseCount === 0 && (
                 <p className="mycal__planner-hint status">
                     No courses on your planner yet — add them on the Plan page to see classes here.
                 </p>
@@ -1244,8 +1264,11 @@ export default function MyCalendar() {
                         {week.map(({ date, inMonth }) => {
                             const key = formatDateKey(date);
                             const dayEvents = eventsByDate.get(key) || [];
-                            const dayClasses = showClasses ? classesByDate.get(key) || [] : [];
                             const academic = getAcademicDay(date);
+                            const dayClasses =
+                                includePlannerClasses && academic.hasClasses
+                                    ? classesByDate.get(key) || []
+                                    : [];
                             const isToday = key === todayKey;
                             const isWeekend = academic.type === 'weekend';
 
@@ -1342,129 +1365,18 @@ export default function MyCalendar() {
             )}
 
             {viewMode === 'week' && (
-            <div className="mycal__weekv-scroll">
-                <div className="mycal__weekv" role="grid" aria-label="Weekly calendar">
-                    <div className="mycal__weekv-row" role="row">
-                        {weekDates.map((date) => {
-                            const key = formatDateKey(date);
-                            const dayEvents = eventsByDate.get(key) || [];
-                            const dayClasses = showClasses
-                                ? classesByDate.get(key) || []
-                                : [];
-                            const academic = getAcademicDay(date);
-                            const isToday = key === todayKey;
-                            const isWeekend = academic.type === 'weekend';
-                            const isExamBreak =
-                                academic.type === 'break' && isExamPeriod(academic.name);
-                            const dow = WEEK_HEADERS[(date.getDay() + 6) % 7].full;
-
-                            const items = [
-                                ...dayClasses.map((s) => ({
-                                    kind: 'class',
-                                    sort: s.start || '0000',
-                                    data: s,
-                                })),
-                                ...dayEvents.map((e) => ({
-                                    kind: 'event',
-                                    sort: eventSortKey(e),
-                                    data: e,
-                                })),
-                            ].sort((a, b) =>
-                                a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0
-                            );
-
-                            const colClass =
-                                'mycal__weekv-col' +
-                                (isToday ? ' is-today' : '') +
-                                (isWeekend ? ' is-weekend' : '') +
-                                (academic.type === 'holiday' ? ' is-holiday' : '') +
-                                (isExamBreak ? ' is-exam' : '') +
-                                (academic.type === 'break' && !isExamBreak ? ' is-break' : '') +
-                                (academic.type === 'swapped' ? ' is-swap' : '');
-
-                            return (
-                                <div key={key} className={colClass} role="gridcell">
-                                    <div className="mycal__weekv-head">
-                                        <button
-                                            type="button"
-                                            className="mycal__weekv-dayrow"
-                                            onClick={() => openDayView(key, date)}
-                                            aria-label={`View ${fmtFull(date)}`}
-                                        >
-                                            <span className="mycal__weekv-dow">{dow}</span>
-                                            <span className="mycal__weekv-date tnum">
-                                                {date.getDate()}
-                                            </span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="mycal__weekv-add"
-                                            onClick={() => openDayView(key, date)}
-                                            aria-label={`View ${fmtFull(date)}`}
-                                        >
-                                            +
-                                        </button>
-
-                                        {academic.type === 'holiday' && (
-                                            <span
-                                                className="mycal__weekv-tag mycal__cell-tag--holiday"
-                                                title={academic.name}
-                                            >
-                                                {academic.name}
-                                            </span>
-                                        )}
-                                        {academic.type === 'swapped' && (
-                                            <span
-                                                className="mycal__weekv-tag mycal__cell-tag--swap"
-                                                title={`${academic.weekday} runs as ${academic.effectiveDay} timetable`}
-                                            >
-                                                → {academic.effectiveDay} TT
-                                            </span>
-                                        )}
-                                        {academic.type === 'break' && (
-                                            <span
-                                                className={
-                                                    'mycal__weekv-tag' +
-                                                    (isExamBreak
-                                                        ? ' mycal__cell-tag--exam'
-                                                        : ' mycal__cell-tag--break')
-                                                }
-                                                title={academic.name}
-                                            >
-                                                {academic.name}
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {items.length > 0 ? (
-                                        <div className="mycal__weekv-items">
-                                            {items.map((it) =>
-                                                it.kind === 'class'
-                                                    ? renderClassChip(it.data)
-                                                    : renderEventChip(it.data)
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            className="mycal__weekv-empty"
-                                            onClick={() => openDayView(key, date)}
-                                            aria-label={`View ${fmtFull(date)}`}
-                                        >
-                                            <span
-                                                className="mycal__weekv-empty-plus"
-                                                aria-hidden="true"
-                                            >
-                                                +
-                                            </span>
-                                        </button>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
+                <div className="mycal__week-board">
+                    <CalendarWeekGrid
+                        weekDates={weekDates}
+                        classesByDate={classesByDate}
+                        eventsByDate={eventsByDate}
+                        showClasses
+                        todayKey={todayKey}
+                        fmtFull={fmtFull}
+                        openDayView={openDayView}
+                        openEdit={openEdit}
+                    />
                 </div>
-            </div>
             )}
 
             {modal && (
@@ -1488,12 +1400,45 @@ export default function MyCalendar() {
                                 <MycalDayModalContent
                                     modal={modal}
                                     closeModal={closeModal}
-                                    showClasses={showClasses}
+                                    showClasses={includePlannerClasses}
                                     eventsByDate={eventsByDate}
                                     classesByDate={classesByDate}
                                     openEdit={openEdit}
                                     chooseCreateMode={chooseCreateMode}
                                 />
+                            ) : eventFormView === 'report' && modalDraft?.id && modalDraft.mode !== 'personal' ? (
+                                <>
+                                    <div className="mycal__modal-head">
+                                        <div className="mycal__modal-head-main">
+                                            <button
+                                                type="button"
+                                                className="btn btn--sm btn--ghost mycal__modal-back"
+                                                onClick={() => setEventFormView('form')}
+                                            >
+                                                ← Back
+                                            </button>
+                                            <h2 id="mycal-modal-title" className="mycal__modal-title">
+                                                Report event
+                                            </h2>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="btn btn--sm btn--ghost"
+                                            onClick={closeModal}
+                                            aria-label="Close"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                    <ReportContentPanel
+                                        compact
+                                        targetKind="course_event"
+                                        targetId={modalDraft.id}
+                                        contextLabel={`${modalDraft.courseCode} · ${modalDraft.title} · ${modalDraft.date}`}
+                                        onDone={closeModal}
+                                        onCancel={() => setEventFormView('form')}
+                                    />
+                                </>
                             ) : (
                                 <form className="mycal__form" onSubmit={handleSave}>
                                     <div className="mycal__modal-head">
@@ -1540,9 +1485,9 @@ export default function MyCalendar() {
                                     )}
 
                                     <div className="mycal__form-grid">
-                                        <label className="mycal__form-row">
-                                            <span className="field-label">Date</span>
+                                        <FormField label="Date" htmlFor="mycal-event-date" className="mycal__form-row">
                                             <input
+                                                id="mycal-event-date"
                                                 type="date"
                                                 className="field field--mono"
                                                 value={modalDraft.date}
@@ -1551,11 +1496,11 @@ export default function MyCalendar() {
                                                 }
                                                 required
                                             />
-                                        </label>
+                                        </FormField>
 
-                                        <label className="mycal__form-row">
-                                            <span className="field-label">Type</span>
+                                        <FormField label="Type" htmlFor="mycal-event-type" className="mycal__form-row">
                                             <select
+                                                id="mycal-event-type"
                                                 className="field"
                                                 value={modalDraft.type}
                                                 onChange={(e) =>
@@ -1568,10 +1513,14 @@ export default function MyCalendar() {
                                                     </option>
                                                 ))}
                                             </select>
-                                        </label>
+                                        </FormField>
 
-                                        <label className="mycal__form-row mycal__form-row--wide">
-                                            <span className="field-label">Course</span>
+                                        <FormField
+                                            label="Course"
+                                            htmlFor={modalDraft.mode === 'personal' ? undefined : 'mycal-event-course'}
+                                            className="mycal__form-row form-field--wide"
+                                            wide
+                                        >
                                             {modalDraft.mode === 'personal' ? (
                                                 <span className="mycal__form-hint">
                                                     Not linked to a course — personal events stay private.
@@ -1579,6 +1528,7 @@ export default function MyCalendar() {
                                             ) : (
                                                 <>
                                                     <select
+                                                        id="mycal-event-course"
                                                         className="field field--mono"
                                                         value={modalDraft.courseCode}
                                                         onChange={(e) =>
@@ -1603,11 +1553,11 @@ export default function MyCalendar() {
                                                     )}
                                                 </>
                                             )}
-                                        </label>
+                                        </FormField>
 
-                                        <label className="mycal__form-row mycal__form-row--wide">
-                                            <span className="field-label">Title</span>
+                                        <FormField label="Title" htmlFor="mycal-event-title" className="mycal__form-row" wide>
                                             <input
+                                                id="mycal-event-title"
                                                 type="text"
                                                 className="field"
                                                 placeholder="e.g. Quiz 2"
@@ -1617,10 +1567,9 @@ export default function MyCalendar() {
                                                 }
                                                 required
                                             />
-                                        </label>
+                                        </FormField>
 
-                                        <fieldset className="mycal__form-row mycal__form-row--wide mycal__form-fieldset">
-                                            <legend className="field-label">Schedule</legend>
+                                        <FormField as="fieldset" label="Schedule" className="mycal__form-row mycal__form-fieldset" wide>
                                             <div className="mycal__schedule-options">
                                                 {EVENT_SCHEDULES.map((s) => (
                                                     <label
@@ -1641,12 +1590,12 @@ export default function MyCalendar() {
                                                     </label>
                                                 ))}
                                             </div>
-                                        </fieldset>
+                                        </FormField>
 
                                         {modalDraft.schedule === 'at' && (
-                                            <label className="mycal__form-row">
-                                                <span className="field-label">At</span>
+                                            <FormField label="At" htmlFor="mycal-event-at" className="mycal__form-row">
                                                 <input
+                                                    id="mycal-event-at"
                                                     type="time"
                                                     className="field field--mono"
                                                     value={hhmmToInput(modalDraft.time)}
@@ -1658,14 +1607,14 @@ export default function MyCalendar() {
                                                     }
                                                     required
                                                 />
-                                            </label>
+                                            </FormField>
                                         )}
 
                                         {modalDraft.schedule === 'timed' && (
                                             <>
-                                                <label className="mycal__form-row">
-                                                    <span className="field-label">From</span>
+                                                <FormField label="From" htmlFor="mycal-event-from" className="mycal__form-row">
                                                     <input
+                                                        id="mycal-event-from"
                                                         type="time"
                                                         className="field field--mono"
                                                         value={hhmmToInput(modalDraft.start)}
@@ -1677,10 +1626,10 @@ export default function MyCalendar() {
                                                         }
                                                         required
                                                     />
-                                                </label>
-                                                <label className="mycal__form-row">
-                                                    <span className="field-label">To</span>
+                                                </FormField>
+                                                <FormField label="To" htmlFor="mycal-event-to" className="mycal__form-row">
                                                     <input
+                                                        id="mycal-event-to"
                                                         type="time"
                                                         className="field field--mono"
                                                         value={hhmmToInput(modalDraft.end)}
@@ -1692,13 +1641,13 @@ export default function MyCalendar() {
                                                         }
                                                         required
                                                     />
-                                                </label>
+                                                </FormField>
                                             </>
                                         )}
 
-                                        <label className="mycal__form-row mycal__form-row--wide">
-                                            <span className="field-label">Note (optional)</span>
+                                        <FormField label="Note (optional)" htmlFor="mycal-event-note" className="mycal__form-row" wide>
                                             <textarea
+                                                id="mycal-event-note"
                                                 className="field mycal__form-note"
                                                 rows={2}
                                                 placeholder="Room, syllabus, links…"
@@ -1707,10 +1656,19 @@ export default function MyCalendar() {
                                                     updateModalDraft((d) => ({ ...d, note: e.target.value }))
                                                 }
                                             />
-                                        </label>
+                                        </FormField>
                                     </div>
 
                                     <div className="mycal__form-actions">
+                                        {modalDraft.id && modalDraft.mode !== 'personal' && user && (
+                                            <button
+                                                type="button"
+                                                className="btn btn--sm btn--ghost"
+                                                onClick={() => setEventFormView('report')}
+                                            >
+                                                Report
+                                            </button>
+                                        )}
                                         {modalDraft.id && (
                                             <button
                                                 type="button"
@@ -1796,6 +1754,15 @@ export default function MyCalendar() {
                                         )}
                                     </span>
                                     <span className="mycal__item-actions">
+                                        {!e.isPersonal && user && (
+                                            <button
+                                                type="button"
+                                                className="btn btn--sm btn--ghost"
+                                                onClick={() => setReportingEvent(e)}
+                                            >
+                                                Report
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             className="btn btn--sm btn--ghost"
@@ -1823,6 +1790,45 @@ export default function MyCalendar() {
                 Course events are shared with everyone in that course.
                 Personal events are stored privately and only visible when you are logged in.
             </p>
+
+            {reportingEvent && (
+                <div
+                    className="mycal__modal-backdrop"
+                    onClick={() => setReportingEvent(null)}
+                    role="presentation"
+                >
+                    <div
+                        className="mycal__modal mycal__modal--form panel"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="mycal-report-title"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="mycal__modal-head">
+                            <h2 id="mycal-report-title" className="mycal__modal-title">
+                                Report event
+                            </h2>
+                            <button
+                                type="button"
+                                className="btn btn--sm btn--ghost"
+                                onClick={() => setReportingEvent(null)}
+                                aria-label="Close"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <ReportContentPanel
+                            compact
+                            targetKind="course_event"
+                            targetId={reportingEvent.id}
+                            contextLabel={`${reportingEvent.courseCode} · ${reportingEvent.title} · ${reportingEvent.date}`}
+                            onDone={() => setReportingEvent(null)}
+                            onCancel={() => setReportingEvent(null)}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
+        </SemesterDataGate>
     );
 }

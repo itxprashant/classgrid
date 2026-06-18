@@ -1,0 +1,374 @@
+/* Calendar week view — planner-style grid over seven calendar dates */
+
+.tt--cal-week {
+    --tt-cols: 7;
+    --tt-min-board: 840px;
+    --tt-head: 56px;
+    display: grid;
+    grid-template-columns: var(--tt-hour-col) minmax(var(--tt-min-board), 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+}
+
+.tt--cal-week.tt--cal-week-has-notes {
+    --tt-head: 72px;
+}
+
+.tt--cal-week.tt--cal-week-has-allday {
+    grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.tt--cal-week .tt__cal-corner {
+    grid-column: 1;
+    grid-row: 1;
+    border-right: 1px solid var(--line);
+    background: var(--paper-2);
+}
+
+.tt--cal-week .tt__cal-days {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.tt--cal-week-has-allday .tt__allday-pad {
+    grid-column: 1;
+    grid-row: 2;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-2);
+}
+
+.tt--cal-week-has-allday .tt__allday {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.tt--cal-week:not(.tt--cal-week-has-allday) .tt__cal-hours,
+.tt--cal-week:not(.tt--cal-week-has-allday) .tt__cal-plot {
+    grid-row: 2;
+}
+
+.tt--cal-week-has-allday .tt__cal-hours,
+.tt--cal-week-has-allday .tt__cal-plot {
+    grid-row: 3;
+}
+
+.tt--cal-week .tt__cal-hours {
+    grid-column: 1;
+    min-height: calc(var(--tt-row) * var(--tt-rows));
+    height: auto;
+}
+
+.tt--cal-week .tt__cal-plot {
+    grid-column: 2;
+}
+
+.tt--cal-week .tt__days {
+    grid-template-columns: repeat(var(--tt-cols), minmax(0, 1fr));
+    height: auto;
+    min-height: var(--tt-head);
+}
+
+.tt--cal-week .tt__cols,
+.tt--cal-week .tt__allday {
+    grid-template-columns: repeat(var(--tt-cols), minmax(0, 1fr));
+}
+
+.tt--cal-week .tt__hour-pad--cal {
+    height: auto;
+    min-height: var(--tt-head);
+    border-bottom: 1px solid var(--line);
+}
+
+.tt--cal-week .tt__day-head.tt__day-head--cal {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 6px 5px;
+    min-height: var(--tt-head);
+    height: auto;
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: inherit;
+}
+
+.tt__day-head-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    min-width: 0;
+}
+
+.tt__day-head-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    border-radius: var(--r-sm);
+    min-width: 0;
+    flex: 1;
+}
+
+.tt__day-head-btn:hover {
+    color: var(--accent-ink);
+}
+
+.tt__day-head-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.tt--cal-week .tt__day-abbr {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+}
+
+.tt__day-date {
+    font-family: var(--font-mono);
+    font-size: var(--fs-16);
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ink);
+}
+
+.tt__day-head--cal.is-today .tt__day-date {
+    color: var(--accent-ink);
+}
+
+.tt__day-add {
+    flex-shrink: 0;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-3);
+    border-radius: var(--r-sm);
+    font-size: 15px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+
+.tt__day-add:hover {
+    border-color: var(--accent-edge);
+    color: var(--accent-ink);
+    background: var(--accent-tint);
+}
+
+.tt__day-add:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.tt__day-note {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    line-height: 1.25;
+    color: var(--ink-3);
+    text-align: left;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    word-break: break-word;
+}
+
+.tt__day-note--holiday {
+    color: var(--success-ink);
+}
+
+.tt__day-note--swap {
+    color: var(--tutorial-ink);
+}
+
+.tt__day-note--exam {
+    color: var(--danger);
+}
+
+.tt__day-note--break {
+    color: var(--lab-ink);
+}
+
+.tt__day-note--weekend {
+    color: var(--ink-3);
+}
+
+.tt__day-head--cal.is-today {
+    background: var(--accent-tint);
+}
+
+.tt__day-head--cal.is-weekend {
+    background: var(--surface-sunk);
+}
+
+.tt__day-head--cal.is-holiday {
+    background: var(--success-tint);
+}
+
+.tt__day-head--cal.is-exam {
+    background: var(--danger-tint);
+}
+
+.tt__day-head--cal.is-swap {
+    background: var(--tutorial-tint);
+}
+
+.tt__day-head--cal.is-break:not(.is-exam) {
+    background: var(--lab-tint);
+}
+
+.tt__allday {
+    display: grid;
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-2);
+    min-height: 28px;
+}
+
+.tt__allday-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px;
+    border-right: 1px solid var(--line);
+    min-width: 0;
+}
+
+.tt__allday-col:last-child {
+    border-right: none;
+}
+
+.tt__allday-pill {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: var(--r-sm);
+    padding: 3px 6px;
+    font-size: 10px;
+    line-height: 1.25;
+    text-align: left;
+    cursor: pointer;
+    color: var(--ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tt__allday-pill:hover {
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow-card);
+}
+
+.tt__allday-pill--personal {
+    border-color: var(--personal-edge);
+    background: var(--personal-tint);
+    color: var(--personal-ink);
+}
+
+.tt__allday-pill--quiz {
+    background: var(--lecture-tint);
+    border-color: var(--lecture-edge);
+    color: var(--lecture-ink);
+}
+
+.tt__allday-pill--deadline {
+    background: var(--tutorial-tint);
+    border-color: var(--tutorial-edge);
+    color: var(--tutorial-ink);
+}
+
+.tt__allday-pill--exam {
+    background: var(--danger-tint);
+    border-color: var(--danger-edge);
+    color: var(--danger);
+}
+
+.tt__col-tap {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 1;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.tt__col-tap:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent);
+    z-index: 2;
+}
+
+.tt-block--btn {
+    cursor: pointer;
+    z-index: 6;
+}
+
+.tt-block--btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-pop);
+    z-index: 20;
+}
+
+.tt-block--personal {
+    background: var(--personal-tint);
+    border-color: var(--personal-edge);
+    color: var(--personal-ink);
+}
+
+.tt-block--event-quiz {
+    background: var(--lecture-tint);
+    border-color: var(--lecture-edge);
+    color: var(--lecture-ink);
+}
+
+.tt-block--event-deadline {
+    background: var(--tutorial-tint);
+    border-color: var(--tutorial-edge);
+    color: var(--tutorial-ink);
+}
+
+.tt-block--event-exam {
+    background: var(--danger-tint);
+    border-color: var(--danger-edge);
+    color: var(--danger);
+}
+
+.tt-block--event-extra-class {
+    background: var(--lab-tint);
+    border-color: var(--lab-edge);
+    color: var(--lab-ink);
+}
+
+.tt-block--event-presentation {
+    background: var(--accent-tint);
+    border-color: var(--accent-edge);
+    color: var(--accent-ink);
+}
+
+.tt-block--event-others,
+.tt-block--event-other {
+    background: var(--surface-sunk);
+    border-color: var(--line-strong);
+    color: var(--ink-2);
+}

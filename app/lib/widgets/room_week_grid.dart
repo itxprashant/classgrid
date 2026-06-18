@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../core/room_schedule.dart';
+import '../core/timetable_layout.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
-
-const int _startHour = 7;
-const int _endHour = 21;
-const double _rowHeight = 58;
-const double _railWidth = 40;
-const double _headerHeight = 26;
+import 'timetable_grid.dart';
+import 'timetable_hour_rail.dart';
 
 const Map<String, int> _dayIndex = {
   'Monday': 0,
@@ -26,24 +23,12 @@ class RoomWeekGrid extends StatelessWidget {
     super.key,
     required this.sessions,
     required this.conflicts,
+    this.onBlockTap,
   });
 
   final List<RoomSession> sessions;
   final Set<int> conflicts;
-
-  double _hourOffset(String start) {
-    final hour = int.parse(start.substring(0, 2));
-    final minute = int.parse(start.substring(2, 4));
-    return (hour - _startHour) + minute / 60.0;
-  }
-
-  double _duration(String start, String end) {
-    final sh = int.parse(start.substring(0, 2));
-    final sm = int.parse(start.substring(2, 4));
-    final eh = int.parse(end.substring(0, 2));
-    final em = int.parse(end.substring(2, 4));
-    return (eh - sh) + (em - sm) / 60.0;
-  }
+  final void Function(RoomSession session, int index)? onBlockTap;
 
   static String _formatTime(String hhmm) {
     final hour = int.parse(hhmm.substring(0, 2));
@@ -62,8 +47,7 @@ class RoomWeekGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
-    final hourCount = _endHour - _startHour;
-    final plotHeight = hourCount * _rowHeight;
+    final plotHeight = TimetableLayout.plotHeight;
 
     return Container(
       decoration: BoxDecoration(
@@ -76,10 +60,10 @@ class RoomWeekGrid extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(
-            height: _headerHeight,
+            height: TimetableLayout.headerHeight,
             child: Row(
               children: [
-                const SizedBox(width: _railWidth),
+                SizedBox(width: TimetableLayout.railWidth),
                 for (final d in _dayLabels)
                   Expanded(
                     child: Container(
@@ -106,26 +90,27 @@ class RoomWeekGrid extends StatelessWidget {
               height: plotHeight,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final dayAreaWidth = constraints.maxWidth - _railWidth;
+                  final dayAreaWidth = constraints.maxWidth - TimetableLayout.railWidth;
                   final colWidth = dayAreaWidth / 5;
                   return Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      for (int h = _startHour; h <= _endHour; h++)
+                      for (int h = TimetableLayout.startHour; h <= TimetableLayout.endHour; h++)
                         Positioned(
-                          top: (h - _startHour) * _rowHeight,
+                          top: TimetableLayout.lineTopForHour(h),
                           left: 0,
                           right: 0,
-                          child: _HourLine(hour: h),
+                          child: TimetableHourRail(hour: h),
                         ),
                       for (int i = 0; i < 5; i++)
                         Positioned(
                           top: 0,
                           bottom: 0,
-                          left: _railWidth + i * colWidth,
+                          left: TimetableLayout.railWidth + i * colWidth,
                           child: Container(width: 1, color: T.line),
                         ),
                       for (int i = 0; i < sessions.length; i++)
-                        _buildBlock(sessions[i], i, conflicts.contains(i), colWidth, plotHeight),
+                        _buildBlock(sessions[i], i, conflicts.contains(i), colWidth),
                     ],
                   );
                 },
@@ -136,12 +121,13 @@ class RoomWeekGrid extends StatelessWidget {
     );
   }
 
-  Widget _buildBlock(RoomSession s, int index, bool conflict, double colWidth, double plotHeightMax) {
+  Widget _buildBlock(RoomSession s, int index, bool conflict, double colWidth) {
     final dayIdx = _dayIndex[s.day];
     if (dayIdx == null) return const SizedBox.shrink();
-    final top = _hourOffset(s.start) * _rowHeight;
-    final span = _duration(s.start, s.end);
-    final height = (span * _rowHeight).clamp(20.0, plotHeightMax);
+    final span = TimetableLayout.durationHours(s.start, s.end);
+    final top = TimetableLayout.blockTop(s.start);
+    final height = TimetableLayout.blockHeight(s.start, s.end)
+        .clamp(20.0, TimetableLayout.plotHeight);
     final compact = span < 0.75;
 
     Color tint, edge, ink;
@@ -170,114 +156,41 @@ class RoomWeekGrid extends StatelessWidget {
     final start = _formatTime(s.start);
     final end = _formatTime(s.end);
 
-    return Positioned(
-      top: top + 1,
-      left: _railWidth + dayIdx * colWidth + 1.5,
-      width: colWidth - 3,
-      height: height - 2,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-        decoration: BoxDecoration(
-          color: tint,
-          border: Border.all(color: conflict ? T.danger : edge, width: conflict ? 1.5 : 1),
-          borderRadius: BorderRadius.circular(T.rSm),
-        ),
-        foregroundDecoration: conflict ? const _DiagonalHatch() : null,
-        child: ClipRect(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fittedLine(s.displayCode, AppText.mono(size: T.fs12, weight: FontWeight.w600, color: ink)),
-              if (!compact) _fittedLine(s.type, AppText.sans(size: 9, color: ink)),
-              if (!compact) _fittedLine('$start–$end', AppText.mono(size: 10, color: ink)),
-            ],
-          ),
+    final block = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      decoration: BoxDecoration(
+        color: tint,
+        border: Border.all(color: conflict ? T.danger : edge, width: conflict ? 1.5 : 1),
+        borderRadius: BorderRadius.circular(T.rSm),
+      ),
+      foregroundDecoration: conflict ? const DiagonalHatch() : null,
+      child: ClipRect(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _fittedLine(s.displayCode, AppText.mono(size: T.fs12, weight: FontWeight.w600, color: ink)),
+            if (!compact) _fittedLine(s.type, AppText.sans(size: T.fs10, color: ink)),
+            if (!compact) _fittedLine('$start–$end', AppText.mono(size: T.fs10, color: ink)),
+          ],
         ),
       ),
     );
-  }
-}
 
-class _HourLine extends StatelessWidget {
-  const _HourLine({required this.hour});
-  final int hour;
-
-  @override
-  Widget build(BuildContext context) {
-    AppPaletteScope.watch(context);
-    final label = hour <= 12 ? '$hour' : '${hour - 12}';
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: _railWidth,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: Text(label, textAlign: TextAlign.right, style: AppText.mono(size: T.fs12, color: T.ink3)),
-          ),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 7),
-            child: CustomPaint(
-              painter: _DashedLinePainter(T.line),
-              size: const Size(double.infinity, 1),
-            ),
-          ),
-        ),
-      ],
+    return Positioned(
+      top: top,
+      left: TimetableLayout.railWidth + dayIdx * colWidth + TimetableLayout.blockInset,
+      width: colWidth - 2 * TimetableLayout.blockInset,
+      height: height,
+      child: onBlockTap != null
+          ? Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => onBlockTap!(s, index),
+                borderRadius: BorderRadius.circular(T.rSm),
+                child: block,
+              ),
+            )
+          : block,
     );
-  }
-}
-
-class _DashedLinePainter extends CustomPainter {
-  _DashedLinePainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1;
-    const dash = 4.0, gap = 4.0;
-    double x = 0;
-    while (x < size.width) {
-      canvas.drawLine(Offset(x, 0), Offset(x + dash, 0), paint);
-      x += dash + gap;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedLinePainter oldDelegate) =>
-      oldDelegate.color != color;
-}
-
-class _DiagonalHatch extends Decoration {
-  const _DiagonalHatch();
-
-  @override
-  BoxPainter createBoxPainter([VoidCallback? onChanged]) => _HatchPainter();
-}
-
-class _HatchPainter extends BoxPainter {
-  @override
-  void paint(Canvas canvas, Offset offset, ImageConfiguration cfg) {
-    final size = cfg.size ?? Size.zero;
-    final rect = offset & size;
-    canvas.save();
-    canvas.clipRect(rect);
-    final paint = Paint()
-      ..color = T.danger.withValues(alpha: 0.28)
-      ..strokeWidth = 1.2;
-    const step = 7.0;
-    for (double x = -size.height; x < size.width; x += step) {
-      canvas.drawLine(
-        Offset(offset.dx + x, offset.dy),
-        Offset(offset.dx + x + size.height, offset.dy + size.height),
-        paint,
-      );
-    }
-    canvas.restore();
   }
 }

@@ -226,7 +226,7 @@ class CalendarWeekGrid extends StatelessWidget {
                 SizedBox(
                   height: plotHeight,
                   child: Stack(
-                    clipBehavior: Clip.hardEdge,
+                    clipBehavior: Clip.none,
                     children: [
                       for (int h = TimetableLayout.startHour;
                           h <= TimetableLayout.endHour;
@@ -610,10 +610,9 @@ class _TimedBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
-    final top = TimetableLayout.hourOffset(item.start) * TimetableLayout.rowHeight +
-        TimetableLayout.blockInset;
     final span = TimetableLayout.durationHours(item.start, item.end);
-    final height = (span * TimetableLayout.rowHeight - 2 * TimetableLayout.blockInset)
+    final top = TimetableLayout.blockTop(item.start);
+    final height = TimetableLayout.blockHeight(item.start, item.end)
         .clamp(compact ? 16.0 : 20.0, TimetableLayout.plotHeight);
     // Match planner/web: only shorten blocks by session length, not column width.
     final blockCompact = span < 0.75;

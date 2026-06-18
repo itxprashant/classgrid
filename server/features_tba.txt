@@ -1,0 +1,5 @@
+- Attendance tracker
+- CG/SG Calculator
+- Course Whatsapp Group links
+- Drive/Resource links
+- Club events (subscribe-able)

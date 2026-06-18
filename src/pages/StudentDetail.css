@@ -1,0 +1,120 @@
+.sd.page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 96px 32px 64px;
+}
+
+.sd__head {
+    margin-bottom: 1.5rem;
+}
+
+.sd__eyebrow {
+    margin: 0 0 0.35rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.sd__back {
+    color: var(--accent-ink);
+    text-decoration: none;
+}
+
+.sd__back:hover {
+    text-decoration: underline;
+}
+
+.sd__title {
+    margin: 0 0 0.35rem;
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    font-weight: 600;
+}
+
+.sd__kerberos,
+.sd__count {
+    margin: 0.15rem 0 0;
+}
+
+.sd__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    margin: 0.75rem 0 0;
+    padding: 0;
+}
+
+.sd__meta dt {
+    margin: 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.sd__meta dd {
+    margin: 0;
+    font-size: 0.875rem;
+}
+
+.sd__sem {
+    margin-bottom: 1rem;
+    padding: 1rem;
+}
+
+.sd__sem-title {
+    margin: 0 0 0.75rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+}
+
+.sd__courses {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sd__course {
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--line);
+}
+
+.sd__course:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.sd__course--active {
+    background: var(--accent-tint);
+    margin: 0 -0.75rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    border-radius: var(--r-sm);
+}
+
+.sd__course-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sd__code {
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--accent-ink);
+}
+
+.sd__course-name {
+    margin: 0.25rem 0;
+}
+
+.sd__timings {
+    margin: 0 0 0.5rem;
+    font-size: 0.8125rem;
+}
+
+.sd__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}

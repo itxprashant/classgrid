@@ -1,3 +1,4 @@
+import '../models/actor.dart';
 import '../models/calendar_event.dart';
 
 /// Event types and schedules ported from `src/utils/calendarEvents.js`.
@@ -75,6 +76,40 @@ String formatEventSchedule(CalendarEvent e) {
   return '';
 }
 
+/// Display name + timestamp for [createdBy] / [updatedBy] metadata.
+({String who, String when})? formatEventActor(Actor? actor) {
+  if (actor == null || actor.at.isEmpty) return null;
+  final who = (actor.name != null && actor.name!.trim().isNotEmpty)
+      ? actor.name!.trim()
+      : ((actor.kerberos != null && actor.kerberos!.trim().isNotEmpty)
+          ? actor.kerberos!.trim()
+          : 'Unknown');
+  DateTime? at;
+  try {
+    at = DateTime.parse(actor.at);
+  } catch (_) {
+    return (who: who, when: '');
+  }
+  final when = _formatActorWhen(at.toLocal());
+  return (who: who, when: when);
+}
+
+String _formatActorWhen(DateTime at) {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  final h = at.hour.toString().padLeft(2, '0');
+  final m = at.minute.toString().padLeft(2, '0');
+  return '${at.day.toString().padLeft(2, '0')} ${months[at.month - 1]} ${at.year}, $h:$m';
+}
+
+bool actorsMatch(Actor? a, Actor? b) {
+  if (a == null || b == null) return false;
+  if (a.at != b.at) return false;
+  return (a.kerberos ?? a.name) == (b.kerberos ?? b.name);
+}
+
 /// Draft of an event being edited in the form.
 class EventDraft {
   String? id;
@@ -88,6 +123,8 @@ class EventDraft {
   String start;
   String end;
   String note;
+  final Actor? createdBy;
+  final Actor? updatedBy;
 
   EventDraft({
     this.id,
@@ -101,6 +138,8 @@ class EventDraft {
     this.start = '',
     this.end = '',
     this.note = '',
+    this.createdBy,
+    this.updatedBy,
   });
 
   factory EventDraft.empty(String dateKey,
@@ -126,6 +165,8 @@ class EventDraft {
       start: e.start ?? '',
       end: e.end ?? '',
       note: e.note ?? '',
+      createdBy: e.createdBy,
+      updatedBy: e.updatedBy,
     );
   }
 

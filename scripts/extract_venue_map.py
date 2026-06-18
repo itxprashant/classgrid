@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Extract course → venues map from room allotment PDF. Prints JSON to stdout."""
+
+import json
+import os
+import re
+import ssl
+import sys
+import urllib.request
+from collections import defaultdict
+
+try:
+    import PyPDF2
+except ImportError:
+    print("Error: PyPDF2 is not installed.", file=sys.stderr)
+    sys.exit(1)
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PDF_URL = os.environ.get(
+    'ROOM_ALLOTMENT_PDF_URL',
+    'https://web.iitd.ac.in/~tti/timetable/Room_Allotment_Chart_2025_2026_2.pdf',
+)
+LOCAL_PDF_PATH = os.path.join(SCRIPT_DIR, '../data/Room_Allotment_Chart.pdf')
+
+COURSE_REGEX = r"\b([A-Z]{3}\d{3,4}[A-Z]?)\b"
+VENUE_PATTERNS = [
+    r"LH\s?\d{3}(\.\d+)?",
+    r"[IV]{1,3}\s?LT\s?\d",
+    r"[IV]{1,3}\s?\d{3}",
+    r"IIA\s?\d{3}",
+    r"\bDH\b",
+]
+VENUE_REGEX = r"(" + "|".join(VENUE_PATTERNS) + r")"
+
+
+def normalize_venue(v):
+    if not v:
+        return None
+    return " ".join(v.split())
+
+
+def parse_pdf(pdf_path):
+    pdf_courses = defaultdict(set)
+    with open(pdf_path, 'rb') as f:
+        reader = PyPDF2.PdfReader(f)
+        for page in reader.pages:
+            text = page.extract_text()
+            if not text:
+                continue
+            current_venue = None
+            buffer_courses = []
+            for line in text.split('\n'):
+                if line.startswith("Room") and ("8-9" in line or "Day" in line):
+                    current_venue = None
+                    buffer_courses = []
+                    continue
+                venue_match = re.search(VENUE_REGEX, line)
+                line_courses = re.findall(COURSE_REGEX, line)
+                valid_courses = [c for c in line_courses if not re.fullmatch(VENUE_REGEX, c)]
+                if venue_match:
+                    current_venue = normalize_venue(venue_match.group(0))
+                    for bc in buffer_courses:
+                        pdf_courses[bc].add(current_venue)
+                    buffer_courses = []
+                    for c in valid_courses:
+                        pdf_courses[c].add(current_venue)
+                elif current_venue:
+                    for c in valid_courses:
+                        pdf_courses[c].add(current_venue)
+                else:
+                    buffer_courses.extend(valid_courses)
+    return {k: sorted(v) for k, v in pdf_courses.items()}
+
+
+def download_pdf(url, local_path):
+    context = ssl._create_unverified_context()
+    with urllib.request.urlopen(url, context=context) as response, open(local_path, 'wb') as out:
+        out.write(response.read())
+
+
+def main():
+    pdf_path = LOCAL_PDF_PATH
+    if not os.path.exists(pdf_path):
+        try:
+            download_pdf(PDF_URL, pdf_path)
+        except Exception as e:
+            print(f"PDF download failed: {e}", file=sys.stderr)
+            sys.exit(1)
+    data = parse_pdf(pdf_path)
+    json.dump(data, sys.stdout)
+
+
+if __name__ == '__main__':
+    main()

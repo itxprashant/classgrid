@@ -39,9 +39,8 @@ class ReminderToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
-    final store = context.watch<ReminderStore>();
-    final minutesBefore = store.minutesBefore;
-    final enabled = store.isEnabled(reminderKey);
+    final minutesBefore = context.select<ReminderStore, int>((s) => s.minutesBefore);
+    final enabled = context.select<ReminderStore, bool>((s) => s.isEnabled(reminderKey));
     final active = enabled && canEnable;
     final lead = formatReminderLeadTime(minutesBefore);
 

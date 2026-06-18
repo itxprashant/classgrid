@@ -205,7 +205,7 @@
 
 .tt-block--conflict {
     border-color: var(--danger-edge);
-    box-shadow: 0 0 0 1px var(--danger-edge), 0 1px 2px oklch(0.5 0.02 60 / 0.06);
+    box-shadow: 0 0 0 1px var(--danger-edge), var(--shadow-card);
 }
 
 .tt-block--conflict::after {
@@ -358,4 +358,63 @@
     .tt-block__time {
         font-size: 10px;
     }
+}
+
+.tt__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 0.78rem;
+    color: var(--ink-3);
+    padding: 12px 14px;
+    margin-top: 4px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+}
+
+.tt__legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tt__legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+}
+
+.tt__legend-swatch--lec {
+    background: var(--lecture-tint);
+    border-color: var(--lecture-edge);
+}
+
+.tt__legend-swatch--tut {
+    background: var(--tutorial-tint);
+    border-color: var(--tutorial-edge);
+}
+
+.tt__legend-swatch--lab {
+    background: var(--lab-tint);
+    border-color: var(--lab-edge);
+}
+
+.tt__legend-swatch--conf {
+    background: var(--danger-tint);
+    border-color: var(--danger-edge);
+}
+
+.tt__conflict {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: var(--danger-tint);
+    border: 1px solid var(--danger-edge);
+    color: var(--danger);
+    border-radius: var(--r);
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }

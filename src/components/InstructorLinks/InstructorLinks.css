@@ -1,0 +1,21 @@
+.instr-links {
+    display: inline;
+}
+
+.instr-links__link {
+    color: var(--accent-ink);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.instr-links__link:hover {
+    text-decoration: underline;
+}
+
+.instr-links__plain {
+    color: var(--ink-2);
+}
+
+.instr-links__sep {
+    color: var(--ink-3);
+}

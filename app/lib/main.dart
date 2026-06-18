@@ -8,10 +8,16 @@ import 'api/calendar_events_api.dart';
 import 'api/occupied_rooms_api.dart';
 import 'api/personal_events_api.dart';
 import 'api/courses_api.dart';
+import 'api/history_api.dart';
+import 'api/course_policy_api.dart';
+import 'api/feedback_api.dart';
+import 'api/reports_api.dart';
 import 'api/planner_api.dart';
 import 'api/reminders_api.dart';
 import 'state/auth_provider.dart';
 import 'state/catalog_provider.dart';
+import 'state/explorer_catalog_provider.dart';
+import 'state/semester_data_provider.dart';
 import 'state/planner_store.dart';
 import 'state/theme_controller.dart';
 import 'storage/attendance_store.dart';
@@ -84,6 +90,8 @@ class ClassGridApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final catalog = CatalogProvider(apiClient, localStore);
+    final explorerCatalog = ExplorerCatalogProvider(apiClient);
+    final semesterData = SemesterDataProvider(apiClient, localStore);
     final auth = AuthProvider(apiClient);
     final planner = PlannerStore(
       plannerApi: PlannerApi(apiClient),
@@ -93,6 +101,8 @@ class ClassGridApp extends StatelessWidget {
 
     planner.initGuest();
     catalog.load();
+    explorerCatalog.load();
+    semesterData.load();
     auth.addListener(() {
       if (!auth.loading) {
         planner.onUserChanged(auth.user);
@@ -110,7 +120,14 @@ class ClassGridApp extends StatelessWidget {
         Provider<PersonalEventsApi>.value(value: PersonalEventsApi(apiClient)),
         Provider<OccupiedRoomsApi>.value(value: OccupiedRoomsApi(apiClient)),
         Provider<CoursesApi>.value(value: CoursesApi(apiClient)),
+        Provider<HistoryApi>.value(value: HistoryApi(apiClient)),
+        Provider<CoursePolicyApi>.value(value: CoursePolicyApi(apiClient)),
+        Provider<FeedbackApi>.value(value: FeedbackApi(apiClient)),
+        Provider<ReportsApi>.value(value: ReportsApi(apiClient)),
+        Provider<PlannerApi>.value(value: PlannerApi(apiClient)),
         ChangeNotifierProvider<CatalogProvider>.value(value: catalog),
+        ChangeNotifierProvider<ExplorerCatalogProvider>.value(value: explorerCatalog),
+        ChangeNotifierProvider<SemesterDataProvider>.value(value: semesterData),
         ChangeNotifierProvider<AuthProvider>.value(value: auth),
         ChangeNotifierProvider<PlannerStore>.value(value: planner),
         ChangeNotifierProvider<ReminderStore>.value(value: reminderStore),

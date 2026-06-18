@@ -1,0 +1,30 @@
+.plan-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1.5px solid var(--accent-edge);
+    background: var(--surface-sunk, var(--paper-2));
+    color: var(--accent-ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.plan-toggle:hover {
+    border-color: var(--accent-ink);
+}
+
+.plan-toggle--on {
+    background: var(--accent-tint);
+    border-color: oklch(from var(--accent-ink) l c h / 0.35);
+}
+
+.plan-toggle svg {
+    flex-shrink: 0;
+}

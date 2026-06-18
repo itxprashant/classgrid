@@ -1,0 +1,137 @@
+/* Course policy section — paper planner (cdpolicy__) */
+
+.cdpolicy__read {
+    padding: 1rem 1.1rem;
+}
+
+.cdpolicy__subsection + .cdpolicy__subsection {
+    margin-top: 1.1rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--line);
+}
+
+.cdpolicy__body {
+    margin: 0.5rem 0 0;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 68ch;
+    white-space: pre-wrap;
+}
+
+.cdpolicy__empty {
+    text-align: left;
+    padding: 1.25rem 0.5rem;
+}
+
+.cdpolicy__empty strong {
+    display: block;
+    margin-bottom: 0.35rem;
+}
+
+.cdpolicy__meta {
+    margin-top: 1.1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cdpolicy__meta-line {
+    margin: 0;
+    font-size: var(--fs-12);
+    color: var(--ink-3);
+}
+
+.cdpolicy__meta-line .mono {
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.cdpolicy__edit {
+    padding-top: 1.25rem;
+}
+
+.cdpolicy__edit-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.cdpolicy__form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cdpolicy__form-note {
+    height: auto;
+    min-height: 5.5rem;
+    padding: 10px 12px;
+    line-height: 1.4;
+    resize: vertical;
+    align-items: stretch;
+}
+
+.cdpolicy__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+}
+
+.cdpolicy__skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.cdpolicy__skeleton-bar {
+    height: 0.85rem;
+    border-radius: var(--r-sm);
+    background: var(--paper-2);
+    animation: cdpolicy-pulse 1.2s ease-in-out infinite;
+}
+
+.cdpolicy__skeleton-bar:nth-child(1) { width: 92%; }
+.cdpolicy__skeleton-bar:nth-child(2) { width: 78%; }
+.cdpolicy__skeleton-bar:nth-child(3) { width: 65%; }
+
+@keyframes cdpolicy-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}
+
+.cdpolicy__section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.cdpolicy__section-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.cdpolicy__report {
+    margin-top: 0.75rem;
+    padding: 1rem 1.1rem;
+}
+
+@media (max-width: 720px) {
+    .cdpolicy__section-head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .cdpolicy__section-actions {
+        align-self: flex-start;
+    }
+}
+

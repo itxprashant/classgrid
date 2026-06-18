@@ -1,11 +1,8 @@
 import React, { useMemo } from 'react';
 import {
-    SEMESTER,
-    HOLIDAYS,
-    SCHEDULE_EXCEPTIONS,
-    NO_CLASS_PERIODS,
     parseDateKey,
 } from '../../utils/semesterSchedule';
+import { useSemesterSchedule } from '../../data/SemesterDataContext';
 import './AcademicCalendar.css';
 
 function todayMidnight() {
@@ -36,10 +33,16 @@ function statusOf(date, today, endDate) {
 }
 
 export default function AcademicCalendarContent({ embedded = false }) {
+    const { schedule } = useSemesterSchedule();
     const today = todayMidnight();
 
-    const start = parseDateKey(SEMESTER.classesStart);
-    const end = parseDateKey(SEMESTER.lastTeachingDay);
+    const SEMESTER = schedule?.SEMESTER || { label: '', classesStart: '', lastTeachingDay: '' };
+    const HOLIDAYS = schedule?.HOLIDAYS || {};
+    const SCHEDULE_EXCEPTIONS = schedule?.SCHEDULE_EXCEPTIONS || {};
+    const NO_CLASS_PERIODS = schedule?.NO_CLASS_PERIODS || [];
+
+    const start = SEMESTER.classesStart ? parseDateKey(SEMESTER.classesStart) : today;
+    const end = SEMESTER.lastTeachingDay ? parseDateKey(SEMESTER.lastTeachingDay) : today;
 
     const changes = useMemo(
         () =>
@@ -49,7 +52,7 @@ export default function AcademicCalendarContent({ embedded = false }) {
                     return { key, date, effectiveDay, realDay: weekdayLong(date) };
                 })
                 .sort((a, b) => a.date - b.date),
-        []
+        [SCHEDULE_EXCEPTIONS]
     );
 
     const holidays = useMemo(
@@ -57,7 +60,7 @@ export default function AcademicCalendarContent({ embedded = false }) {
             Object.entries(HOLIDAYS)
                 .map(([key, name]) => ({ key, date: parseDateKey(key), name }))
                 .sort((a, b) => a.date - b.date),
-        []
+        [HOLIDAYS]
     );
 
     const periods = useMemo(
@@ -67,7 +70,7 @@ export default function AcademicCalendarContent({ embedded = false }) {
                 startDate: parseDateKey(p.start),
                 endDate: parseDateKey(p.end),
             })).sort((a, b) => a.startDate - b.startDate),
-        []
+        [NO_CLASS_PERIODS]
     );
 
     const nextKey = useMemo(() => {
@@ -76,6 +79,14 @@ export default function AcademicCalendarContent({ embedded = false }) {
             .sort((a, b) => a.date - b.date);
         return upcoming.length ? upcoming[0].key : null;
     }, [holidays, changes, today]);
+
+    if (!schedule) {
+        return (
+            <div className="cal">
+                <p className="muted">Loading academic calendar…</p>
+            </div>
+        );
+    }
 
     return (
         <div className={'cal' + (embedded ? ' cal--embedded' : '')}>

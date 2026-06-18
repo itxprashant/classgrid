@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas-pro';
 import './Generator.css';
-import coursesData from '../courses.json';
 import TimetableGrid from '../components/Timetable/TimetableGrid';
 import EditTiming from '../components/FullTimetable/EditTiming';
 import AcademicCalendarButton from '../components/AcademicCalendar/AcademicCalendarButton';
+import AndroidAppPromo from '../components/AndroidAppPromo/AndroidAppPromo';
 import { useAuth, apiFetch } from '../auth/AuthContext';
+import { useSemesterData } from '../data/SemesterDataContext';
+import SemesterDataGate from '../data/SemesterDataGate';
 import { fetchPlan, savePlan } from '../utils/plannerApi';
-import { SEMESTER, getAcademicDay, parseDateKey } from '../utils/semesterSchedule';
+import { getAcademicDay, parseDateKey } from '../utils/semesterSchedule';
 
 function parseTimingStr(timingStr) {
     if (!timingStr) return [];
@@ -25,16 +27,6 @@ function parseTimingStr(timingStr) {
 function toMinutes(t) {
     return parseInt(t.substring(0, 2), 10) * 60 + parseInt(t.substring(2, 4), 10);
 }
-
-// Semester metadata is sourced from src/utils/semesterSchedule.js so the
-// planner, free-room finder and ICS export all share one calendar.
-const ANDROID_APK_URL =
-    'https://drive.google.com/file/d/1_3fPAEBmWddY7HQ18oXbgiOwQSYJdr3I/view?usp=sharing';
-const ANDROID_APP_VERSION = '1.0.2';
-
-const SEMESTER_LABEL = SEMESTER.label; // e.g. "Semester 1, 2026–2027"
-const SEMESTER_START = parseDateKey(SEMESTER.classesStart); // Commencement of classes
-const SEMESTER_END = parseDateKey(SEMESTER.lastTeachingDay); // Last teaching day
 
 const DAY_TO_WEEKDAY = {
     Monday: 1,
@@ -109,12 +101,21 @@ export default function Generator() {
     const [planReady, setPlanReady] = useState(false);
 
     const { user, loading: authLoading, login } = useAuth();
+    const { courses: catalogCourses, schedule } = useSemesterData();
     const location = useLocation();
     const navigate = useNavigate();
 
+    const semesterLabel = schedule?.SEMESTER?.label || 'Current semester';
+    const semesterStart = schedule?.SEMESTER?.classesStart
+        ? parseDateKey(schedule.SEMESTER.classesStart)
+        : null;
+    const semesterEnd = schedule?.SEMESTER?.lastTeachingDay
+        ? parseDateKey(schedule.SEMESTER.lastTeachingDay)
+        : null;
+
     useEffect(() => {
-        setAllCourses(coursesData);
-    }, []);
+        setAllCourses(catalogCourses);
+    }, [catalogCourses]);
 
     useEffect(() => {
         localStorage.setItem('selectedCourses', JSON.stringify(selectedCourses));
@@ -360,6 +361,7 @@ export default function Generator() {
     };
 
     const generateICS = () => {
+        if (!semesterStart || !semesterEnd) return;
         const CRLF = '\r\n';
         const lines = [];
         lines.push('BEGIN:VCALENDAR');
@@ -382,9 +384,9 @@ export default function Generator() {
         const dtstamp = formatUtcStamp(new Date());
         // UNTIL is end of SEMESTER_END day in IST, expressed in UTC (23:59:59 IST = 18:29:59 UTC).
         const untilDate = new Date(Date.UTC(
-            SEMESTER_END.getFullYear(),
-            SEMESTER_END.getMonth(),
-            SEMESTER_END.getDate(),
+            semesterEnd.getFullYear(),
+            semesterEnd.getMonth(),
+            semesterEnd.getDate(),
             18, 29, 59
         ));
         const untilStr = formatUtcStamp(untilDate);
@@ -396,8 +398,8 @@ export default function Generator() {
         //    different calendar day (e.g. a Saturday running the Wednesday plan)
         const exdatesByWeekday = { 1: [], 2: [], 3: [], 4: [], 5: [] };
         const swapExtrasByWeekday = { 1: [], 2: [], 3: [], 4: [], 5: [] };
-        const cursor = new Date(SEMESTER_START);
-        while (cursor <= SEMESTER_END) {
+        const cursor = new Date(semesterStart);
+        while (cursor <= semesterEnd) {
             const info = getAcademicDay(cursor);
             const dow = cursor.getDay(); // Sun=0 … Sat=6; Mon–Fri == day code
             if (info.type === 'holiday' || info.type === 'break') {
@@ -421,7 +423,7 @@ export default function Generator() {
             events.forEach((event) => {
                 const weekday = DAY_TO_WEEKDAY[event.day];
                 if (!weekday) return;
-                const firstDate = firstDateOnOrAfter(SEMESTER_START, weekday);
+                const firstDate = firstDateOnOrAfter(semesterStart, weekday);
                 const datePart = formatDateYMD(firstDate);
                 const startTime = `${event.start.slice(0, 2)}${event.start.slice(2, 4)}00`;
                 const endTime = `${event.end.slice(0, 2)}${event.end.slice(2, 4)}00`;
@@ -483,7 +485,8 @@ export default function Generator() {
         try {
             const canvas = await html2canvas(timetableRef.current, {
                 scale: 2,
-                backgroundColor: '#FBF9F4',
+                backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()
+                    || getComputedStyle(document.body).backgroundColor,
                 logging: false,
                 useCORS: true,
                 width: w,
@@ -585,10 +588,11 @@ export default function Generator() {
     }, [showAutoFetchConfirm]);
 
     return (
+        <SemesterDataGate>
         <section className="gen">
             <header className="gen__head">
                 <div className="gen__head-text">
-                    <div className="gen__eyebrow">IIT Delhi · {SEMESTER_LABEL}</div>
+                    <div className="gen__eyebrow">IIT Delhi · {semesterLabel}</div>
                     <h1 className="gen__title">
                         Build your <em>week</em>, the way it actually fits.
                     </h1>
@@ -616,41 +620,7 @@ export default function Generator() {
                 </div>
             </header>
 
-            <aside className="gen__android" aria-labelledby="gen-android-title">
-                <div className="gen__android-body">
-                    <div className="gen__android-copy">
-                        <div className="gen__eyebrow">Mobile</div>
-                        <p id="gen-android-title" className="gen__android-title">
-                            ClassGrid for Android
-                        </p>
-                        <ul className="gen__android-list">
-                            <li>Smooth Android experience with your weekly/monthly schedule</li>
-                            <li>Courses, Calendar, rooms, and reminders</li>
-                        </ul>
-                    </div>
-                    <div className="gen__android-phone" aria-hidden="true">
-                        <span className="gen__android-phone-notch" />
-                        <span className="gen__android-phone-screen" />
-                    </div>
-                    <a
-                        href={ANDROID_APK_URL}
-                        className="gen__android-btn"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        <span className="gen__android-btn-meta">
-                            <strong>Android build</strong>
-                            v{ANDROID_APP_VERSION} · sideload
-                        </span>
-                        <span className="gen__android-btn-action">
-                            Get APK
-                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                            </svg>
-                        </span>
-                    </a>
-                </div>
-            </aside>
+            <AndroidAppPromo />
 
             <div className="gen__toolbar">
                 <button
@@ -827,35 +797,11 @@ export default function Generator() {
 
             <div className="gen__main">
                 <div className="gen__col-board" ref={timetableRef}>
-                    <TimetableGrid timetable={selectedCourses} timetableData={timetableData} />
-
-                    <div className="gen__legend" aria-label="Legend">
-                        <span className="gen__legend-item">
-                            <span className="gen__legend-swatch gen__legend-swatch--lec" /> Lecture
-                        </span>
-                        <span className="gen__legend-item">
-                            <span className="gen__legend-swatch gen__legend-swatch--tut" /> Tutorial
-                        </span>
-                        <span className="gen__legend-item">
-                            <span className="gen__legend-swatch gen__legend-swatch--lab" /> Lab
-                        </span>
-                        <span className="gen__legend-item">
-                            <span className="gen__legend-swatch gen__legend-swatch--conf" /> Conflict
-                        </span>
-                    </div>
-
-                    {stats.conflicts > 0 && (
-                        <div className="gen__conflict" role="alert">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <circle cx="12" cy="12" r="10" />
-                                <line x1="12" y1="8" x2="12" y2="12" />
-                                <line x1="12" y1="16" x2="12.01" y2="16" />
-                            </svg>
-                            <span>
-                                {stats.conflicts} overlap{stats.conflicts === 1 ? '' : 's'} detected — adjust tutorial/lab timings to resolve.
-                            </span>
-                        </div>
-                    )}
+                    <TimetableGrid
+                        timetable={selectedCourses}
+                        timetableData={timetableData}
+                        showFooter
+                    />
                 </div>
 
                 <aside className="gen__col-side">
@@ -953,5 +899,6 @@ export default function Generator() {
                 </aside>
             </div>
         </section>
+        </SemesterDataGate>
     );
 }

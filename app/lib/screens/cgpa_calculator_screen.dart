@@ -14,7 +14,9 @@ import '../widgets/common.dart';
 
 /// CGPA / SGPA calculator for the current semester (plan courses + grades).
 class CgpaCalculatorScreen extends StatefulWidget {
-  const CgpaCalculatorScreen({super.key});
+  const CgpaCalculatorScreen({super.key, this.onGoToPlan});
+
+  final VoidCallback? onGoToPlan;
 
   @override
   State<CgpaCalculatorScreen> createState() => _CgpaCalculatorScreenState();
@@ -133,110 +135,102 @@ class _CgpaCalculatorScreenState extends State<CgpaCalculatorScreen> {
     );
     final semCredits = semesterCreditsForSgpa(_rows);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'CGPA calculator',
-          style: AppText.serif(size: T.fs18, weight: FontWeight.w600, color: T.ink),
-        ),
+    return ScreenShell(
+      eyebrow: 'Tools',
+      title: 'CGPA calculator',
+      subtitle: Text(
+        'Grades from your plan on a 10-point scale',
+        style: AppText.sans(size: T.fs14, color: T.ink3),
       ),
-      body: Material(
-        color: T.paper,
-        child: !_loaded
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                padding: const EdgeInsets.only(bottom: 32),
-                children: [
-                  PageHeader(
-                    eyebrow: 'Tools',
-                    title: 'CGPA calculator',
-                    subtitle: Text(
-                      'Grades from your plan on a 10-point scale',
-                      style: AppText.sans(size: T.fs14, color: T.ink3),
-                    ),
+      body: !_loaded
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.only(bottom: T.space32),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: T.space16),
+                  child: _ResultsCard(sgpa: sgpa, cgpa: cgpa, semCredits: semCredits),
+                ),
+                const SizedBox(height: T.space24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: T.space16),
+                  child: Text(
+                    'Before this semester',
+                    style: AppText.sans(size: T.fs14, weight: FontWeight.w600),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _ResultsCard(sgpa: sgpa, cgpa: cgpa, semCredits: semCredits),
-                  ),
-                  const SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Before this semester',
-                      style: AppText.sans(size: T.fs14, weight: FontWeight.w600),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _LabeledField(
-                            label: 'CGPA so far',
-                            controller: _priorCgpaCtrl,
-                            hint: 'e.g. 8.25',
-                            onChanged: (_) => _persist(),
-                          ),
+                ),
+                const SizedBox(height: T.space8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: T.space16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _LabeledField(
+                          label: 'CGPA so far',
+                          controller: _priorCgpaCtrl,
+                          hint: 'e.g. 8.25',
+                          onChanged: (_) => _persist(),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _LabeledField(
-                            label: 'Credits done',
-                            controller: _priorCreditsCtrl,
-                            hint: 'e.g. 60',
-                            onChanged: (_) => _persist(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Saved on this device. Used for projected CGPA after this semester.',
-                      style: AppText.sans(size: T.fs12, color: T.ink3),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'This semester',
-                      style: AppText.sans(size: T.fs14, weight: FontWeight.w600),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Courses from your plan — pick a grade for each.',
-                      style: AppText.sans(size: T.fs12, color: T.ink3),
-                    ),
-                  ),
-                  if (_rows.isEmpty)
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: EmptyState(
-                        message: 'Add courses to your plan first.',
-                        icon: Icons.school_outlined,
                       ),
-                    )
-                  else
-                    ...List.generate(_rows.length, (i) {
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: _CourseGradeRow(
-                          row: _rows[i],
-                          onGradeChanged: (g) => _setGrade(i, g),
+                      const SizedBox(width: T.space12),
+                      Expanded(
+                        child: _LabeledField(
+                          label: 'Credits done',
+                          controller: _priorCreditsCtrl,
+                          hint: 'e.g. 60',
+                          onChanged: (_) => _persist(),
                         ),
-                      );
-                    }),
-                ],
-              ),
-      ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: T.space8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: T.space16),
+                  child: Text(
+                    'Saved on this device. Used for projected CGPA after this semester.',
+                    style: AppText.sans(size: T.fs12, color: T.ink3),
+                  ),
+                ),
+                const SizedBox(height: T.space24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: T.space16),
+                  child: Text(
+                    'This semester',
+                    style: AppText.sans(size: T.fs14, weight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: T.space16),
+                  child: Text(
+                    'Courses from your plan — pick a grade for each.',
+                    style: AppText.sans(size: T.fs12, color: T.ink3),
+                  ),
+                ),
+                if (_rows.isEmpty)
+                  EmptyState(
+                    message: 'Add courses to your plan first.',
+                    icon: Icons.school_outlined,
+                    action: widget.onGoToPlan != null
+                        ? FilledButton(
+                            onPressed: widget.onGoToPlan,
+                            child: const Text('Go to Plan'),
+                          )
+                        : null,
+                  )
+                else
+                  ...List.generate(_rows.length, (i) {
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(T.space16, T.space8, T.space16, 0),
+                      child: _CourseGradeRow(
+                        row: _rows[i],
+                        onGradeChanged: (g) => _setGrade(i, g),
+                      ),
+                    );
+                  }),
+              ],
+            ),
     );
   }
 }

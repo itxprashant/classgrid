@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import courses from '../courses.json';
-import extraOccupied from '../extra_occupied.json';
 import { useAuth } from '../auth/AuthContext';
-import { describeAcademicDay, SEMESTER } from '../utils/semesterSchedule';
+import { useSemesterData } from '../data/SemesterDataContext';
+import SemesterDataGate from '../data/SemesterDataGate';
+import { describeAcademicDay } from '../utils/semesterSchedule';
 import { computeEmptyHallsState } from '../utils/emptyHalls';
 import { normalizeRoomName, roomToSlug } from '../utils/roomSchedule';
 import {
@@ -12,6 +12,8 @@ import {
     removeOccupiedRoom,
 } from '../utils/occupiedRoomsApi';
 import './EmptyLectureHalls.css';
+import ReportContentPanel from '../components/ReportContent/ReportContentPanel';
+import FormField from '../components/FormField/FormField';
 
 function formatDateYMD(date) {
     const y = date.getFullYear();
@@ -68,6 +70,9 @@ function groupHalls(entries) {
 
 const EmptyLectureHalls = () => {
     const { user, login } = useAuth();
+    const { courses, extraOccupied, schedule } = useSemesterData();
+    const termStart = schedule?.SEMESTER?.classesStart || '';
+    const termEnd = schedule?.SEMESTER?.lastTeachingDay || '';
     const [currentTime, setCurrentTime] = useState(new Date());
     const [isCustomSchedule, setIsCustomSchedule] = useState(false);
     const [manualMarkings, setManualMarkings] = useState([]);
@@ -78,6 +83,7 @@ const EmptyLectureHalls = () => {
     const [markNote, setMarkNote] = useState('');
     const [markSubmitting, setMarkSubmitting] = useState(false);
     const [markError, setMarkError] = useState(null);
+    const [markingDialogView, setMarkingDialogView] = useState('detail');
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -128,7 +134,7 @@ const EmptyLectureHalls = () => {
                 manualMarkings,
                 at: currentTime,
             }),
-        [currentTime, manualMarkings]
+        [courses, extraOccupied, currentTime, manualMarkings]
     );
 
     const grouped = useMemo(() => groupHalls(displayEntries), [displayEntries]);
@@ -219,6 +225,7 @@ const EmptyLectureHalls = () => {
     const timeValue = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
 
     return (
+        <SemesterDataGate>
         <div className="eh">
             <header className="eh__head">
                 <div className="eh__eyebrow">Right now · live</div>
@@ -233,15 +240,14 @@ const EmptyLectureHalls = () => {
             </header>
 
             <div className="eh__controls">
-                <div className="eh__control">
-                    <label className="field-label" htmlFor="eh-day">Date</label>
+                <FormField label="Date" htmlFor="eh-day" className="eh__control form-field--sm">
                     <input
                         id="eh-day"
                         type="date"
                         className="field field--mono"
                         value={selectedDate}
-                        min={SEMESTER.classesStart}
-                        max={SEMESTER.lastTeachingDay}
+                        min={termStart}
+                        max={termEnd}
                         onChange={handleDateChange}
                     />
                     {academic.type === 'swapped' && (
@@ -249,9 +255,8 @@ const EmptyLectureHalls = () => {
                             {formatDisplayDate(currentTime)} → {academic.effectiveDay} timetable
                         </span>
                     )}
-                </div>
-                <div className="eh__control">
-                    <label className="field-label" htmlFor="eh-time">Time</label>
+                </FormField>
+                <FormField label="Time" htmlFor="eh-time" className="eh__control form-field--sm">
                     <input
                         id="eh-time"
                         type="time"
@@ -259,7 +264,7 @@ const EmptyLectureHalls = () => {
                         value={timeValue}
                         onChange={handleTimeChange}
                     />
-                </div>
+                </FormField>
                 <div className="eh__control eh__control--inline">
                     {isCustomSchedule ? (
                         <button type="button" className="btn btn--sm" onClick={handleReset}>
@@ -347,7 +352,10 @@ const EmptyLectureHalls = () => {
                                                 <button
                                                     type="button"
                                                     className="eh__hall-action"
-                                                    onClick={() => setSelectedMarking(entry.marking)}
+                                                    onClick={() => {
+                                                        setMarkingDialogView('detail');
+                                                        setSelectedMarking(entry.marking);
+                                                    }}
                                                     aria-label={`Who marked ${room} occupied`}
                                                 >
                                                     Details
@@ -386,7 +394,10 @@ const EmptyLectureHalls = () => {
             {selectedMarking && (
                 <div
                     className="eh__dialog-backdrop"
-                    onClick={() => setSelectedMarking(null)}
+                    onClick={() => {
+                        setSelectedMarking(null);
+                        setMarkingDialogView('detail');
+                    }}
                     role="presentation"
                 >
                     <div
@@ -396,6 +407,42 @@ const EmptyLectureHalls = () => {
                         aria-labelledby="eh-marked-title"
                         onClick={(e) => e.stopPropagation()}
                     >
+                        {markingDialogView === 'report' ? (
+                            <>
+                                <div className="eh__dialog-head">
+                                    <button
+                                        type="button"
+                                        className="btn btn--sm btn--ghost eh__dialog-back"
+                                        onClick={() => setMarkingDialogView('detail')}
+                                    >
+                                        ← Back
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn--sm btn--ghost"
+                                        onClick={() => {
+                                            setSelectedMarking(null);
+                                            setMarkingDialogView('detail');
+                                        }}
+                                        aria-label="Close"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                                <ReportContentPanel
+                                    compact
+                                    targetKind="occupied_room"
+                                    targetId={selectedMarking.id}
+                                    contextLabel={`${selectedMarking.room} · ${selectedMarking.date}`}
+                                    onDone={() => {
+                                        setSelectedMarking(null);
+                                        setMarkingDialogView('detail');
+                                    }}
+                                    onCancel={() => setMarkingDialogView('detail')}
+                                />
+                            </>
+                        ) : (
+                            <>
                         <div className="eh__dialog-head">
                             <h2 id="eh-marked-title" className="eh__dialog-title">
                                 {selectedMarking.room}
@@ -403,7 +450,10 @@ const EmptyLectureHalls = () => {
                             <button
                                 type="button"
                                 className="btn btn--sm btn--ghost"
-                                onClick={() => setSelectedMarking(null)}
+                                onClick={() => {
+                                    setSelectedMarking(null);
+                                    setMarkingDialogView('detail');
+                                }}
                                 aria-label="Close"
                             >
                                 ×
@@ -417,6 +467,15 @@ const EmptyLectureHalls = () => {
                             >
                                 Weekly schedule
                             </Link>
+                            {user && (
+                                <button
+                                    type="button"
+                                    className="btn btn--sm btn--ghost"
+                                    onClick={() => setMarkingDialogView('report')}
+                                >
+                                    Report marking
+                                </button>
+                            )}
                         </p>
                         <dl className="eh__dialog-meta">
                             <div>
@@ -457,6 +516,8 @@ const EmptyLectureHalls = () => {
                                 </button>
                             </div>
                         )}
+                        </>
+                        )}
                     </div>
                 </div>
             )}
@@ -491,25 +552,29 @@ const EmptyLectureHalls = () => {
                             For {formatDisplayDate(currentTime)} from {timeValue} until the end time below.
                             Markings apply to this date only.
                         </p>
-                        <label className="field-label" htmlFor="eh-mark-end">Until</label>
-                        <input
-                            id="eh-mark-end"
-                            type="time"
-                            className="field field--mono"
-                            value={markEndTime}
-                            onChange={(e) => setMarkEndTime(e.target.value)}
-                        />
-                        <label className="field-label" htmlFor="eh-mark-note">
-                            Note <span className="muted">(optional)</span>
-                        </label>
-                        <input
-                            id="eh-mark-note"
-                            type="text"
-                            className="field"
-                            placeholder="Optional — e.g. club meeting"
-                            value={markNote}
-                            onChange={(e) => setMarkNote(e.target.value)}
-                        />
+                        <FormField label="Until" htmlFor="eh-mark-end" wide>
+                            <input
+                                id="eh-mark-end"
+                                type="time"
+                                className="field field--mono"
+                                value={markEndTime}
+                                onChange={(e) => setMarkEndTime(e.target.value)}
+                            />
+                        </FormField>
+                        <FormField
+                            label={<>Note <span className="muted">(optional)</span></>}
+                            htmlFor="eh-mark-note"
+                            wide
+                        >
+                            <input
+                                id="eh-mark-note"
+                                type="text"
+                                className="field"
+                                placeholder="Optional — e.g. club meeting"
+                                value={markNote}
+                                onChange={(e) => setMarkNote(e.target.value)}
+                            />
+                        </FormField>
                         {markError && (
                             <p className="eh__dialog-error" role="alert">{markError}</p>
                         )}
@@ -530,6 +595,7 @@ const EmptyLectureHalls = () => {
                 </div>
             )}
         </div>
+        </SemesterDataGate>
     );
 };
 

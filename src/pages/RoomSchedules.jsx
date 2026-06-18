@@ -1,17 +1,24 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import FormField from '../components/FormField/FormField';
 import {
     buildRoomCatalog,
     filterRooms,
     getRoomPrefixes,
     roomToSlug,
 } from '../utils/roomSchedule';
+import { useSemesterData } from '../data/SemesterDataContext';
+import SemesterDataGate from '../data/SemesterDataGate';
 import './RoomSchedules.css';
 
 const ITEMS_PER_PAGE = 48;
 
 export default function RoomSchedules() {
-    const { rooms, catalogHasVenues, catalogHasSessions } = useMemo(() => buildRoomCatalog(), []);
+    const { courses, extraOccupied } = useSemesterData();
+    const { rooms, catalogHasVenues, catalogHasSessions } = useMemo(
+        () => buildRoomCatalog(courses, extraOccupied),
+        [courses, extraOccupied]
+    );
     const prefixes = useMemo(() => getRoomPrefixes(rooms), [rooms]);
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -36,6 +43,7 @@ export default function RoomSchedules() {
     };
 
     return (
+        <SemesterDataGate>
         <div className="rs">
             <header className="rs__head">
                 <div className="rs__eyebrow">Campus</div>
@@ -101,19 +109,21 @@ export default function RoomSchedules() {
                         </button>
                     )}
                 </div>
-                <select
-                    className="field field--mono rs__building"
-                    value={building}
-                    onChange={(e) => { setBuilding(e.target.value); setPage(1); }}
-                    aria-label="Filter by building"
-                >
-                    <option value="">All buildings</option>
-                    {prefixes.map(({ code, count }) => (
-                        <option key={code} value={code}>
-                            {code} ({count})
-                        </option>
-                    ))}
-                </select>
+                <FormField label="Building" htmlFor="rs-building" className="rs__building-field form-field--sm">
+                    <select
+                        id="rs-building"
+                        className="field field--mono rs__building"
+                        value={building}
+                        onChange={(e) => { setBuilding(e.target.value); setPage(1); }}
+                    >
+                        <option value="">All buildings</option>
+                        {prefixes.map(({ code, count }) => (
+                            <option key={code} value={code}>
+                                {code} ({count})
+                            </option>
+                        ))}
+                    </select>
+                </FormField>
             </div>
 
             <p className="rs__count muted">
@@ -152,5 +162,6 @@ export default function RoomSchedules() {
             )}
 
         </div>
+        </SemesterDataGate>
     );
 }

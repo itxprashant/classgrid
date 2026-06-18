@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import FormField from '../components/FormField/FormField';
 import './CourseExplorer.css';
-import coursesData from '../courses.json';
+import { useSemesterData } from '../data/SemesterDataContext';
+import SemesterDataGate from '../data/SemesterDataGate';
+import { coursePagePath } from '../utils/courseRoutes';
 
 const ITEMS_PER_PAGE = 40;
 
 export default function CourseExplorer() {
+    const { explorerCourses, semesterCode } = useSemesterData();
+    const coursesData = explorerCourses;
     const [searchTerm, setSearchTerm] = useState('');
     const [department, setDepartment] = useState('');
     const [displayedCourses, setDisplayedCourses] = useState([]);
@@ -25,7 +30,7 @@ export default function CourseExplorer() {
         return Array.from(counts.entries())
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([code, count]) => ({ code, count }));
-    }, []);
+    }, [coursesData]);
 
     const filteredCourses = useMemo(() => {
         const lowerTerm = searchTerm.trim().toLowerCase();
@@ -38,7 +43,7 @@ export default function CourseExplorer() {
             const instr = (course.instructor || '').toLowerCase();
             return lcCode.includes(lowerTerm) || name.includes(lowerTerm) || instr.includes(lowerTerm);
         });
-    }, [searchTerm, department]);
+    }, [searchTerm, department, coursesData]);
 
     useEffect(() => {
         const end = page * ITEMS_PER_PAGE;
@@ -56,14 +61,17 @@ export default function CourseExplorer() {
     const hasMore = displayedCourses.length < filteredCourses.length;
 
     return (
+        <SemesterDataGate>
         <div className="ce">
             <header className="ce__head">
                 <div className="ce__eyebrow">Catalog</div>
                 <h1 className="ce__title">
-                    Every course offered <em>this semester</em>.
+                    Every course <em>on record</em>.
                 </h1>
                 <p className="ce__sub">
-                    Browse {coursesData.length.toLocaleString()} courses, search by code, name, or instructor.
+                    Browse {coursesData.length.toLocaleString()} courses
+                    {semesterCode ? ` (${coursesData.filter((c) => c.offeredThisSemester !== false).length.toLocaleString()} offered this semester)` : ''}.
+                    Search by code, name, or instructor.
                 </p>
             </header>
 
@@ -92,23 +100,25 @@ export default function CourseExplorer() {
                         </button>
                     )}
                 </div>
-                <select
-                    className="field field--mono ce__dept"
-                    value={department}
-                    onChange={(e) => {
-                        setDepartment(e.target.value);
-                        setPage(1);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    aria-label="Filter by department"
-                >
-                    <option value="">All departments</option>
-                    {departments.map((d) => (
-                        <option key={d.code} value={d.code}>
-                            {d.code} ({d.count})
-                        </option>
-                    ))}
-                </select>
+                <FormField label="Department" htmlFor="ce-dept" className="ce__dept-field form-field--sm">
+                    <select
+                        id="ce-dept"
+                        className="field field--mono ce__dept"
+                        value={department}
+                        onChange={(e) => {
+                            setDepartment(e.target.value);
+                            setPage(1);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                    >
+                        <option value="">All departments</option>
+                        {departments.map((d) => (
+                            <option key={d.code} value={d.code}>
+                                {d.code} ({d.count})
+                            </option>
+                        ))}
+                    </select>
+                </FormField>
                 <div className="ce__count tnum">
                     {filteredCourses.length.toLocaleString()} match{filteredCourses.length === 1 ? '' : 'es'}
                 </div>
@@ -134,12 +144,17 @@ export default function CourseExplorer() {
                         </div>
                         {displayedCourses.map((course, index) => (
                             <Link
-                                to={`/course/${course.courseCode}`}
+                                to={coursePagePath(course, semesterCode)}
                                 key={`${course.courseCode}-${index}`}
                                 className="ce__row"
                                 role="listitem"
                             >
-                                <span className="ce__cell ce__cell--code">{course.courseCode}</span>
+                                <span className="ce__cell ce__cell--code">
+                                    {course.courseCode}
+                                    {course.offeredThisSemester === false && (
+                                        <span className="ce__not-offered badge">Not offered</span>
+                                    )}
+                                </span>
                                 <span className="ce__cell ce__cell--name">{course.courseName}</span>
                                 <span className="ce__cell ce__cell--instr">{course.instructor || '—'}</span>
                                 <span className="ce__cell ce__cell--slot">
@@ -166,5 +181,6 @@ export default function CourseExplorer() {
                 </>
             )}
         </div>
+        </SemesterDataGate>
     );
 }

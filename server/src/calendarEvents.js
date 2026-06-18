@@ -155,7 +155,7 @@ router.get('/events', async (req, res) => {
     const session = readSession(req);
     if (session && session.kerberos) {
         const coursesRouter = require('./courses');
-        const enrolled = coursesRouter.getEnrolledCourses(session.kerberos)
+        const enrolled = (await coursesRouter.getEnrolledCourses(session.kerberos))
             .map(normalizeCourseCode);
         courses = [...new Set([...courses, ...enrolled])];
     }

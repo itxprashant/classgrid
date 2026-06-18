@@ -1,0 +1,74 @@
+.rpt__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.rpt__panel--compact {
+    gap: 0.75rem;
+}
+
+.rpt__title {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: var(--ink);
+}
+
+.rpt__context {
+    margin: 0;
+    font-size: var(--fs-13);
+    color: var(--ink-2);
+    line-height: 1.4;
+}
+
+.rpt__reasons {
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+.rpt__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.rpt__chip {
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    transition: background var(--t-fast) var(--ease-out),
+        border-color var(--t-fast) var(--ease-out),
+        color var(--t-fast) var(--ease-out);
+}
+
+.rpt__chip:hover {
+    border-color: var(--line-strong);
+}
+
+.rpt__row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rpt__details {
+    min-height: 4.5rem;
+    padding: 10px 12px;
+    line-height: 1.4;
+    resize: vertical;
+}
+
+.rpt__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.rpt__actions .btn--ghost {
+    margin-right: auto;
+}

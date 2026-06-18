@@ -1,175 +1,132 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
-import coursesData from '../courses.json';
-import courseStudentsData from '../courseStudents.json';
+import { useAuth, apiFetch } from '../auth/AuthContext';
+import { useSemesterData } from '../data/SemesterDataContext';
+import SemesterDataGate from '../data/SemesterDataGate';
+import { fetchCourseOfferings, offeringTimingSummary, offeringToCourse, sortOfferingsBySemesterDesc } from '../utils/historyApi';
+import { courseOfferingPath } from '../utils/courseRoutes';
+import { instructorsFromCourse } from '../utils/instructors';
+import InstructorLinks from '../components/InstructorLinks/InstructorLinks';
+import PlanToggle from '../components/PlanToggle/PlanToggle';
+import CoursePolicySection from '../components/CoursePolicy/CoursePolicySection';
+import { useCoursePlan } from '../hooks/useCoursePlan';
 import './CourseDetails.css';
-
-// Muted palette aligned to design tokens (paper-toned hues, not saturated SaaS rainbow)
-const COLORS = [
-    'oklch(0.62 0.10 195)', // teal
-    'oklch(0.60 0.10 80)',  // ochre
-    'oklch(0.58 0.10 40)',  // clay
-    'oklch(0.55 0.10 290)', // muted violet
-    'oklch(0.62 0.10 145)', // sage
-    'oklch(0.58 0.10 20)',  // rust
-    'oklch(0.55 0.10 240)', // dusk
-    'oklch(0.60 0.10 100)', // moss
-    'oklch(0.58 0.10 350)', // berry
-    'oklch(0.62 0.10 170)', // jade
-];
-
-function BranchPieChart({ students }) {
-    const data = useMemo(() => {
-        const counts = students.reduce((acc, student) => {
-            const match = student.id.match(/^([a-z0-9]{3})/i);
-            const branch = match ? match[1].toUpperCase() : 'Others';
-            acc[branch] = (acc[branch] || 0) + 1;
-            return acc;
-        }, {});
-        return Object.entries(counts)
-            .sort((a, b) => b[1] - a[1])
-            .map(([name, value], index) => ({
-                name,
-                value,
-                color: COLORS[index % COLORS.length],
-            }));
-    }, [students]);
-
-    const total = students.length;
-    let accumulatedAngle = -90; // start at top
-
-    return (
-        <div className="cd-pie">
-            <svg viewBox="0 0 100 100" className="cd-pie__svg" aria-label="Branch distribution">
-                {data.map((slice) => {
-                    const percentage = slice.value / total;
-                    const angle = percentage * 360;
-                    const x1 = 50 + 50 * Math.cos((Math.PI * accumulatedAngle) / 180);
-                    const y1 = 50 + 50 * Math.sin((Math.PI * accumulatedAngle) / 180);
-                    const endAngle = accumulatedAngle + angle;
-                    const x2 = 50 + 50 * Math.cos((Math.PI * endAngle) / 180);
-                    const y2 = 50 + 50 * Math.sin((Math.PI * endAngle) / 180);
-                    const largeArcFlag = angle > 180 ? 1 : 0;
-                    const pathData =
-                        total === slice.value
-                            ? `M 50 50 m -50 0 a 50 50 0 1 0 100 0 a 50 50 0 1 0 -100 0`
-                            : `M 50 50 L ${x1} ${y1} A 50 50 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
-                    accumulatedAngle += angle;
-                    return (
-                        <path
-                            key={slice.name}
-                            d={pathData}
-                            fill={slice.color}
-                            stroke="oklch(0.99 0.005 83)"
-                            strokeWidth="0.8"
-                        >
-                            <title>{`${slice.name}: ${slice.value} (${(percentage * 100).toFixed(1)}%)`}</title>
-                        </path>
-                    );
-                })}
-                <circle cx="50" cy="50" r="30" fill="var(--surface)" />
-                <text
-                    x="50"
-                    y="48"
-                    textAnchor="middle"
-                    style={{ fontSize: '11px', fill: 'var(--ink-3)', fontFamily: 'var(--font-mono)' }}
-                >
-                    Total
-                </text>
-                <text
-                    x="50"
-                    y="60"
-                    textAnchor="middle"
-                    style={{ fontSize: '12px', fill: 'var(--ink)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}
-                >
-                    {total}
-                </text>
-            </svg>
-            <div className="cd-pie__legend">
-                {data.map((item) => (
-                    <div key={item.name} className="cd-pie__legend-item">
-                        <span className="cd-pie__swatch" style={{ backgroundColor: item.color }} />
-                        <span className="cd-pie__legend-label">{item.name}</span>
-                        <span className="cd-pie__legend-value tnum">{item.value}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function BranchYearPivotTable({ students }) {
-    const { years, branches, matrix, totals } = useMemo(() => {
-        const yearsSet = new Set();
-        const branchesSet = new Set();
-        const matrix = {};
-        students.forEach((student) => {
-            const match = student.id.match(/^([a-z0-9]{3})(\d{2})/i);
-            const branch = match ? match[1].toUpperCase() : 'Unknown';
-            const yearStr = match ? `20${match[2]}` : 'Unknown';
-            yearsSet.add(yearStr);
-            branchesSet.add(branch);
-            if (!matrix[branch]) matrix[branch] = {};
-            matrix[branch][yearStr] = (matrix[branch][yearStr] || 0) + 1;
-        });
-        const years = Array.from(yearsSet).sort();
-        const branches = Array.from(branchesSet).sort();
-        const totals = {};
-        branches.forEach((branch) => {
-            totals[branch] = years.reduce((sum, y) => sum + (matrix[branch][y] || 0), 0);
-        });
-        return { years, branches, matrix, totals };
-    }, [students]);
-
-    return (
-        <div className="cd-pivot">
-            <table className="cd-pivot__table">
-                <thead>
-                    <tr>
-                        <th className="cd-pivot__corner">Branch</th>
-                        {years.map((year) => (
-                            <th key={year} className="cd-pivot__year">{year}</th>
-                        ))}
-                        <th className="cd-pivot__total-head">Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {branches.map((branch) => (
-                        <tr key={branch}>
-                            <td className="cd-pivot__branch">{branch}</td>
-                            {years.map((year) => (
-                                <td key={year} className="cd-pivot__cell tnum">
-                                    {matrix[branch][year] || <span className="muted">·</span>}
-                                </td>
-                            ))}
-                            <td className="cd-pivot__total tnum">{totals[branch]}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
-}
 
 export default function CourseDetails() {
     const { courseCode } = useParams();
-    const [showAnalytics, setShowAnalytics] = useState(false);
+    const { user } = useAuth();
+    const { courses, explorerCourses } = useSemesterData();
+    const [offerings, setOfferings] = useState([]);
+    const [offeringsLoading, setOfferingsLoading] = useState(true);
+    const [offeringsError, setOfferingsError] = useState(null);
+    const [showPastOfferings, setShowPastOfferings] = useState(false);
+    const [enrolledCodes, setEnrolledCodes] = useState([]);
+    const [enrollmentLoaded, setEnrollmentLoaded] = useState(false);
 
-    const course = useMemo(
-        () => coursesData.find((c) => c.courseCode === courseCode),
-        [courseCode]
+    const isEnrolled = useMemo(
+        () => enrolledCodes.includes(courseCode),
+        [enrolledCodes, courseCode],
     );
 
-    const students = useMemo(
-        () => courseStudentsData[courseCode] || [],
-        [courseCode]
+    const [fallbackCourse, setFallbackCourse] = useState(null);
+
+    const catalogCourse = useMemo(
+        () => courses.find((c) => c.courseCode === courseCode)
+            ?? explorerCourses.find((c) => c.courseCode === courseCode),
+        [courses, explorerCourses, courseCode]
     );
+
+    const course = catalogCourse || fallbackCourse;
+    const offeredThisSemester = course?.offeredThisSemester !== false;
+
+    const { onPlan, addToPlan, removeFromPlan } = useCoursePlan(course, user);
+
+    const sortedOfferings = useMemo(
+        () => sortOfferingsBySemesterDesc(offerings),
+        [offerings]
+    );
+
+    const headerInstructors = useMemo(() => {
+        if (!course) return [];
+        const active = sortedOfferings.find((o) => o.isActive);
+        if (Array.isArray(active?.instructors) && active.instructors.length) {
+            return active.instructors;
+        }
+        return instructorsFromCourse(course);
+    }, [sortedOfferings, course]);
+
+    const strengthLabel = (course?.currentStrength || '').trim();
+    const activeOffering = sortedOfferings.find((o) => o.isActive);
+    const primaryOffering = activeOffering || sortedOfferings[0] || null;
+
+    useEffect(() => {
+        let cancelled = false;
+        setOfferingsLoading(true);
+        setOfferingsError(null);
+        fetchCourseOfferings(courseCode)
+            .then(({ offerings: rows }) => {
+                if (!cancelled) {
+                    setOfferings(rows);
+                    setShowPastOfferings(rows.length >= 1);
+                    if (!catalogCourse && rows.length > 0) {
+                        setFallbackCourse(offeringToCourse(rows[0]));
+                    }
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setOfferingsError('Could not load semester history');
+            })
+            .finally(() => {
+                if (!cancelled) setOfferingsLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [courseCode, catalogCourse]);
+
+    useEffect(() => {
+        setFallbackCourse(null);
+    }, [courseCode]);
+
+    useEffect(() => {
+        if (!user) {
+            setEnrolledCodes([]);
+            setEnrollmentLoaded(true);
+            return undefined;
+        }
+        let cancelled = false;
+        setEnrollmentLoaded(false);
+        apiFetch('/api/me/courses')
+            .then((res) => res.json())
+            .then((data) => {
+                if (!cancelled) {
+                    setEnrolledCodes(Array.isArray(data.courses) ? data.courses : []);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setEnrolledCodes([]);
+            })
+            .finally(() => {
+                if (!cancelled) setEnrollmentLoaded(true);
+            });
+        return () => { cancelled = true; };
+    }, [user, courseCode]);
 
     if (!course) {
-        return <Navigate to="/course-explorer" replace />;
+        if (offeringsLoading) {
+            return (
+                <SemesterDataGate>
+                    <div className="empty"><strong>Loading course…</strong></div>
+                </SemesterDataGate>
+            );
+        }
+        return (
+            <SemesterDataGate>
+                <Navigate to="/course-explorer" replace />
+            </SemesterDataGate>
+        );
     }
 
     return (
+        <SemesterDataGate>
         <div className="cd">
             <Link to="/course-explorer" className="cd__back">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -182,13 +139,40 @@ export default function CourseDetails() {
             <header className="cd__head">
                 <div className="cd__head-top">
                     <span className="cd__code">{course.courseCode}</span>
+                    {!offeredThisSemester && (
+                        <span className="badge cd__not-offered">Not offered this sem</span>
+                    )}
                     <span className="cd__credits tnum">{course.totalCredits} credits</span>
                 </div>
-                <h1 className="cd__title">{course.courseName}</h1>
+                <div className="cd__title-row">
+                    <h1 className="cd__title">{course.courseName}</h1>
+                    <PlanToggle
+                        onPlan={onPlan}
+                        onAdd={addToPlan}
+                        onRemove={removeFromPlan}
+                    />
+                </div>
                 <p className="cd__instructor">
-                    <span className="muted">Taught by</span> {course.instructor || 'TBD'}
+                    <span className="muted">Taught by</span>{' '}
+                    {headerInstructors.length > 0 ? (
+                        <InstructorLinks instructors={headerInstructors} />
+                    ) : (
+                        'TBD'
+                    )}
                 </p>
             </header>
+
+            {!offeredThisSemester && (
+                <p className="cd__not-offered-note muted">
+                    Not offered this semester — summary below. Open the archived offering for full details and enrolled students.
+                </p>
+            )}
+
+            {offeredThisSemester && activeOffering && (
+                <p className="cd__offering-hint muted">
+                    Summary page — open the <strong>{activeOffering.label}</strong> offering for schedule, venue, and enrolled students.
+                </p>
+            )}
 
             <dl className="cd__facts">
                 <div>
@@ -207,91 +191,107 @@ export default function CourseDetails() {
                     <dt>Structure (L-T-P)</dt>
                     <dd className="mono">{course.creditStructure || '—'}</dd>
                 </div>
-                <div>
-                    <dt>Strength</dt>
-                    <dd className="mono">{course.currentStrength || '—'}</dd>
-                </div>
             </dl>
 
-            {students.length > 0 && (
-                <section className="cd__section">
-                    <div className="cd__section-head">
-                        <h2 className="cd__h2">Class composition</h2>
-                        <button className="btn btn--sm btn--ghost" onClick={() => setShowAnalytics(true)}>
-                            Show full breakdown →
-                        </button>
-                    </div>
-                    <div className="cd__chart-block">
-                        <BranchPieChart students={students} />
-                    </div>
-                </section>
+            {primaryOffering && (
+            <section className="cd__section">
+                <Link
+                    to={courseOfferingPath(courseCode, primaryOffering.semesterCode)}
+                    className="cd__roster-link panel"
+                >
+                    <span className="cd__roster-icon" aria-hidden>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                        </svg>
+                    </span>
+                    <span className="cd__roster-copy">
+                        <strong>
+                            {primaryOffering.isActive
+                                ? `Open ${primaryOffering.label} offering`
+                                : `View ${primaryOffering.label} offering`}
+                        </strong>
+                        <span className="muted">
+                            {primaryOffering.isActive
+                                ? (strengthLabel
+                                    ? `${strengthLabel} registered · slot, schedule, roster`
+                                    : 'Schedule, venue, and enrolled students')
+                                : 'Archived slot, schedule, and enrolled students'}
+                        </span>
+                    </span>
+                    {strengthLabel && primaryOffering.isActive && (
+                        <span className="badge cd__roster-badge">{strengthLabel}</span>
+                    )}
+                    <span className="cd__roster-chevron" aria-hidden>→</span>
+                </Link>
+            </section>
+            )}
+
+            {enrollmentLoaded && isEnrolled && offeredThisSemester && (
+                <CoursePolicySection courseCode={courseCode} />
             )}
 
             <section className="cd__section">
                 <div className="cd__section-head">
                     <h2 className="cd__h2">
-                        Registered students
-                        <span className="cd__h2-count tnum">{students.length}</span>
+                        Past offerings
+                        {!offeringsLoading && sortedOfferings.length > 0 && (
+                            <span className="cd__h2-count tnum">{sortedOfferings.length}</span>
+                        )}
                     </h2>
+                    {sortedOfferings.length > 1 && (
+                        <button
+                            type="button"
+                            className="btn btn--sm btn--ghost"
+                            onClick={() => setShowPastOfferings((v) => !v)}
+                        >
+                            {showPastOfferings ? 'Hide' : 'Show'} history
+                        </button>
+                    )}
                 </div>
-
-                {students.length > 0 ? (
-                    <div className="cd__students">
-                        <table className="cd__students-table">
-                            <thead>
-                                <tr>
-                                    <th className="cd__students-num">#</th>
-                                    <th>Name</th>
-                                    <th>Kerberos</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {students.map((student, index) => (
-                                    <tr key={student.id}>
-                                        <td className="cd__students-num tnum muted">{index + 1}</td>
-                                        <td>{student.name}</td>
-                                        <td className="mono">{student.id}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : (
+                {offeringsLoading ? (
+                    <div className="empty"><strong>Loading semester history…</strong></div>
+                ) : offeringsError ? (
+                    <div className="empty"><strong>{offeringsError}</strong></div>
+                ) : sortedOfferings.length === 0 ? (
                     <div className="empty">
-                        <strong>No students registered yet</strong>
-                        Check back closer to the semester start.
+                        <strong>No archived offerings yet</strong>
                     </div>
+                ) : showPastOfferings ? (
+                    <ul className="cd__history panel">
+                        {sortedOfferings.map((o) => (
+                            <li key={`${o.semesterCode}-${o.courseCode}`}>
+                                <Link
+                                    to={`/course/${encodeURIComponent(courseCode)}/${encodeURIComponent(o.semesterCode)}`}
+                                    className={`cd__history-row cd__history-row--link${o.isActive ? ' cd__history-row--active' : ''}`}
+                                >
+                                    <div className="cd__history-head">
+                                        <span className="mono">{o.label}</span>
+                                        {o.isActive && <span className="badge">Current</span>}
+                                    </div>
+                                    <p className="cd__history-instr">
+                                        <InstructorLinks
+                                            course={o}
+                                            instructors={o.instructors}
+                                        />
+                                    </p>
+                                    <p className="cd__history-time mono muted">{offeringTimingSummary(o)}</p>
+                                    <div className="cd__history-chips">
+                                        {o.slotName && o.slotName !== 'X' && (
+                                            <span className="badge">Slot {o.slotName}</span>
+                                        )}
+                                        {o.lectureHall && <span className="badge">{o.lectureHall}</span>}
+                                    </div>
+                                    <span className="cd__history-chevron" aria-hidden>→</span>
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="muted">This course has {sortedOfferings.length} recorded offerings across semesters.</p>
                 )}
             </section>
-
-            {showAnalytics && (
-                <div className="cd__modal-overlay" onClick={() => setShowAnalytics(false)}>
-                    <div className="cd__modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="cd__modal-head">
-                            <h2 className="cd__h2">Class composition · {course.courseCode}</h2>
-                            <button
-                                className="btn btn--sm btn--ghost btn--icon"
-                                onClick={() => setShowAnalytics(false)}
-                                aria-label="Close"
-                            >
-                                ×
-                            </button>
-                        </div>
-                        <div className="cd__modal-body">
-                            <div className="cd__modal-grid">
-                                <div>
-                                    <h3 className="cd__h3">Branch distribution</h3>
-                                    <BranchPieChart students={students} />
-                                </div>
-                                <div>
-                                    <h3 className="cd__h3">Year of entry by branch</h3>
-                                    <BranchYearPivotTable students={students} />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
+        </SemesterDataGate>
     );
 }

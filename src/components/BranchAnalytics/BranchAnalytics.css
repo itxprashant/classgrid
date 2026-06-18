@@ -1,0 +1,108 @@
+.branch-analytics--pie {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 28px;
+    align-items: center;
+}
+
+.branch-analytics__svg {
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+}
+
+.branch-analytics__legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px 16px;
+}
+
+.branch-analytics__legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--ink-2);
+}
+
+.branch-analytics__swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.branch-analytics__legend-label {
+    font-family: var(--font-mono);
+    color: var(--ink);
+    letter-spacing: 0.02em;
+}
+
+.branch-analytics__legend-value {
+    margin-left: auto;
+    color: var(--ink-3);
+}
+
+.branch-analytics--pivot {
+    overflow-x: auto;
+}
+
+.branch-analytics__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.branch-analytics__table th {
+    text-align: right;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.branch-analytics__corner {
+    text-align: left !important;
+}
+
+.branch-analytics__table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    text-align: right;
+    color: var(--ink);
+}
+
+.branch-analytics__branch {
+    text-align: left !important;
+    font-family: var(--font-mono);
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.branch-analytics__total,
+.branch-analytics__total-head {
+    border-left: 1px solid var(--line);
+    color: var(--accent-ink);
+    font-weight: 500;
+}
+
+.branch-analytics__table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+@media (max-width: 880px) {
+    .branch-analytics--pie {
+        grid-template-columns: 1fr;
+        gap: 18px;
+        text-align: center;
+    }
+
+    .branch-analytics__svg {
+        max-width: 180px;
+        margin: 0 auto;
+    }
+}

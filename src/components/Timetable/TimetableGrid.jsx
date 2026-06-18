@@ -15,7 +15,24 @@ function toMinutes(t) {
     return parseInt(t.substring(0, 2), 10) * 60 + parseInt(t.substring(2, 4), 10);
 }
 
-export default function TimetableGrid({ timetable, timetableData }) {
+function countConflictPairs(sessionList) {
+    let conflicts = 0;
+    for (let i = 0; i < sessionList.length; i++) {
+        for (let j = i + 1; j < sessionList.length; j++) {
+            const a = sessionList[i];
+            const b = sessionList[j];
+            if (a.day !== b.day || a.courseCode === b.courseCode) continue;
+            const aStart = toMinutes(a.start);
+            const aEnd = toMinutes(a.end);
+            const bStart = toMinutes(b.start);
+            const bEnd = toMinutes(b.end);
+            if (aStart < bEnd && bStart < aEnd) conflicts++;
+        }
+    }
+    return conflicts;
+}
+
+export default function TimetableGrid({ timetable, timetableData, showFooter = false }) {
     const sessions = useMemo(() => {
         const result = [];
         timetable.forEach((course) => {
@@ -63,7 +80,10 @@ export default function TimetableGrid({ timetable, timetableData }) {
         return set;
     }, [sessions]);
 
+    const conflictPairs = useMemo(() => countConflictPairs(sessions), [sessions]);
+
     return (
+        <>
         <div className="tt-scroll">
         <div className="tt">
             <div className="tt__hours">
@@ -118,5 +138,38 @@ export default function TimetableGrid({ timetable, timetableData }) {
             </div>
         </div>
         </div>
+
+        {showFooter && (
+            <>
+                <div className="tt__legend" aria-label="Legend">
+                    <span className="tt__legend-item">
+                        <span className="tt__legend-swatch tt__legend-swatch--lec" /> Lecture
+                    </span>
+                    <span className="tt__legend-item">
+                        <span className="tt__legend-swatch tt__legend-swatch--tut" /> Tutorial
+                    </span>
+                    <span className="tt__legend-item">
+                        <span className="tt__legend-swatch tt__legend-swatch--lab" /> Lab
+                    </span>
+                    <span className="tt__legend-item">
+                        <span className="tt__legend-swatch tt__legend-swatch--conf" /> Conflict
+                    </span>
+                </div>
+
+                {conflictPairs > 0 && (
+                    <div className="tt__conflict" role="alert">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <span>
+                            {conflictPairs} overlap{conflictPairs === 1 ? '' : 's'} detected — adjust tutorial/lab timings to resolve.
+                        </span>
+                    </div>
+                )}
+            </>
+        )}
+        </>
     );
 }

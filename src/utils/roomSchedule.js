@@ -1,6 +1,3 @@
-import coursesData from '../courses.json';
-import extraOccupiedData from '../extra_occupied.json';
-
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_ORDER = {
     Monday: 1,
@@ -79,7 +76,7 @@ function compareRoomNames(a, b) {
 /**
  * Build room index + per-room weekly sessions from the semester catalog.
  */
-export function buildRoomCatalog(courses = coursesData, extraOccupied = extraOccupiedData) {
+export function buildRoomCatalog(courses = [], extraOccupied = []) {
     const sessionsByRoom = new Map();
     const roomNames = new Set();
 

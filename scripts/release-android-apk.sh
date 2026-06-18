@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# Build ClassGrid release APK and upload to the shared Google Drive file.
-# Keeps the public link in src/pages/Generator.jsx valid (same file id).
+# Build ClassGrid release APK, stage for deploy, and push to the production VM.
 #
-# Prereqs: flutter SDK, gdrive CLI (glotlabs) with `gdrive account list` showing your account.
+# Each release is also published as /app/classgrid-VERSION+BUILD.apk so Cloudflare
+# cannot serve a stale binary at the stable /app/classgrid.apk path.
+# GET /api/app/version downloadUrl points at the versioned filename.
 #
 # Usage (from repo root):
-#   ./scripts/release-android-apk.sh           # upload APK, bump versions, deploy --api + --static
+#   ./scripts/release-android-apk.sh           # stage APK, bump DB version, deploy --api --apk
 #   ./scripts/release-android-apk.sh --build   # flutter build apk --release, then same as above
-#   ./scripts/release-android-apk.sh --no-deploy # upload + bump versions only (no deploy.sh)
+#   ./scripts/release-android-apk.sh --no-deploy # stage + bump DB version only (no deploy.sh)
 #
-# Env:
-#   GOOGLE_DRIVE_APK_FILE_ID  default: 1_3fPAEBmWddY7HQ18oXbgiOwQSYJdr3I
-#   APK_PATH                  default: app/build/app/outputs/flutter-apk/app-release.apk
+# SSH: ~/.ssh/config Host alias mydevclub (default). Optional deploy.env for DEPLOY_DOMAIN.
 
 set -euo pipefail
 
@@ -19,8 +18,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_DIR="${REPO_ROOT}/app"
 
-GOOGLE_DRIVE_APK_FILE_ID="${GOOGLE_DRIVE_APK_FILE_ID:-1_3fPAEBmWddY7HQ18oXbgiOwQSYJdr3I}"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/scripts/lib/deploy_ssh.sh"
+load_deploy_env "${REPO_ROOT}"
+DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-${DOMAIN:-classgrid.devclub.in}}"
+
 APK_PATH="${APK_PATH:-${APP_DIR}/build/app/outputs/flutter-apk/app-release.apk}"
+APK_STAGED="${APK_SRC:-${REPO_ROOT}/dist/app/classgrid.apk}"
+APK_PUBLIC_URL=""
 
 DO_BUILD=0
 DO_DEPLOY=1
@@ -29,7 +34,7 @@ for arg in "$@"; do
         --build) DO_BUILD=1 ;;
         --no-deploy) DO_DEPLOY=0 ;;
         -h|--help)
-            sed -n '2,16p' "$0"
+            sed -n '2,18p' "$0"
             exit 0
             ;;
         *)
@@ -38,16 +43,6 @@ for arg in "$@"; do
             ;;
     esac
 done
-
-if ! command -v gdrive >/dev/null 2>&1; then
-    echo "gdrive CLI not found. Install from https://github.com/glotlabs/gdrive" >&2
-    exit 1
-fi
-
-if ! gdrive account list 2>/dev/null | grep -q .; then
-    echo "No gdrive account. Run: gdrive account add" >&2
-    exit 1
-fi
 
 if [[ "$DO_BUILD" -eq 1 ]]; then
     echo "==> flutter build apk --release"
@@ -62,64 +57,43 @@ fi
 APK_SIZE="$(du -h "$APK_PATH" | cut -f1)"
 VERSION="$(grep -E '^version:' "${APP_DIR}/pubspec.yaml" | awk '{print $2}')"
 VERSION_NAME="${VERSION%%+*}"
-APK_DIR="$(dirname "$APK_PATH")"
-APK_DRIVE_NAME="ClassGrid_${VERSION_NAME}.apk"
-APK_NAMED="${APK_DIR}/${APK_DRIVE_NAME}"
-
-cp -f "$APK_PATH" "$APK_NAMED"
-
-echo "==> Uploading ${APK_NAMED} (${APK_SIZE}, pubspec ${VERSION})"
-echo "    Drive file id: ${GOOGLE_DRIVE_APK_FILE_ID}"
-
-gdrive files update "${GOOGLE_DRIVE_APK_FILE_ID}" "${APK_NAMED}"
-gdrive files rename "${GOOGLE_DRIVE_APK_FILE_ID}" "${APK_DRIVE_NAME}"
-
-ANDROID_VERSION_FILE="${REPO_ROOT}/server/data/android-version.json"
-GENERATOR_JSX="${REPO_ROOT}/src/pages/Generator.jsx"
 BUILD_NUM="${VERSION#*+}"
-python3 - "$ANDROID_VERSION_FILE" "$GENERATOR_JSX" "$VERSION_NAME" "$BUILD_NUM" <<'PY'
-import json
-import re
-import sys
-from pathlib import Path
 
-android_json = Path(sys.argv[1])
-generator_jsx = Path(sys.argv[2])
-version = sys.argv[3]
-build = int(sys.argv[4])
+mkdir -p "$(dirname "$APK_STAGED")"
+cp -f "$APK_PATH" "$APK_STAGED"
 
-data = json.loads(android_json.read_text(encoding="utf-8"))
-android = data.setdefault("android", {})
-android["version"] = version
-android["build"] = build
-android_json.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+APK_VERSIONED_NAME="classgrid-${VERSION_NAME}+${BUILD_NUM}.apk"
+APK_VERSIONED_STAGED="${REPO_ROOT}/dist/app/${APK_VERSIONED_NAME}"
+cp -f "$APK_PATH" "$APK_VERSIONED_STAGED"
+APK_PUBLIC_URL="https://${DEPLOY_DOMAIN}/app/${APK_VERSIONED_NAME}"
 
-jsx = generator_jsx.read_text(encoding="utf-8")
-new_line = f"const ANDROID_APP_VERSION = '{version}';"
-jsx_new, n = re.subn(
-    r"const ANDROID_APP_VERSION = '[^']*';",
-    new_line,
-    jsx,
-    count=1,
-)
-if n != 1:
-    raise SystemExit(f"Could not update ANDROID_APP_VERSION in {generator_jsx}")
-generator_jsx.write_text(jsx_new, encoding="utf-8")
-print(f"{version}+{build}", end="")
-PY
-echo ""
-echo "==> Updated ${ANDROID_VERSION_FILE}"
-echo "==> Updated ${GENERATOR_JSX} (ANDROID_APP_VERSION=${VERSION_NAME})"
+echo "==> Staged ${APK_STAGED} (${APK_SIZE}, pubspec ${VERSION})"
+echo "==> Versioned ${APK_VERSIONED_STAGED}"
+
+echo "==> Updating app_release_config in Postgres..."
+if can_deploy_ssh; then
+    "${REPO_ROOT}/scripts/db/run_on_prod.sh" import_app_version.js \
+        --version="${VERSION_NAME}" \
+        --build="${BUILD_NUM}" \
+        --url="${APK_PUBLIC_URL}"
+else
+    echo "    (ssh ${DEPLOY_SSH_HOST:-mydevclub} unavailable — using local DATABASE_URL)"
+    (cd "${REPO_ROOT}/server" && NODE_PATH=./node_modules node ../scripts/db/import_app_version.js \
+        --version="${VERSION_NAME}" \
+        --build="${BUILD_NUM}" \
+        --url="${APK_PUBLIC_URL}")
+fi
 
 if [[ "$DO_DEPLOY" -eq 1 ]]; then
-    echo "==> Deploying API (android-version.json)..."
+    echo "==> Deploying API (restart picks up version cache)..."
     (cd "$REPO_ROOT" && ./deploy.sh --api)
-    echo "==> Deploying static site (ANDROID_APP_VERSION label)..."
-    (cd "$REPO_ROOT" && ./deploy.sh --static)
+    echo "==> Deploying APK (stable + versioned paths)..."
+    (cd "$REPO_ROOT" && APK_VERSIONED_NAME="${APK_VERSIONED_NAME}" ./deploy.sh --apk)
 else
-    echo "    Skipped deploy (--no-deploy). Run: ./deploy.sh --api && ./deploy.sh --static"
+    echo "    Skipped deploy (--no-deploy). Run:"
+    echo "      ./deploy.sh --api && ./deploy.sh --apk"
 fi
 
 echo ""
-echo "==> Done. Public link (unchanged):"
-echo "    https://drive.google.com/file/d/${GOOGLE_DRIVE_APK_FILE_ID}/view?usp=sharing"
+echo "==> Done. Public APK URL:"
+echo "    ${APK_PUBLIC_URL}"

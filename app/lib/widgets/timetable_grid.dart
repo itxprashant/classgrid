@@ -6,6 +6,7 @@ import '../models/plan.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import 'common.dart';
 import 'timetable_hour_rail.dart';
 
 const Map<String, int> _dayIndex = {
@@ -20,15 +21,31 @@ const List<String> _dayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
 /// The weekly timetable board. Mirrors the web TimetableGrid: a mono hour rail
 /// (7 AM–9 PM), five day columns, solid session-tinted blocks positioned
 /// absolutely, and a diagonal hatch + red border for conflicts.
+///
+/// Parents should memoize [sessions] and [conflicts] when feeding a large or
+/// frequently rebuilt plan (e.g. cache `flattenSessions` / `conflictIndices`
+/// in a [StatefulWidget] or provider) to avoid recomputing on every frame.
 class TimetableGrid extends StatelessWidget {
   const TimetableGrid({
     super.key,
     required this.courses,
     required this.timetableData,
+    this.sessions,
+    this.conflicts,
+    this.onBlockTap,
   });
 
   final List<SelectedCourse> courses;
   final Map<String, CourseTimetable> timetableData;
+
+  /// Precomputed session list; defaults to [flattenSessions].
+  final List<GridSession>? sessions;
+
+  /// Precomputed conflict indices; defaults to [conflictIndices] on [sessions].
+  final Set<int>? conflicts;
+
+  /// Optional tap handler for a session block (index into the resolved session list).
+  final void Function(int index, GridSession session)? onBlockTap;
 
   /// Drop leading zero on the hour so "09:30" → "9:30" — saves width in narrow columns.
   static String _formatTime(String hhmm) {
@@ -48,9 +65,12 @@ class TimetableGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
-    final sessions = flattenSessions(courses, timetableData);
-    final conflicts = conflictIndices(sessions);
+    final resolvedSessions =
+        sessions ?? flattenSessions(courses, timetableData);
+    final resolvedConflicts =
+        conflicts ?? conflictIndices(resolvedSessions);
     final plotHeight = TimetableLayout.plotHeight;
+    final empty = resolvedSessions.isEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -105,12 +125,45 @@ class TimetableGrid extends StatelessWidget {
                       left: TimetableLayout.railWidth + i * colWidth,
                       child: Container(width: 1, color: T.line),
                     ),
+                  if (empty)
+                    Positioned.fill(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: T.space24),
+                          child: Text(
+                            'No sessions yet — add courses to see your week',
+                            textAlign: TextAlign.center,
+                            style: AppText.sans(size: T.fs13, color: T.ink3),
+                          ),
+                        ),
+                      ),
+                    ),
                   // Session blocks.
-                  for (int i = 0; i < sessions.length; i++)
-                    _buildBlock(sessions[i], i, conflicts.contains(i), colWidth),
+                  for (int i = 0; i < resolvedSessions.length; i++)
+                    _buildBlock(
+                      resolvedSessions[i],
+                      i,
+                      resolvedConflicts.contains(i),
+                      colWidth,
+                    ),
                 ],
               );
             }),
+          ),
+          Divider(height: 1, color: T.line),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: T.space12, vertical: T.space8),
+            child: Wrap(
+              spacing: T.space8,
+              runSpacing: T.space4,
+              alignment: WrapAlignment.center,
+              children: [
+                Pill('Lecture', tint: T.lectureTint, edge: T.lectureEdge, ink: T.lectureInk),
+                Pill('Tutorial', tint: T.tutorialTint, edge: T.tutorialEdge, ink: T.tutorialInk),
+                Pill('Lab', tint: T.labTint, edge: T.labEdge, ink: T.labInk),
+                Pill('Conflict', tint: T.dangerTint, edge: T.dangerEdge, ink: T.danger),
+              ],
+            ),
           ),
         ],
       ),
@@ -120,10 +173,9 @@ class TimetableGrid extends StatelessWidget {
   Widget _buildBlock(GridSession s, int index, bool conflict, double colWidth) {
     final dayIdx = _dayIndex[s.day];
     if (dayIdx == null) return const SizedBox.shrink();
-    final top = TimetableLayout.hourOffset(s.start) * TimetableLayout.rowHeight +
-        TimetableLayout.blockInset;
     final span = TimetableLayout.durationHours(s.start, s.end);
-    final height = (span * TimetableLayout.rowHeight - 2 * TimetableLayout.blockInset)
+    final top = TimetableLayout.blockTop(s.start);
+    final height = TimetableLayout.blockHeight(s.start, s.end)
         .clamp(20.0, TimetableLayout.plotHeight);
     final compact = span < 0.75;
 
@@ -148,51 +200,74 @@ class TimetableGrid extends StatelessWidget {
     final start = _formatTime(s.start);
     final end = _formatTime(s.end);
 
-    return Positioned(
+    final block = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      decoration: BoxDecoration(
+        color: tint,
+        border: Border.all(color: conflict ? T.danger : edge, width: conflict ? 1.5 : 1),
+        borderRadius: BorderRadius.circular(T.rSm),
+      ),
+      foregroundDecoration: conflict
+          ? const DiagonalHatch()
+          : null,
+      child: ClipRect(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _fittedLine(
+              s.courseCode,
+              AppText.mono(size: T.fs12, weight: FontWeight.w600, color: ink),
+            ),
+            if (!compact)
+              _fittedLine(
+                s.type,
+                AppText.sans(size: T.fs10, color: ink),
+              ),
+            if (!compact)
+              _fittedLine(
+                '$start–$end',
+                AppText.mono(size: T.fs10, color: ink),
+              ),
+            if (!compact && s.location.isNotEmpty)
+              _fittedLine(
+                s.location,
+                AppText.mono(size: T.fs10, color: ink),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    Widget child = block;
+    if (onBlockTap != null) {
+      child = Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => onBlockTap!(index, s),
+          borderRadius: BorderRadius.circular(T.rSm),
+          child: block,
+        ),
+      );
+    }
+
+    final positioned = Positioned(
       top: top,
       left: TimetableLayout.railWidth + dayIdx * colWidth + TimetableLayout.blockInset,
       width: colWidth - 2 * TimetableLayout.blockInset,
       height: height,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-        decoration: BoxDecoration(
-          color: tint,
-          border: Border.all(color: conflict ? T.danger : edge, width: conflict ? 1.5 : 1),
-          borderRadius: BorderRadius.circular(T.rSm),
-        ),
-        foregroundDecoration: conflict
-            ? const DiagonalHatch()
-            : null,
-        child: ClipRect(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fittedLine(
-                s.courseCode,
-                AppText.mono(size: T.fs12, weight: FontWeight.w600, color: ink),
-              ),
-              if (!compact)
-                _fittedLine(
-                  s.type,
-                  AppText.sans(size: 9, color: ink),
-                ),
-              if (!compact)
-                _fittedLine(
-                  '$start–$end',
-                  AppText.mono(size: 10, color: ink),
-                ),
-              if (!compact && s.location.isNotEmpty)
-                _fittedLine(
-                  s.location,
-                  AppText.mono(size: 9, color: ink),
-                ),
-            ],
-          ),
-        ),
-      ),
+      child: child,
     );
-  }
 
+    if (conflict) {
+      return Semantics(
+        label: '${s.courseCode} ${s.type}, clashes with another session',
+        button: onBlockTap != null,
+        child: positioned,
+      );
+    }
+
+    return positioned;
+  }
 }
 
 /// Diagonal hatch overlay drawn over conflicting blocks (shared with [RoomWeekGrid]).

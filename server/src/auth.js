@@ -3,6 +3,7 @@
 const express = require('express');
 const config = require('./config');
 const { getClientLib, getOidcConfig } = require('./oidc');
+const semesterData = require('./semesterData');
 const {
     setSessionCookie,
     clearSessionCookie,
@@ -84,9 +85,18 @@ router.get('/callback', async (req, res) => {
         const name = userinfo.name || claims.name || kerberos || 'IITD user';
         const picture = userinfo.picture || claims.picture || null;
         const email = userinfo.email || claims.email || null;
+        const hostel = (userinfo.hostel ?? claims.hostel ?? '').toString().trim() || null;
 
         if (!kerberos) {
             console.warn('[auth] no kerberos claim in token/userinfo');
+        }
+
+        if (kerberos && hostel && config.databaseUrl) {
+            try {
+                await semesterData.upsertStudentHostel(kerberos, hostel);
+            } catch (e) {
+                console.warn('[auth] hostel upsert failed:', e && e.message);
+            }
         }
 
         const sessionToken = setSessionCookie(res, {
@@ -94,6 +104,7 @@ router.get('/callback', async (req, res) => {
             name,
             picture,
             email,
+            ...(hostel ? { hostel } : {}),
         });
 
         if (flow.app === 1 && flow.desktop === 1) {

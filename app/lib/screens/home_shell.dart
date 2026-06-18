@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../state/auth_provider.dart';
 import '../storage/attendance_store.dart';
 import '../state/planner_store.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/app_navigation.dart';
 import '../widgets/profile_button.dart';
 import 'attendance_screen.dart';
 import 'cgpa_calculator_screen.dart';
@@ -14,7 +16,10 @@ import 'calendar_screen.dart';
 import 'courses_screen.dart';
 import 'about_screen.dart';
 import 'empty_halls_screen.dart';
+import 'feedback_screen.dart';
 import 'plan_screen.dart';
+import 'prof_explorer_screen.dart';
+import 'student_explorer_screen.dart';
 import 'rooms_screen.dart';
 import 'settings_screen.dart';
 
@@ -29,10 +34,18 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  String? _drawerRoute;
   PlannerStore? _planner;
   AttendanceStore? _attendance;
 
   static const _titles = ['Calendar', 'Plan', 'Courses', 'Rooms'];
+
+  static const _tabScreens = [
+    CalendarScreen(),
+    PlanScreen(),
+    CoursesScreen(),
+    RoomsScreen(),
+  ];
 
   @override
   void didChangeDependencies() {
@@ -78,10 +91,23 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  void _selectTab(int index) {
+    setState(() {
+      _index = index;
+      _drawerRoute = null;
+    });
+  }
+
+  void _goToPlanTab() {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    setState(() {
+      _index = 1;
+      _drawerRoute = null;
+    });
+  }
+
   void _openEmptyHalls() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const EmptyHallsScreen()),
-    );
+    pushAppRoute<void>(context, const EmptyHallsScreen());
   }
 
   void _openAttendance({
@@ -89,47 +115,102 @@ class _HomeShellState extends State<HomeShell> {
     String? sessionKind,
     String? date,
   }) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AttendanceScreen(
-          initialCourseCode: courseCode,
-          initialSessionKind: sessionKind,
-          initialDate: date,
-        ),
+    setState(() => _drawerRoute = AppDrawerRoute.attendance);
+    pushAppRoute<void>(
+      context,
+      AttendanceScreen(
+        initialCourseCode: courseCode,
+        initialSessionKind: sessionKind,
+        initialDate: date,
+        onGoToPlan: _goToPlanTab,
       ),
-    );
+    ).then((_) {
+      if (mounted) setState(() => _drawerRoute = null);
+    });
   }
 
   void _openCgpaCalculator() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const CgpaCalculatorScreen()),
-    );
+    setState(() => _drawerRoute = AppDrawerRoute.cgpa);
+    pushAppRoute<void>(
+      context,
+      CgpaCalculatorScreen(onGoToPlan: _goToPlanTab),
+    ).then((_) {
+      if (mounted) setState(() => _drawerRoute = null);
+    });
+  }
+
+  void _openProfExplorer() {
+    setState(() => _drawerRoute = AppDrawerRoute.profExplorer);
+    pushAppRoute<void>(context, const ProfExplorerScreen()).then((_) {
+      if (mounted) setState(() => _drawerRoute = null);
+    });
+  }
+
+  void _openStudentExplorer() {
+    setState(() => _drawerRoute = AppDrawerRoute.studentExplorer);
+    pushAppRoute<void>(context, const StudentExplorerScreen()).then((_) {
+      if (mounted) setState(() => _drawerRoute = null);
+    });
   }
 
   void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-    );
+    setState(() => _drawerRoute = AppDrawerRoute.settings);
+    pushAppRoute<void>(context, const SettingsScreen()).then((_) {
+      if (mounted) setState(() => _drawerRoute = null);
+    });
   }
 
   void _openAbout() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
-    );
+    setState(() => _drawerRoute = AppDrawerRoute.about);
+    pushAppRoute<void>(context, const AboutScreen()).then((_) {
+      if (mounted) setState(() => _drawerRoute = null);
+    });
+  }
+
+  void _openFeedback() {
+    setState(() => _drawerRoute = AppDrawerRoute.feedback);
+    pushAppRoute<void>(context, const FeedbackScreen()).then((_) {
+      if (mounted) setState(() => _drawerRoute = null);
+    });
+  }
+
+  Future<void> _startLoginFromDrawer() async {
+    final auth = context.read<AuthProvider>();
+    final opened = await auth.startBrowserLogin();
+    if (!mounted) return;
+    if (opened) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sign in on ClassGrid in your browser, then return here.'),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the browser.')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    final fadeDuration = disableAnimations ? Duration.zero : T.tBase;
+
     return Scaffold(
       drawer: AppDrawer(
         selectedIndex: _index,
-        onTabSelected: (i) => setState(() => _index = i),
+        selectedDrawerRoute: _drawerRoute,
+        onTabSelected: _selectTab,
         onOpenEmptyHalls: _openEmptyHalls,
         onOpenAttendance: () => _openAttendance(),
         onOpenCgpaCalculator: _openCgpaCalculator,
+        onOpenProfExplorer: _openProfExplorer,
+        onOpenStudentExplorer: _openStudentExplorer,
         onOpenSettings: _openSettings,
+        onOpenFeedback: _openFeedback,
         onOpenAbout: _openAbout,
+        onLoginTap: _startLoginFromDrawer,
       ),
       appBar: AppBar(
         titleSpacing: 16,
@@ -149,17 +230,23 @@ class _HomeShellState extends State<HomeShell> {
         color: T.paper,
         child: IndexedStack(
           index: _index,
-          children: const [
-            CalendarScreen(),
-            PlanScreen(),
-            CoursesScreen(),
-            RoomsScreen(),
-          ],
+          children: List.generate(_tabScreens.length, (i) {
+            return AnimatedOpacity(
+              key: ValueKey<int>(i),
+              opacity: _index == i ? 1.0 : 0.0,
+              duration: fadeDuration,
+              curve: T.easeOut,
+              child: IgnorePointer(
+                ignoring: _index != i,
+                child: _tabScreens[i],
+              ),
+            );
+          }),
         ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: _selectTab,
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.calendar_month_outlined),

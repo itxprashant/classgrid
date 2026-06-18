@@ -1,3 +1,5 @@
+import 'course_offering.dart';
+
 /// A course-catalog slot. Timing strings are the raw `DHHMMHHMM` format.
 class Slot {
   final String? name;
@@ -34,9 +36,11 @@ class Course {
   final double totalCredits;
   final String creditStructure; // "L-T-Lab", e.g. "3.0-1.0-0.0"
   final String? instructor;
+  final String? instructorEmail;
   final String? currentStrength;
   final Slot slot;
   final String? lectureHall;
+  final bool offeredThisSemester;
 
   const Course({
     required this.courseCode,
@@ -45,9 +49,11 @@ class Course {
     required this.totalCredits,
     required this.creditStructure,
     this.instructor,
+    this.instructorEmail,
     this.currentStrength,
     required this.slot,
     this.lectureHall,
+    this.offeredThisSemester = true,
   });
 
   factory Course.fromJson(Map<String, dynamic> json) {
@@ -58,9 +64,34 @@ class Course {
       totalCredits: _toDouble(json['totalCredits']),
       creditStructure: (json['creditStructure'] ?? '0.0-0.0-0.0').toString(),
       instructor: json['instructor']?.toString(),
+      instructorEmail: json['instructorEmail']?.toString(),
       currentStrength: json['currentStrength']?.toString(),
       slot: Slot.fromJson(json['slot'] as Map<String, dynamic>?),
       lectureHall: json['lectureHall']?.toString(),
+      offeredThisSemester: json['offeredThisSemester'] != false,
+    );
+  }
+
+  /// Build a catalog-shaped course from a historical offering row.
+  factory Course.fromOffering(CourseOffering offering, {required bool offeredThisSemester}) {
+    return Course(
+      courseCode: offering.courseCode,
+      courseName: offering.courseName,
+      semesterCode: offering.semesterCode,
+      totalCredits: offering.credits ?? 0,
+      creditStructure: offering.creditStructure ?? '0.0-0.0-0.0',
+      instructor: offering.instructor.isNotEmpty ? offering.instructor : null,
+      instructorEmail: offering.instructorEmail,
+      currentStrength: offering.currentStrength,
+      slot: Slot(
+        name: offering.slotName,
+        lectureTiming: offering.lectureTiming,
+        lectureTimingStr: offering.lectureTimingStr,
+        tutorialTiming: offering.tutorialTiming,
+        labTiming: offering.labTiming,
+      ),
+      lectureHall: offering.lectureHall,
+      offeredThisSemester: offeredThisSemester,
     );
   }
 

@@ -220,7 +220,23 @@ class T {
   static const double r = 6;
   static const double rLg = 10;
 
+  // Spacing scale
+  static const double space4 = 4;
+  static const double space8 = 8;
+  static const double space12 = 12;
+  static const double space16 = 16;
+  static const double space24 = 24;
+  static const double space32 = 32;
+
+  // Motion — cubic-bezier(0.22, 1, 0.36, 1) from DESIGN.md
+  static const Duration tFast = Duration(milliseconds: 120);
+  static const Duration tBase = Duration(milliseconds: 180);
+  static const Duration tSlow = Duration(milliseconds: 280);
+  static const Curve easeOut = Cubic(0.22, 1, 0.36, 1);
+
   // Type scale (px @ 16px root)
+  static const double fs10 = 10;
+  static const double fs11 = 11;
   static const double fs12 = 12;
   static const double fs13 = 13;
   static const double fs14 = 14;

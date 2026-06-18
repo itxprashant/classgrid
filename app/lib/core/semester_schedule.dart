@@ -1,32 +1,80 @@
 import '../models/academic_day.dart';
 
-/// IIT Delhi academic calendar — Semester 1, 2026-2027 (Fall 2026).
-/// Ported verbatim from `src/utils/semesterSchedule.js`. Update each semester.
-class Semester {
-  static const String code = '2601';
-  static const String label = 'Semester 1, 2026–2027';
-  static const String classesStart = '2026-07-23'; // Thursday
-  static const String lastTeachingDay = '2026-11-17'; // Tuesday
+/// Active semester schedule loaded from `GET /api/semester/schedule`.
+class SemesterScheduleConfig {
+  SemesterScheduleConfig({
+    required this.code,
+    required this.label,
+    required this.classesStart,
+    required this.lastTeachingDay,
+    required this.holidays,
+    required this.scheduleExceptions,
+    required this.noClassPeriods,
+  });
+
+  final String code;
+  final String label;
+  final String classesStart;
+  final String lastTeachingDay;
+  final Map<String, String> holidays;
+  final Map<String, String> scheduleExceptions;
+  final List<NoClassPeriod> noClassPeriods;
+
+  factory SemesterScheduleConfig.fromJson(Map<String, dynamic> json) {
+    final semester = json['semester'];
+    final semMap = semester is Map ? Map<String, dynamic>.from(semester) : <String, dynamic>{};
+    final holidaysRaw = json['holidays'];
+    final swapsRaw = json['scheduleExceptions'];
+    final periodsRaw = json['noClassPeriods'];
+
+    final holidays = <String, String>{};
+    if (holidaysRaw is Map) {
+      holidaysRaw.forEach((k, v) {
+        if (k is String && v is String) holidays[k] = v;
+      });
+    }
+
+    final scheduleExceptions = <String, String>{};
+    if (swapsRaw is Map) {
+      swapsRaw.forEach((k, v) {
+        if (k is String && v is String) scheduleExceptions[k] = v;
+      });
+    }
+
+    final noClassPeriods = <NoClassPeriod>[];
+    if (periodsRaw is List) {
+      for (final item in periodsRaw) {
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item);
+        final name = m['name']?.toString() ?? '';
+        final start = m['start']?.toString() ?? '';
+        final end = m['end']?.toString() ?? '';
+        if (name.isNotEmpty && start.isNotEmpty && end.isNotEmpty) {
+          noClassPeriods.add(NoClassPeriod(name, start, end));
+        }
+      }
+    }
+
+    return SemesterScheduleConfig(
+      code: semMap['code']?.toString() ?? '',
+      label: semMap['label']?.toString() ?? '',
+      classesStart: semMap['classesStart']?.toString() ?? '',
+      lastTeachingDay: semMap['lastTeachingDay']?.toString() ?? '',
+      holidays: holidays,
+      scheduleExceptions: scheduleExceptions,
+      noClassPeriods: noClassPeriods,
+    );
+  }
 }
 
-/// Days the institute runs a *different* day's timetable.
-const Map<String, String> kScheduleExceptions = {
-  '2026-09-03': 'Friday',
-  '2026-10-10': 'Wednesday',
-};
-
-/// Institute holidays within the teaching period — no regular classes.
-const Map<String, String> kHolidays = {
-  '2026-08-15': 'Independence Day',
-  '2026-08-26': 'Milad-un-Nabi',
-  '2026-09-04': 'Janmashtami',
-  '2026-10-02': "Gandhi's Birthday",
-  '2026-10-20': 'Dussehra',
-  '2026-11-08': 'Diwali',
-  '2026-11-09': 'Govardhan Puja',
-  '2026-11-24': "Guru Nanak's Birthday",
-  '2026-12-25': 'Christmas',
-};
+/// Backward-compatible accessors for screens that read term bounds.
+class Semester {
+  static SemesterScheduleConfig get _cfg => _requireActive();
+  static String get code => _cfg.code;
+  static String get label => _cfg.label;
+  static String get classesStart => _cfg.classesStart;
+  static String get lastTeachingDay => _cfg.lastTeachingDay;
+}
 
 class NoClassPeriod {
   final String name;
@@ -34,13 +82,6 @@ class NoClassPeriod {
   final String end;
   const NoClassPeriod(this.name, this.start, this.end);
 }
-
-/// Inclusive date ranges with no regular timetabled classes.
-const List<NoClassPeriod> kNoClassPeriods = [
-  NoClassPeriod('Mid-semester examinations', '2026-09-12', '2026-09-18'),
-  NoClassPeriod('Semester break', '2026-09-28', '2026-10-04'),
-  NoClassPeriod('End-semester examinations', '2026-11-18', '2026-11-26'),
-];
 
 const List<String> _weekdays = [
   'Sunday',
@@ -61,6 +102,22 @@ const Map<String, int> kDayNameToCode = {
   'Friday': 5,
 };
 
+SemesterScheduleConfig? _activeSchedule;
+
+void setActiveSemesterSchedule(SemesterScheduleConfig? config) {
+  _activeSchedule = config;
+}
+
+SemesterScheduleConfig? get activeSemesterSchedule => _activeSchedule;
+
+SemesterScheduleConfig _requireActive() {
+  final cfg = _activeSchedule;
+  if (cfg == null) {
+    throw StateError('Semester schedule not loaded');
+  }
+  return cfg;
+}
+
 String formatDateKey(DateTime date) {
   final y = date.year.toString().padLeft(4, '0');
   final m = date.month.toString().padLeft(2, '0');
@@ -70,16 +127,15 @@ String formatDateKey(DateTime date) {
 
 DateTime parseDateKey(String key) {
   final parts = key.split('-').map(int.parse).toList();
-  // DateTime months are 1-indexed (unlike JS Date), so use the part as-is.
   return DateTime(parts[0], parts[1], parts[2]);
 }
 
 int _dayValue(DateTime date) =>
     DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
 
-NoClassPeriod? _findNoClassPeriod(DateTime date) {
+NoClassPeriod? _findNoClassPeriod(SemesterScheduleConfig cfg, DateTime date) {
   final v = _dayValue(date);
-  for (final p in kNoClassPeriods) {
+  for (final p in cfg.noClassPeriods) {
     if (v >= _dayValue(parseDateKey(p.start)) &&
         v <= _dayValue(parseDateKey(p.end))) {
       return p;
@@ -88,26 +144,24 @@ NoClassPeriod? _findNoClassPeriod(DateTime date) {
   return null;
 }
 
-/// Resolve the academic meaning of a calendar date.
-/// Mirrors `getAcademicDay` in the web app.
-AcademicDay getAcademicDay([DateTime? date]) {
+AcademicDay getAcademicDayForConfig(SemesterScheduleConfig cfg, [DateTime? date]) {
   final d = date ?? DateTime.now();
   final key = formatDateKey(d);
-  final weekday = _weekdays[d.weekday % 7]; // DateTime.weekday: Mon=1..Sun=7
+  final weekday = _weekdays[d.weekday % 7];
 
-  if (kHolidays.containsKey(key)) {
+  if (cfg.holidays.containsKey(key)) {
     return AcademicDay(
       type: AcademicType.holiday,
       weekday: weekday,
-      name: kHolidays[key],
+      name: cfg.holidays[key],
       effectiveDay: null,
       effectiveDayCode: null,
       hasClasses: false,
     );
   }
 
-  if (kScheduleExceptions.containsKey(key)) {
-    final effectiveDay = kScheduleExceptions[key]!;
+  if (cfg.scheduleExceptions.containsKey(key)) {
+    final effectiveDay = cfg.scheduleExceptions[key]!;
     return AcademicDay(
       type: AcademicType.swapped,
       weekday: weekday,
@@ -118,7 +172,8 @@ AcademicDay getAcademicDay([DateTime? date]) {
   }
 
   final v = _dayValue(d);
-  if (v < _dayValue(parseDateKey(Semester.classesStart))) {
+  if (cfg.classesStart.isNotEmpty &&
+      v < _dayValue(parseDateKey(cfg.classesStart))) {
     return AcademicDay(
       type: AcademicType.beforeTerm,
       weekday: weekday,
@@ -127,7 +182,8 @@ AcademicDay getAcademicDay([DateTime? date]) {
       hasClasses: false,
     );
   }
-  if (v > _dayValue(parseDateKey(Semester.lastTeachingDay))) {
+  if (cfg.lastTeachingDay.isNotEmpty &&
+      v > _dayValue(parseDateKey(cfg.lastTeachingDay))) {
     return AcademicDay(
       type: AcademicType.afterTerm,
       weekday: weekday,
@@ -137,7 +193,7 @@ AcademicDay getAcademicDay([DateTime? date]) {
     );
   }
 
-  final period = _findNoClassPeriod(d);
+  final period = _findNoClassPeriod(cfg, d);
   if (period != null) {
     return AcademicDay(
       type: AcademicType.breakPeriod,
@@ -149,7 +205,7 @@ AcademicDay getAcademicDay([DateTime? date]) {
     );
   }
 
-  final dow = d.weekday % 7; // Sun=0..Sat=6
+  final dow = d.weekday % 7;
   if (dow == 0 || dow == 6) {
     return AcademicDay(
       type: AcademicType.weekend,
@@ -169,7 +225,11 @@ AcademicDay getAcademicDay([DateTime? date]) {
   );
 }
 
+AcademicDay getAcademicDay([DateTime? date]) =>
+    getAcademicDayForConfig(_requireActive(), date);
+
 String describeAcademicDay(AcademicDay info) {
+  final cfg = _requireActive();
   switch (info.type) {
     case AcademicType.holiday:
       return 'Holiday — ${info.name}. No classes scheduled.';
@@ -180,9 +240,9 @@ String describeAcademicDay(AcademicDay info) {
     case AcademicType.weekend:
       return 'Weekend — no classes scheduled.';
     case AcademicType.beforeTerm:
-      return 'Term starts ${Semester.classesStart}. No classes yet.';
+      return 'Term starts ${cfg.classesStart}. No classes yet.';
     case AcademicType.afterTerm:
-      return 'Teaching ended ${Semester.lastTeachingDay}. No regular classes.';
+      return 'Teaching ended ${cfg.lastTeachingDay}. No regular classes.';
     case AcademicType.normal:
       return 'Following ${info.effectiveDay} timetable.';
   }
@@ -191,7 +251,6 @@ String describeAcademicDay(AcademicDay info) {
 bool isExamPeriod(String? name) =>
     name != null && RegExp(r'examination', caseSensitive: false).hasMatch(name);
 
-/// Label shown in month-grid cells for institute calendar markers.
 String? academicCellLabel(AcademicDay info) {
   switch (info.type) {
     case AcademicType.holiday:
@@ -207,7 +266,6 @@ String? academicCellLabel(AcademicDay info) {
   }
 }
 
-/// Label under day headers in calendar week view. Mirrors web `academicHeadNote`.
 String? academicWeekHeadLabel(AcademicDay info) {
   switch (info.type) {
     case AcademicType.holiday:
@@ -228,7 +286,6 @@ String? academicWeekHeadLabel(AcademicDay info) {
   }
 }
 
-/// Whether a day should show institute calendar info in the day dialog.
 bool showAcademicInDayDialog(AcademicDay info) {
   return info.type == AcademicType.holiday ||
       info.type == AcademicType.swapped ||
@@ -236,3 +293,38 @@ bool showAcademicInDayDialog(AcademicDay info) {
       info.type == AcademicType.beforeTerm ||
       info.type == AcademicType.afterTerm;
 }
+
+/// Default config for unit tests (matches data/academic_calendar.json).
+SemesterScheduleConfig testSemesterScheduleConfig() => SemesterScheduleConfig.fromJson({
+      'semester': {
+        'code': '2601',
+        'label': 'Semester 1, 2026–2027',
+        'classesStart': '2026-07-23',
+        'lastTeachingDay': '2026-11-17',
+      },
+      'holidays': {
+        '2026-08-15': 'Independence Day',
+        '2026-08-26': 'Milad-un-Nabi',
+        '2026-09-04': 'Janmashtami',
+        '2026-10-02': "Gandhi's Birthday",
+        '2026-10-20': 'Dussehra',
+        '2026-11-08': 'Diwali',
+        '2026-11-09': 'Govardhan Puja',
+        '2026-11-24': "Guru Nanak's Birthday",
+        '2026-12-25': 'Christmas',
+      },
+      'scheduleExceptions': {
+        '2026-09-03': 'Friday',
+        '2026-10-10': 'Wednesday',
+      },
+      'noClassPeriods': [
+        {'name': 'Mid-semester examinations', 'start': '2026-09-12', 'end': '2026-09-18'},
+        {'name': 'Semester break', 'start': '2026-09-28', 'end': '2026-10-04'},
+        {'name': 'End-semester examinations', 'start': '2026-11-18', 'end': '2026-11-26'},
+      ],
+    });
+
+/// Legacy aliases used by a few widgets.
+Map<String, String> get kHolidays => _requireActive().holidays;
+Map<String, String> get kScheduleExceptions => _requireActive().scheduleExceptions;
+List<NoClassPeriod> get kNoClassPeriods => _requireActive().noClassPeriods;

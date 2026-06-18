@@ -10,14 +10,21 @@ import {
     sessionOverlapIndices,
     slugToRoom,
 } from '../utils/roomSchedule';
+import { useSemesterData } from '../data/SemesterDataContext';
+import SemesterDataGate from '../data/SemesterDataGate';
+import { courseOfferingPath } from '../utils/courseRoutes';
 import './RoomDetail.css';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 export default function RoomDetail() {
     const { roomSlug } = useParams();
+    const { courses, extraOccupied, semesterCode } = useSemesterData();
     const roomName = slugToRoom(roomSlug);
-    const { rooms, sessionsByRoom } = useMemo(() => buildRoomCatalog(), []);
+    const { rooms, sessionsByRoom } = useMemo(
+        () => buildRoomCatalog(courses, extraOccupied),
+        [courses, extraOccupied]
+    );
     const [view, setView] = useState('list');
 
     const roomExists = rooms.some((r) => r.name === roomName);
@@ -30,11 +37,16 @@ export default function RoomDetail() {
     const overlapCount = conflictSet.size;
 
     if (!roomName) {
-        return <Navigate to="/rooms" replace />;
+        return (
+            <SemesterDataGate>
+                <Navigate to="/rooms" replace />
+            </SemesterDataGate>
+        );
     }
 
     if (!roomExists) {
         return (
+            <SemesterDataGate>
             <div className="rd">
                 <div className="rd__empty panel">
                     <h1 className="rd__empty-title serif">Room not found</h1>
@@ -44,10 +56,12 @@ export default function RoomDetail() {
                     <Link to="/rooms" className="btn btn--primary">Back to all rooms</Link>
                 </div>
             </div>
+            </SemesterDataGate>
         );
     }
 
     return (
+        <SemesterDataGate>
         <div className="rd">
             <nav className="rd__crumb" aria-label="Breadcrumb">
                 <Link to="/rooms">Rooms</Link>
@@ -126,7 +140,7 @@ export default function RoomDetail() {
                                                 <div className="rd__session-body">
                                                     {session.courseCode ? (
                                                         <Link
-                                                            to={`/course/${session.courseCode}`}
+                                                            to={courseOfferingPath(session.courseCode, semesterCode)}
                                                             className="rd__session-code mono"
                                                         >
                                                             {session.courseCode}
@@ -152,5 +166,6 @@ export default function RoomDetail() {
                 </div>
             )}
         </div>
+        </SemesterDataGate>
     );
 }

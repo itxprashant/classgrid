@@ -5,7 +5,18 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#FFFBFE" />
+    <meta name="theme-color" content="#faf8f5" />
+    <script>
+        (function () {
+            var key = 'cg_color_scheme';
+            var stored = null;
+            try { stored = localStorage.getItem(key); } catch (e) {}
+            var dark = stored === 'dark' || (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var theme = dark ? 'dark' : 'light';
+            document.documentElement.dataset.theme = theme;
+            document.documentElement.style.colorScheme = theme;
+        })();
+    </script>
     <meta name="description"
         content="TimetableGen helps you create your semester timetable in 2 minutes. The tool follows the semester schedule so you don't have to worry if Friday timetable is being followed on a random Monday. Cherry on the cake, easily integrate it with your Google Calendar or Apple iCalendar." />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
