@@ -5,6 +5,7 @@ import './CourseExplorer.css';
 import { useSemesterData } from '../data/SemesterDataContext';
 import SemesterDataGate from '../data/SemesterDataGate';
 import { coursePagePath } from '../utils/courseRoutes';
+import { useDebouncedValue } from '../utils/useDebouncedValue';
 
 const ITEMS_PER_PAGE = 40;
 
@@ -12,6 +13,7 @@ export default function CourseExplorer() {
     const { explorerCourses, semesterCode } = useSemesterData();
     const coursesData = explorerCourses;
     const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebouncedValue(searchTerm, 200);
     const [department, setDepartment] = useState('');
     const [displayedCourses, setDisplayedCourses] = useState([]);
     const [page, setPage] = useState(1);
@@ -33,7 +35,7 @@ export default function CourseExplorer() {
     }, [coursesData]);
 
     const filteredCourses = useMemo(() => {
-        const lowerTerm = searchTerm.trim().toLowerCase();
+        const lowerTerm = debouncedSearchTerm.trim().toLowerCase();
         return coursesData.filter((course) => {
             const code = (course.courseCode || '').toUpperCase();
             if (department && code.slice(0, 2) !== department) return false;
@@ -43,7 +45,7 @@ export default function CourseExplorer() {
             const instr = (course.instructor || '').toLowerCase();
             return lcCode.includes(lowerTerm) || name.includes(lowerTerm) || instr.includes(lowerTerm);
         });
-    }, [searchTerm, department, coursesData]);
+    }, [debouncedSearchTerm, department, coursesData]);
 
     useEffect(() => {
         const end = page * ITEMS_PER_PAGE;
@@ -170,7 +172,7 @@ export default function CourseExplorer() {
 
                     {hasMore && (
                         <div className="ce__load-more">
-                            <button onClick={loadMore} className="btn">
+                            <button type="button" onClick={loadMore} className="btn">
                                 Load {Math.min(ITEMS_PER_PAGE, filteredCourses.length - displayedCourses.length)} more
                             </button>
                             <span className="ce__load-more-meta tnum muted">

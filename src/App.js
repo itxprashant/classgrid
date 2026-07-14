@@ -23,6 +23,8 @@ import AdminShell from './pages/admin/AdminShell';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminFeedback from './pages/admin/AdminFeedback';
 import AdminReports from './pages/admin/AdminReports';
+import AdminAuditLog from './pages/admin/AdminAuditLog';
+import AdminPush from './pages/admin/AdminPush';
 import { AuthProvider } from './auth/AuthContext';
 import { SemesterDataProvider } from './data/SemesterDataContext';
 import SemesterDataGate from './data/SemesterDataGate';
@@ -50,18 +52,23 @@ function AppChrome() {
 
     return (
         <div className="App">
+            <a href="#main-content" className="skip-link">
+                Skip to content
+            </a>
             {!isAdmin && (
                 <header>
                     <Navbar />
                 </header>
             )}
-            <main>
+            <main id="main-content" tabIndex={-1}>
                 <Routes>
                     <Route path="/admin" element={<AdminGate />}>
                         <Route element={<AdminShell />}>
                             <Route index element={<AdminDashboard />} />
                             <Route path="feedback" element={<AdminFeedback />} />
                             <Route path="reports" element={<AdminReports />} />
+                            <Route path="push" element={<AdminPush />} />
+                            <Route path="logs" element={<AdminAuditLog />} />
                         </Route>
                     </Route>
                     <Route element={<SemesterDataGateWrapper />}>

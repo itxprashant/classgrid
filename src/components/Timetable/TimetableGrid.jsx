@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import './Timetable.css';
 import TimetableElement from './TimetableElement';
 
@@ -32,7 +32,7 @@ function countConflictPairs(sessionList) {
     return conflicts;
 }
 
-export default function TimetableGrid({ timetable, timetableData, showFooter = false }) {
+function TimetableGrid({ timetable, timetableData, showFooter = false }) {
     const sessions = useMemo(() => {
         const result = [];
         timetable.forEach((course) => {
@@ -173,3 +173,5 @@ export default function TimetableGrid({ timetable, timetableData, showFooter = f
         </>
     );
 }
+
+export default memo(TimetableGrid);

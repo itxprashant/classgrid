@@ -18,6 +18,8 @@ class ClassNotificationService {
   static const _channelName = 'Class reminders';
   static const _attendanceChannelId = 'class_attendance_prompts';
   static const _attendanceChannelName = 'Attendance prompts';
+  static const pushChannelId = 'classgrid_push';
+  static const pushChannelName = 'ClassGrid updates';
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _ready = false;
@@ -74,6 +76,14 @@ class ClassNotificationService {
         _attendanceChannelId,
         _attendanceChannelName,
         description: 'Remind you to mark attendance after class',
+        importance: Importance.high,
+      ),
+    );
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        pushChannelId,
+        pushChannelName,
+        description: 'Semester updates and announcements from ClassGrid',
         importance: Importance.high,
       ),
     );
@@ -161,6 +171,33 @@ class ClassNotificationService {
         ),
         iOS: DarwinNotificationDetails(),
       );
+
+  NotificationDetails get pushDetails => const NotificationDetails(
+        android: AndroidNotificationDetails(
+          pushChannelId,
+          pushChannelName,
+          channelDescription: 'Semester updates and announcements from ClassGrid',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
+
+  /// Immediate notification for FCM broadcast messages.
+  Future<void> showPushNotification({
+    required String title,
+    required String body,
+    int? id,
+  }) async {
+    if (!_ready) await init();
+    final notifyId = id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
+    await _plugin.show(
+      id: notifyId,
+      title: title,
+      body: body,
+      notificationDetails: pushDetails,
+    );
+  }
 
   Future<bool> scheduleAttendancePrompt({
     required String key,

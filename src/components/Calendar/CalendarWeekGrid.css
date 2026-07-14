@@ -177,6 +177,13 @@
     box-shadow: 0 0 0 2px var(--accent);
 }
 
+@media (pointer: coarse) {
+    .tt__day-add {
+        width: 44px;
+        height: 44px;
+    }
+}
+
 .tt__day-note {
     font-family: var(--font-mono);
     font-size: 9px;

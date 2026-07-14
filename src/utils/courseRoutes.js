@@ -28,6 +28,10 @@ export function coursePagePath(course, activeSemesterCode) {
     return courseOfferingPath(course?.courseCode, sem);
 }
 
+export function courseDetailPath(courseCode) {
+    return `/course/${encodeURIComponent((courseCode || '').trim().toUpperCase())}`;
+}
+
 export function coursePolicyReportPath(courseCode, semesterCode) {
     const sem = (semesterCode || '').trim();
     if (SEMESTER_CODE_RE.test(sem)) {

@@ -26,6 +26,9 @@
  *
  * Requires a `semesters` row for --semester (FK). For archived terms, import catalog
  * or calendar first, e.g. import_historical_catalog.js --semester=2502.
+ *
+ * Only student kerberos ids are kept (aa1234567 or abc123456).
+ * Staff/professor ids from LDAP pages are skipped at fetch and on --from-json import.
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -33,6 +36,11 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const fs = require('fs');
 const path = require('path');
 const { withClient, parseArgs, repoRoot } = require('./pg');
+const {
+    isStudentKerberos,
+    normalizeKerberos,
+    filterStudentEnrollmentData,
+} = require('./student_kerberos');
 
 const args = parseArgs(process.argv);
 const semesterCode = args.semester;
@@ -101,9 +109,9 @@ async function fetchStudentDataFromLdap() {
                 const rowRegex = /<TR><TD[^>]*>([a-z0-9]+)<\/TD>\s*<TD>([^<]+)<\/TD>/gi;
                 let rowMatch;
                 while ((rowMatch = rowRegex.exec(courseText)) !== null) {
-                    const kid = rowMatch[1].trim().toLowerCase();
+                    const kid = normalizeKerberos(rowMatch[1]);
                     const name = rowMatch[2].trim();
-                    if (kid.length < 5) continue;
+                    if (!isStudentKerberos(kid)) continue;
 
                     if (!studentCourses[kid]) studentCourses[kid] = [];
                     if (!studentCourses[kid].includes(courseCode)) {
@@ -124,7 +132,7 @@ async function fetchStudentDataFromLdap() {
     return { studentCourses, courseStudents };
 }
 
-function writeJsonExport(dir, data) {
+function writeJsonExport(dir, data, skippedKerberos = 0) {
     fs.mkdirSync(dir, { recursive: true });
     const studentPath = path.join(dir, 'studentCourses.json');
     const rosterPath = path.join(dir, 'courseStudents.json');
@@ -138,6 +146,8 @@ function writeJsonExport(dir, data) {
         fetchedAt: new Date().toISOString(),
         studentCount: Object.keys(data.studentCourses).length,
         courseCount: Object.keys(data.courseStudents).length,
+        skippedNonStudentKerberos: skippedKerberos,
+        studentKerberosFormat: 'aa1234567|abc123456',
         source: BASE_URL,
     }, null, 2));
 
@@ -163,11 +173,12 @@ function readJsonExport(dir) {
     };
 }
 
-async function importToPostgres(studentCourses, courseStudents) {
+async function importToPostgres(studentCourses, courseStudents, skippedKerberos = 0) {
     if (dryRun) {
         console.log(
             `[dry-run] Would import ${Object.keys(studentCourses).length} students, `
-            + `${Object.keys(courseStudents).length} course rosters for ${semesterCode}`,
+            + `${Object.keys(courseStudents).length} course rosters for ${semesterCode}`
+            + (skippedKerberos ? ` (${skippedKerberos} non-student kerberos skipped)` : ''),
         );
         return;
     }
@@ -208,20 +219,37 @@ async function importToPostgres(studentCourses, courseStudents) {
         await client.query('COMMIT');
         console.log(
             `Imported ${Object.keys(studentCourses).length} students, `
-            + `${Object.keys(courseStudents).length} course rosters for ${semesterCode}`,
+            + `${Object.keys(courseStudents).length} course rosters for ${semesterCode}`
+            + (skippedKerberos ? ` (${skippedKerberos} non-student kerberos skipped)` : ''),
         );
     });
 }
 
+function applyStudentKerberosFilter(data) {
+    const filtered = filterStudentEnrollmentData(data);
+    if (filtered.skippedKerberos > 0) {
+        console.log(
+            `[import_student_data] skipped ${filtered.skippedKerberos} non-student kerberos `
+            + '(expected format: aa1234567 or abc123456)',
+        );
+    }
+    return filtered;
+}
+
 async function main() {
     let data;
+    let skippedKerberos = 0;
 
     if (fromJson) {
         console.log(`Loading JSON from ${outDir}…`);
         data = readJsonExport(outDir);
+        ({ studentCourses: data.studentCourses, courseStudents: data.courseStudents, skippedKerberos } =
+            applyStudentKerberosFilter(data));
     } else {
         data = await fetchStudentDataFromLdap();
-        writeJsonExport(outDir, data);
+        ({ studentCourses: data.studentCourses, courseStudents: data.courseStudents, skippedKerberos } =
+            applyStudentKerberosFilter(data));
+        writeJsonExport(outDir, data, skippedKerberos);
     }
 
     if (fetchOnly) {
@@ -232,7 +260,7 @@ async function main() {
         return;
     }
 
-    await importToPostgres(data.studentCourses, data.courseStudents);
+    await importToPostgres(data.studentCourses, data.courseStudents, skippedKerberos);
 }
 
 main().catch((e) => {

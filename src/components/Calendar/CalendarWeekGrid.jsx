@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import { getAcademicDay, formatDateKey } from '../../utils/semesterSchedule';
 import { formatEventSchedule } from '../../utils/calendarEvents';
 import '../Timetable/Timetable.css';
@@ -98,6 +98,7 @@ function WeekBlock({ item }) {
                 width: colWidth(),
             }}
             title={title}
+            aria-label={onClick ? title : undefined}
             role={onClick ? 'button' : undefined}
             tabIndex={onClick ? 0 : undefined}
             onClick={onClick}
@@ -127,6 +128,8 @@ function AllDayPill({ evt, onClick }) {
     const label = evt.isPersonal
         ? evt.title
         : `${evt.courseCode ? `${evt.courseCode} · ` : ''}${evt.title}`;
+    const schedule = formatEventSchedule(evt);
+    const ariaLabel = schedule ? `${label}, ${schedule}` : `${label}, all day`;
     return (
         <button
             type="button"
@@ -135,7 +138,8 @@ function AllDayPill({ evt, onClick }) {
                 (evt.isPersonal ? ' tt__allday-pill--personal' : ` tt__allday-pill--${evt.type}`)
             }
             onClick={onClick}
-            title={formatEventSchedule(evt) || 'All day'}
+            aria-label={ariaLabel}
+            title={schedule || 'All day'}
         >
             {label}
         </button>
@@ -168,7 +172,7 @@ function academicHeadNote(academic) {
     }
 }
 
-export default function CalendarWeekGrid({
+function CalendarWeekGrid({
     weekDates,
     classesByDate,
     eventsByDate,
@@ -406,3 +410,5 @@ export default function CalendarWeekGrid({
         </div>
     );
 }
+
+export default memo(CalendarWeekGrid);

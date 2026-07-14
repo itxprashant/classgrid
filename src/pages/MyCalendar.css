@@ -168,23 +168,22 @@
     font-feature-settings: 'tnum';
 }
 
-/* Grid — scroll on narrow viewports; fixed min column width for readability */
+/* Grid — fits viewport width; no forced horizontal scroll */
 .mycal__grid-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -4px 32px;
-    padding: 0 4px;
+    overflow-x: visible;
+    margin: 0 0 32px;
+    padding: 0;
 }
 
 .mycal__grid {
     display: grid;
-    grid-template-columns: repeat(7, minmax(92px, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 1px;
     background: var(--line);
     border: 1px solid var(--line);
     border-radius: var(--r-lg);
     overflow: hidden;
-    min-width: min(100%, 644px);
+    width: 100%;
 }
 
 .mycal__weekhead {
@@ -470,6 +469,14 @@
 .mycal__chip:hover {
     filter: brightness(0.97);
     border-color: var(--ink-4);
+}
+
+@media (pointer: coarse) {
+    .mycal__chip {
+        min-height: 44px;
+        padding: 8px 10px;
+        align-items: center;
+    }
 }
 
 .mycal__chip--quiz {
@@ -1361,13 +1368,12 @@
     }
 
     .mycal__grid {
-        grid-template-columns: repeat(7, minmax(88px, 1fr));
-        min-width: 616px;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
     }
 
     .mycal__cell {
-        min-height: 104px;
-        padding: 8px;
+        min-height: 88px;
+        padding: 6px;
     }
 
     .mycal__form-grid {
@@ -1390,8 +1396,7 @@
     }
 
     .mycal__grid {
-        grid-template-columns: repeat(7, minmax(76px, 1fr));
-        min-width: 532px;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
     }
 
     .mycal__weekhead-full {
@@ -1410,8 +1415,8 @@
     }
 
     .mycal__cell {
-        min-height: 96px;
-        padding: 6px 5px;
+        min-height: 72px;
+        padding: 4px;
         gap: 4px;
     }
 

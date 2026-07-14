@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const { withClient, parseArgs, repoRoot } = require('./pg');
+const { isStudentKerberos, normalizeKerberos } = require('./student_kerberos');
 
 const args = parseArgs(process.argv);
 const dryRun = Boolean(args['dry-run']);
@@ -35,7 +36,7 @@ function parseCsvLine(line) {
     if (parts.length < 3) return null;
     const kerberos = parts[0].trim().replace(/^"|"$/g, '').toLowerCase();
     const hostel = parts[parts.length - 1].trim().replace(/^"|"$/g, '');
-    if (!kerberos || !hostel) return null;
+    if (!kerberos || !hostel || !isStudentKerberos(kerberos)) return null;
     return { kerberos, hostel };
 }
 

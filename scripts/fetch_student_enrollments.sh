@@ -15,6 +15,8 @@
 # One-shot on VPN with local Postgres:
 #   ./scripts/fetch_student_enrollments.sh 2502
 #
+# LDAP rows with non-student kerberos (not aa1234567 / abc123456) are skipped at fetch/import.
+#
 # After import, restart API so enrollment cache reloads:
 #   ./deploy.sh --api
 

@@ -14,13 +14,13 @@ clients fetch it at runtime — nothing is bundled from `src/*.json` anymore.
 |------|---------|
 | Full semester refresh (local or prod `DATABASE_URL`) | `./scripts/db/refresh_semester.sh 2601` |
 | **LDAP student lists (VPN)** | `./scripts/fetch_student_enrollments.sh 2502 --fetch-only` then `--import` |
-| Run any importer on **production VM** | `./scripts/db/run_on_prod.sh import_student_data.js --semester=2601` |
+| Run any importer on **production VM** | `./scripts/db/run_on_prod.sh import_student_data.js --semester=2601` (add `--with-data` for full semester refresh / seed) |
 | One-time seed from legacy JSON files | `node scripts/db/seed_from_files.js` |
 | Verify API after refresh | `./scripts/db/check_semester.sh` |
 | Rebuild per-prof `instructors[]` on existing catalog rows | `node scripts/db/backfill_instructors.js` (then `./deploy.sh --api`) |
 | Prefill student hostels from CSV | `node scripts/db/import_student_hostels.js` (default: `data/student_hostels.csv`) |
 | Local Postgres + migrate + seed | `./scripts/db/bootstrap_local.sh` |
-| Ship Android APK + bump version in DB | `./scripts/release-android-apk.sh --build` |
+| Ship Android APK + bump version in DB | `./scripts/android-keystore-init.sh` (once), then `./scripts/bump-app-version.sh` + `./scripts/release-android-apk.sh --build` — [docs/ANDROID_SIGNING.md](../docs/ANDROID_SIGNING.md) |
 | Deploy code (restart API cache) | `./deploy.sh --api` |
 
 ---
@@ -87,6 +87,20 @@ Set the allotment PDF when IITD publishes a new one:
 export ROOM_ALLOTMENT_PDF_URL='https://web.iitd.ac.in/~tti/timetable/Room_Allotment_Chart_….pdf'
 # optional local cache: data/Room_Allotment_Chart.pdf
 ```
+
+**Campus room list (client fallback, no DB):** when the active catalog has no
+`lectureHall` yet, web and Flutter merge [`data/campus_rooms.json`](../data/campus_rooms.json)
+into `/rooms` so users can browse room names with “schedule pending” labels.
+Regenerate from the latest allotment PDF and copy into client bundles:
+
+```bash
+./scripts/generate_campus_rooms.sh
+# writes data/campus_rooms.json → public/campus_rooms.json + app/assets/campus_rooms.json
+git add data/campus_rooms.json public/campus_rooms.json app/assets/campus_rooms.json
+```
+
+This does **not** update Postgres — use `sync_venues.js` for that after catalog import.
+Deploy static assets (`./deploy.sh --static`) so `/campus_rooms.json` is live.
 
 ### Migrations
 
@@ -217,7 +231,7 @@ When IITD rolls to a new term (e.g. `2601` → `2602`):
 ./scripts/db/refresh_semester.sh 2602
 
 # Or on production VM directly:
-./scripts/db/run_on_prod.sh -- ./scripts/db/refresh_semester.sh 2602
+./scripts/db/run_on_prod.sh --with-data -- ./scripts/db/refresh_semester.sh 2602
 ```
 
 `refresh_semester.sh` runs importers in order and **activates** the new semester
@@ -257,7 +271,7 @@ Expect `activeSemester` to match the new code and `catalogCount` > 0.
 |--------|-------------|
 | [`refresh_semester.sh`](db/refresh_semester.sh) | Runs the full import chain for one semester code, activates it, prints restart reminder. Env: `CSV` overrides catalog CSV path. |
 | [`bootstrap_local.sh`](db/bootstrap_local.sh) | Docker Postgres up → migrate → `seed_from_files.js`. For first-time dev setup. |
-| [`run_on_prod.sh`](db/run_on_prod.sh) | Rsyncs inputs + `scripts/db/` (+ `server/src/parse_instructors.js`) to the VM via `ssh mydevclub` and runs a Node importer or arbitrary shell command with prod `DATABASE_URL`. |
+| [`run_on_prod.sh`](db/run_on_prod.sh) | Rsyncs `scripts/db/` plus only the inputs needed for the target importer (default). Pass `--with-data` for full seed sync; `--minimal` for DB-only jobs. Does **not** run from `./deploy.sh`. |
 | [`check_semester.sh`](db/check_semester.sh) | Curls `/api/health`, `/api/semester/meta`, `/api/catalog/meta`, `/api/catalog/explorer`, extra-occupied count. Defaults to `https://${DEPLOY_DOMAIN}`. |
 
 ### Importers (Node)
@@ -269,7 +283,7 @@ Expect `activeSemester` to match the new code and `catalogCount` > 0.
 | [`import_historical_catalog.js`](db/import_historical_catalog.js) | `data/courses_offered_historical/*.csv` | Upserts stub `semesters` rows + replaces `catalog_courses` per file; never activates. Flags: `--dir`, `--semester`, `--dry-run`. |
 | [`backfill_instructors.js`](db/backfill_instructors.js) | Existing `catalog_courses.course_data` | Rebuilds `instructors[]` + primary `instructor` / `instructorEmail` from stored name/email fields (no CSV). Run after parse upgrades; restart API after. |
 | [`sync_venues.js`](db/sync_venues.js) | Room allotment PDF via [`extract_venue_map.py`](extract_venue_map.py) | Updates `course_data.lectureHall` in `catalog_courses`. |
-| [`import_student_data.js`](db/import_student_data.js) | IITD LDAP (`ldapweb.iitd.ac.in`) | Replaces `student_enrollments` + `course_rosters` for `--semester`. Slow (many HTTP requests). |
+| [`import_student_data.js`](db/import_student_data.js) | IITD LDAP (`ldapweb.iitd.ac.in`) | Replaces `student_enrollments` + `course_rosters` for `--semester`. Keeps student kerberos only (`aa1234567` or `abc123456`). Slow (many HTTP requests). |
 | [`import_extra_occupied.js`](db/import_extra_occupied.js) | `data/extra_occupied.json` | Replaces `extra_occupied_slots` for `--semester`. |
 | [`import_app_version.js`](db/import_app_version.js) | `app/pubspec.yaml` or `--version` / `--build` / `--url` | Upserts `app_release_config` (`android`). |
 | [`activate_semester.js`](db/activate_semester.js) | — | Sets exactly one `semesters.is_active = true`. |
@@ -296,7 +310,8 @@ Expect `activeSemester` to match the new code and `catalogCount` > 0.
 
 | Script | Role |
 |--------|------|
-| [`extract_venue_map.py`](extract_venue_map.py) | Downloads/parses room allotment PDF; prints `{ "COL106": ["LH 111", …], … }` JSON to stdout. Used by `sync_venues.js`. |
+| [`extract_venue_map.py`](extract_venue_map.py) | Downloads/parses room allotment PDF; default stdout is `{ "COL106": ["LH 111", …], … }` (used by `sync_venues.js`). `--rooms-list` emits unique venue names for [`generate_campus_rooms.sh`](generate_campus_rooms.sh). |
+| [`generate_campus_rooms.sh`](generate_campus_rooms.sh) | Runs `extract_venue_map.py --rooms-list` → `data/campus_rooms.json`; copies to `public/` and `app/assets/` for client fallback (no DB). |
 
 ---
 
@@ -363,14 +378,14 @@ Exported JSON is gitignored under `data/ldap_exports/` (PII).
 
 ```bash
 # First time after deploying migration 008
-./scripts/db/run_on_prod.sh seed_from_files.js
+./scripts/db/run_on_prod.sh --with-data seed_from_files.js
 ./deploy.sh --api
 ./scripts/db/check_semester.sh
 
 # Each semester refresh
 # 1. Edit data/academic_calendar.json, data/Courses_Offered.csv, PDF URL, etc.
 # 2. Import + activate
-./scripts/db/run_on_prod.sh -- ./scripts/db/refresh_semester.sh 2602
+./scripts/db/run_on_prod.sh --with-data -- ./scripts/db/refresh_semester.sh 2602
 # 3. Restart API
 ./deploy.sh --api
 # 4. Verify

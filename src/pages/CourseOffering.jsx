@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { useAuth, apiFetch } from '../auth/AuthContext';
 import SemesterDataGate from '../data/SemesterDataGate';
 import { fetchCourseOfferings, offeringToCourse, offeringTimingSummary } from '../utils/historyApi';
+import { courseDetailPath } from '../utils/courseRoutes';
 import { fetchCourseStudents } from '../utils/coursesApi';
 import { instructorsFromCourse } from '../utils/instructors';
 import InstructorLinks from '../components/InstructorLinks/InstructorLinks';
@@ -154,12 +155,12 @@ export default function CourseOffering() {
     return (
         <SemesterDataGate>
             <div className="cd">
-                <Link to={`/course/${encodeURIComponent(courseCode)}`} className="cd__back">
+                <Link to="/course-explorer" className="cd__back">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="19" y1="12" x2="5" y2="12" />
                         <polyline points="12 19 5 12 12 5" />
                     </svg>
-                    Back to {courseCode}
+                    Back to catalog
                 </Link>
 
                 <header className="cd__head">
@@ -168,6 +169,14 @@ export default function CourseOffering() {
                         <span className="badge">{offering.label}</span>
                         {offering.isActive && <span className="badge">Current</span>}
                         <span className="cd__credits tnum">{course.totalCredits} credits</span>
+                        {offering.isActive && (
+                            <Link
+                                to={courseDetailPath(courseCode)}
+                                className="btn btn--sm btn--ghost cd__head-action"
+                            >
+                                Previous offerings
+                            </Link>
+                        )}
                     </div>
                     <div className="cd__title-row">
                         <h1 className="cd__title">{course.courseName}</h1>

@@ -100,6 +100,25 @@ Defined in [src/styles/ui.css](src/styles/ui.css) and used by every page.
 - `.panel`, `.rule`, `.empty`, `.status`, `.dl`, `.table` for layout primitives.
 - `.mono`, `.serif`, `.muted`, `.dim`, `.tnum` as utility helpers.
 
+### Layout & native controls
+
+Native `<select>`, `<input type="date">`, and `<input type="time">` render their
+option menus **outside** the element box. Any ancestor with `overflow: hidden`
+(or `overflow: clip`) can cut the menu off — this is not fixable with ARIA or
+focus management alone.
+
+**Rules**
+
+- **Never** put `overflow: hidden` on panel bodies (`*__body`, `.admin__body`) or
+  filter toolbars (`*__controls`) that contain native controls.
+- Use `border-radius` on the shell; put `overflow-x: auto` only on inner scrollers
+  (e.g. `.admin__table-wrap`, `.mycal__grid-scroll` when intentional).
+- **Fixed-count dashboards** (admin overview, stat strips with known N items):
+  use explicit `repeat(N, minmax(0, 1fr))` in page-scoped CSS — not shared `.dl`
+  `repeat(auto-fit, minmax(160px, 1fr))`.
+- **Verification:** `npm run check:ui` plus a browser pass on every filter dropdown
+  after UI edits (see [AGENTS.md](AGENTS.md) UI design ship gate).
+
 ## Surfaces
 
 - **Navbar** ([Navbar.jsx](src/components/Navbar/Navbar.jsx)): solid paper
@@ -130,6 +149,20 @@ Defined in [src/styles/ui.css](src/styles/ui.css) and used by every page.
   time controls with a "live" pulsing indicator, a stats strip
   (free/occupied/total), and halls grouped by building prefix with each
   hall rendered as a tinted mono tile.
+
+## Admin surfaces
+
+Web-only panel at `/admin` ([admin.css](src/pages/admin/admin.css)). Product register:
+dense grids and tables, not editorial spacing from public pages.
+
+- **Shell:** max-width 960px, tabs flush to `.admin__body` card, same OKLCH tokens as the SPA.
+- **Overview metrics:** `.admin__priority` — `grid-template-columns: repeat(4, 1fr)` for inbox counts.
+- **Overview health:** `.admin__health .dl` — `repeat(3, 1fr)` for six fixed facts (two even rows).
+- **Filters:** `.admin__controls` row with [FormField.jsx](src/components/FormField/FormField.jsx); native `<select>` for long enums (audit actions use `<optgroup>`).
+- **Tables:** `.admin__table-wrap` may use `overflow-x: auto`; **`.admin__body` must not use `overflow: hidden`** or select menus clip.
+- **Actions:** `.admin__actions--inline` — `.btn.btn--sm` row; at most one `.btn--primary` for the primary inbox link.
+
+Mobile (≤640px): priority grid → 2 columns; health grid → 1 column.
 
 ## What we avoid
 

@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 
@@ -19,11 +20,16 @@ const historyRouter = require('./history');
 const coursePoliciesRouter = require('./coursePolicies');
 const feedbackRouter = require('./feedback');
 const reportsRouter = require('./reports');
+const fcmTokensRouter = require('./fcmTokens');
 const adminRouter = require('./admin');
 
 const app = express();
 
 app.set('trust proxy', 1);
+app.use((req, res, next) => {
+    req.requestId = crypto.randomUUID();
+    next();
+});
 app.use(express.json());
 app.use(cookieParser());
 
@@ -42,6 +48,7 @@ app.use('/api', historyRouter);
 app.use('/api', coursePoliciesRouter);
 app.use('/api', feedbackRouter);
 app.use('/api', reportsRouter);
+app.use('/api', fcmTokensRouter);
 app.use('/api/admin', adminRouter);
 
 app.get('/', (req, res) => {
@@ -62,5 +69,10 @@ app.listen(config.port, () => {
         console.log('[classgrid-api] database: configured');
     } else {
         console.warn('[classgrid-api] database: DATABASE_URL not set (calendar API disabled)');
+    }
+    if (config.firebaseServiceAccountPath) {
+        console.log('[classgrid-api] FCM: service account path configured');
+    } else {
+        console.warn('[classgrid-api] FCM: FIREBASE_SERVICE_ACCOUNT_PATH not set (admin push disabled)');
     }
 });

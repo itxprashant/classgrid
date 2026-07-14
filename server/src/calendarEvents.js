@@ -4,6 +4,7 @@ const express = require('express');
 const config = require('./config');
 const db = require('./db');
 const { requireSession, readSession } = require('./session');
+const { recordAuditSafe } = require('./auditLog');
 
 const router = express.Router();
 
@@ -134,6 +135,16 @@ function actorFromSession(session) {
     };
 }
 
+function auditMetaFromRow(row) {
+    return {
+        id: row.id,
+        courseCode: row.course_code,
+        title: row.title,
+        type: row.type,
+        date: pgDateToKey(row.event_date),
+    };
+}
+
 function dbUnavailable(req, res) {
     res.status(503).json({ error: 'database_unavailable' });
 }
@@ -229,7 +240,15 @@ router.post('/events', requireSession, async (req, res) => {
                 actor.name,
             ]
         );
-        res.status(201).json({ event: rowToEvent(result.rows[0]) });
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'course_event.created',
+            targetKind: 'course_event',
+            targetId: row.id,
+            metadata: auditMetaFromRow(row),
+        });
+        res.status(201).json({ event: rowToEvent(row) });
     } catch (e) {
         console.error('[calendar] create failed:', e.message);
         res.status(500).json({ error: 'internal_error' });
@@ -318,7 +337,15 @@ router.patch('/events/:id', requireSession, async (req, res) => {
             res.status(404).json({ error: 'not_found' });
             return;
         }
-        res.json({ event: rowToEvent(result.rows[0]) });
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'course_event.updated',
+            targetKind: 'course_event',
+            targetId: row.id,
+            metadata: auditMetaFromRow(row),
+        });
+        res.json({ event: rowToEvent(row) });
     } catch (e) {
         console.error('[calendar] update failed:', e.message);
         res.status(500).json({ error: 'internal_error' });
@@ -339,14 +366,23 @@ router.delete('/events/:id', requireSession, async (req, res) => {
 
     try {
         const result = await db.query(
-            'DELETE FROM course_events WHERE id = $1::uuid RETURNING id',
+            `DELETE FROM course_events WHERE id = $1::uuid
+             RETURNING id, course_code, event_date, title, type`,
             [id]
         );
         if (result.rowCount === 0) {
             res.status(404).json({ error: 'not_found' });
             return;
         }
-        res.json({ ok: true, id: result.rows[0].id });
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'course_event.deleted',
+            targetKind: 'course_event',
+            targetId: row.id,
+            metadata: auditMetaFromRow(row),
+        });
+        res.json({ ok: true, id: row.id });
     } catch (e) {
         console.error('[calendar] delete failed:', e.message);
         res.status(500).json({ error: 'internal_error' });

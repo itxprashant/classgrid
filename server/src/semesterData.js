@@ -32,6 +32,16 @@ function normalizeKerberos(kerberos) {
     return (kerberos || '').toLowerCase().trim();
 }
 
+/** IITD student ids: aa1234567 (2 letters + 7 digits) or abc123456 (3 letters + 6 digits). */
+const STUDENT_KERBEROS_RE = /^(?:[a-z]{2}[0-9]{7}|[a-z]{3}[0-9]{6})$/;
+
+/** Same rule for Postgres `~` filters (lowercase kerberos). */
+const STUDENT_KERBEROS_SQL = '^(?:[a-z]{2}[0-9]{7}|[a-z]{3}[0-9]{6})$';
+
+function isStudentKerberos(kerberos) {
+    return STUDENT_KERBEROS_RE.test(normalizeKerberos(kerberos));
+}
+
 function formatEtag(raw) {
     if (!raw) return '"empty"';
     const s = String(raw);
@@ -306,6 +316,7 @@ async function getCourseRoster(courseCode, semesterCode) {
     const { rows } = await query(
         `SELECT student_kerberos, student_name FROM course_rosters
          WHERE semester_code = $1 AND course_code = $2
+           AND lower(student_kerberos) ~ '${STUDENT_KERBEROS_SQL}'
          ORDER BY student_kerberos`,
         [code, cc],
     );
@@ -339,7 +350,16 @@ async function getSemesterMeta(semesterCode) {
 
 async function getAppReleaseConfig(platform = 'android') {
     const { rows } = await query(
-        'SELECT version, build, download_url FROM app_release_config WHERE platform = $1',
+        `SELECT c.version,
+                c.build,
+                c.download_url,
+                c.minimum_version,
+                c.minimum_build,
+                h.release_notes AS latest_release_notes
+         FROM app_release_config c
+         LEFT JOIN app_release_history h
+           ON h.platform = c.platform AND h.build = c.build
+         WHERE c.platform = $1`,
         [platform],
     );
     if (!rows.length) {
@@ -347,6 +367,9 @@ async function getAppReleaseConfig(platform = 'android') {
             version: '1.0.0',
             build: 1,
             downloadUrl: 'https://classgrid.devclub.in/app/classgrid.apk',
+            minimumVersion: '1.0.0',
+            minimumBuild: 1,
+            latestReleaseNotes: '',
         };
     }
     const r = rows[0];
@@ -354,6 +377,58 @@ async function getAppReleaseConfig(platform = 'android') {
         version: r.version,
         build: r.build,
         downloadUrl: r.download_url,
+        minimumVersion: r.minimum_version,
+        minimumBuild: r.minimum_build,
+        latestReleaseNotes: r.latest_release_notes || '',
+    };
+}
+
+async function listAppReleaseHistory(platform = 'android', { limit = 20, offset = 0 } = {}) {
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const safeOffset = Math.max(Number(offset) || 0, 0);
+    const [{ rows }, { rows: countRows }] = await Promise.all([
+        query(
+            `SELECT version, build, download_url, release_notes, published_at
+             FROM app_release_history
+             WHERE platform = $1
+             ORDER BY build DESC
+             LIMIT $2 OFFSET $3`,
+            [platform, safeLimit, safeOffset],
+        ),
+        query(
+            'SELECT COUNT(*)::int AS total FROM app_release_history WHERE platform = $1',
+            [platform],
+        ),
+    ]);
+    return {
+        releases: rows.map((r) => ({
+            version: r.version,
+            build: r.build,
+            downloadUrl: r.download_url,
+            releaseNotes: r.release_notes || '',
+            publishedAt: r.published_at,
+        })),
+        total: countRows[0]?.total ?? 0,
+    };
+}
+
+async function getAppReleaseHistoryEntry(platform, build) {
+    const buildNum = Number(build);
+    if (!Number.isFinite(buildNum)) return null;
+    const { rows } = await query(
+        `SELECT version, build, download_url, release_notes, published_at
+         FROM app_release_history
+         WHERE platform = $1 AND build = $2`,
+        [platform, buildNum],
+    );
+    if (!rows.length) return null;
+    const r = rows[0];
+    return {
+        version: r.version,
+        build: r.build,
+        downloadUrl: r.download_url,
+        releaseNotes: r.release_notes || '',
+        publishedAt: r.published_at,
     };
 }
 
@@ -515,10 +590,11 @@ async function searchStudents(searchQuery, limit = 30) {
                 lower(r.student_kerberos) AS kerberos,
                 trim(r.student_name) AS name
             FROM course_rosters r
-            WHERE (
+            WHERE lower(r.student_kerberos) ~ '${STUDENT_KERBEROS_SQL}'
+              AND (
                 lower(r.student_kerberos) ILIKE $1 ESCAPE '\\'
                 OR trim(r.student_name) ILIKE $1 ESCAPE '\\'
-            )
+              )
          ),
          grouped AS (
             SELECT
@@ -538,6 +614,7 @@ async function searchStudents(searchQuery, limit = 30) {
          LEFT JOIN (
             SELECT lower(kerberos) AS kerberos, COUNT(DISTINCT semester_code)::int AS enrollment_count
             FROM student_enrollments
+            WHERE lower(kerberos) ~ '^(?:[a-z]{2}[0-9]{7}|[a-z]{3}[0-9]{6})$'
             GROUP BY lower(kerberos)
          ) e ON e.kerberos = g.kerberos
          ORDER BY g.name
@@ -555,7 +632,7 @@ async function searchStudents(searchQuery, limit = 30) {
 
 async function getStudentOfferings(kerberos) {
     const normalized = normalizeKerberos(kerberos);
-    if (!normalized) return null;
+    if (!normalized || !isStudentKerberos(normalized)) return null;
 
     const { rows: offeringRows } = await query(
         `SELECT s.code AS semester_code, s.label, s.is_active, c.course_code, c.course_data
@@ -655,6 +732,8 @@ module.exports = {
     getCourseRoster,
     getSemesterMeta,
     getAppReleaseConfig,
+    listAppReleaseHistory,
+    getAppReleaseHistoryEntry,
     getHealthStats,
     listSemesters,
     getCourseOfferings,
@@ -670,4 +749,5 @@ module.exports = {
     notModified,
     normalizeCourseCode,
     normalizeKerberos,
+    isStudentKerberos,
 };

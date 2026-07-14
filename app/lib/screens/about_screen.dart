@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../api/api_client.dart';
 import '../config.dart';
+import '../core/app_update_check.dart';
+import '../storage/update_release_store.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_navigation.dart';
 import '../widgets/common.dart';
+import 'changelog_screen.dart';
 import 'feedback_screen.dart';
 
 /// App info, features, and links. Opened from the navigation drawer.
@@ -22,6 +27,8 @@ class AboutScreen extends StatefulWidget {
 }
 
 class _AboutScreenState extends State<AboutScreen> {
+  bool _checkingUpdates = false;
+
   Future<void> _openSite() async {
     final uri = Uri.parse(AboutScreen._siteUrl);
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -31,6 +38,44 @@ class _AboutScreenState extends State<AboutScreen> {
         const SnackBar(content: Text('Could not open the website.')),
       );
     }
+  }
+
+  Future<void> _checkForUpdates() async {
+    setState(() => _checkingUpdates = true);
+    try {
+      final info = await AboutScreen.packageInfoFuture;
+      if (!mounted) return;
+      final installedBuild = int.tryParse(info.buildNumber) ?? 0;
+
+      final result = await checkForAppUpdates(
+        context: context,
+        apiClient: context.read<ApiClient>(),
+        releaseStore: context.read<UpdateReleaseStore>(),
+        installedVersion: info.version,
+        installedBuild: installedBuild,
+      );
+      if (!mounted) return;
+      switch (result) {
+        case UpdateCheckResult.upToDate:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You’re on the latest build.')),
+          );
+        case UpdateCheckResult.failed:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not check for updates.')),
+          );
+        case UpdateCheckResult.optionalAvailable:
+        case UpdateCheckResult.forceRequired:
+          break;
+      }
+    } finally {
+      if (mounted) setState(() => _checkingUpdates = false);
+    }
+  }
+
+  void _openChangelog() {
+    final apiClient = context.read<ApiClient>();
+    pushAppRoute<void>(context, ChangelogScreen(apiClient: apiClient));
   }
 
   @override
@@ -95,6 +140,40 @@ class _AboutScreenState extends State<AboutScreen> {
             icon: Icons.ios_share_outlined,
             title: 'ICS export',
             body: 'Share your plan as a calendar file from the Plan tab.',
+          ),
+          const SizedBox(height: T.space16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: T.space16),
+            child: AppCard(
+              padding: const EdgeInsets.all(T.space16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('App updates', style: AppText.sans(size: T.fs13, color: T.ink3)),
+                  const SizedBox(height: T.space12),
+                  FilledButton.icon(
+                    onPressed: _checkingUpdates ? null : _checkForUpdates,
+                    icon: _checkingUpdates
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: T.accentFg,
+                            ),
+                          )
+                        : const Icon(Icons.system_update, size: 18),
+                    label: Text(_checkingUpdates ? 'Checking…' : 'Check for updates'),
+                  ),
+                  const SizedBox(height: T.space8),
+                  OutlinedButton.icon(
+                    onPressed: _openChangelog,
+                    icon: const Icon(Icons.history, size: 18),
+                    label: const Text('Release history'),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: T.space16),
           Padding(

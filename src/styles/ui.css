@@ -411,6 +411,25 @@ select.field {
     font-feature-settings: 'tnum';
 }
 
+/* Touch devices: 44px minimum hit targets without changing desktop density */
+@media (pointer: coarse) {
+    .btn--sm {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0 12px;
+    }
+
+    .btn--icon.btn--sm {
+        width: 44px;
+        min-height: 44px;
+    }
+
+    .field {
+        min-height: 44px;
+        height: auto;
+    }
+}
+
 /* Responsive helpers */
 @media (max-width: 720px) {
     .page {

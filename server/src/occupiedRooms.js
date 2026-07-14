@@ -4,6 +4,7 @@ const express = require('express');
 const config = require('./config');
 const db = require('./db');
 const { requireSession } = require('./session');
+const { recordAuditSafe } = require('./auditLog');
 
 const router = express.Router();
 
@@ -148,7 +149,21 @@ router.post('/rooms/occupied', requireSession, async (req, res) => {
                        marked_kerberos, marked_name, created_at`,
             [room, date, start, end, note, kerberos || null, name]
         );
-        res.status(201).json({ marking: rowToMarking(result.rows[0]) });
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'occupied_room.marked',
+            targetKind: 'occupied_room',
+            targetId: row.id,
+            metadata: {
+                id: row.id,
+                room: row.room_name,
+                occupancy_date: pgDateToKey(row.occupancy_date),
+                start: row.start_hhmm,
+                end: row.end_hhmm,
+            },
+        });
+        res.status(201).json({ marking: rowToMarking(row) });
     } catch (e) {
         console.error('[occupiedRooms] create failed:', e.message);
         res.status(500).json({ error: 'internal_error' });
@@ -171,14 +186,28 @@ router.delete('/rooms/occupied/:id', requireSession, async (req, res) => {
         const result = await db.query(
             `DELETE FROM occupied_rooms
              WHERE id = $1::uuid AND marked_kerberos = $2
-             RETURNING id`,
+             RETURNING id, room_name, occupancy_date, start_hhmm, end_hhmm`,
             [req.params.id, kerberos]
         );
         if (result.rowCount === 0) {
             res.status(404).json({ error: 'not_found' });
             return;
         }
-        res.json({ id: result.rows[0].id });
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'occupied_room.unmarked',
+            targetKind: 'occupied_room',
+            targetId: row.id,
+            metadata: {
+                id: row.id,
+                room: row.room_name,
+                occupancy_date: pgDateToKey(row.occupancy_date),
+                start: row.start_hhmm,
+                end: row.end_hhmm,
+            },
+        });
+        res.json({ id: row.id });
     } catch (e) {
         console.error('[occupiedRooms] delete failed:', e.message);
         res.status(500).json({ error: 'internal_error' });

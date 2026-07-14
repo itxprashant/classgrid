@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../api/api_client.dart';
 import '../core/semester_schedule.dart';
@@ -15,17 +18,34 @@ class SemesterDataProvider extends ChangeNotifier {
   String? _error;
   SemesterScheduleConfig? _schedule;
   List<Map<String, dynamic>> _extraOccupied = [];
+  List<String> _campusRooms = [];
 
   bool get loading => _loading;
   String? get error => _error;
   SemesterScheduleConfig? get schedule => _schedule;
   List<Map<String, dynamic>> get extraOccupied => _extraOccupied;
+  List<String> get campusRooms => _campusRooms;
   bool get isReady => _schedule != null;
+
+  static Future<List<String>> _loadCampusRoomsAsset() async {
+    try {
+      final raw = await rootBundle.loadString('assets/campus_rooms.json');
+      final data = jsonDecode(raw);
+      if (data is Map && data['rooms'] is List) {
+        return data['rooms'].whereType<String>().toList();
+      }
+    } catch (_) {
+      // Non-fatal — rooms page falls back to catalog-only list.
+    }
+    return const [];
+  }
 
   Future<void> load() async {
     _loading = true;
     _error = null;
     notifyListeners();
+
+    _campusRooms = await _loadCampusRoomsAsset();
 
     final cachedSchedule = _store.loadScheduleCache();
     final cachedExtra = _store.loadExtraOccupiedCache();

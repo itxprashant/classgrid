@@ -5,6 +5,7 @@ const config = require('./config');
 const db = require('./db');
 const { requireSession } = require('./session');
 const semesterData = require('./semesterData');
+const { recordAuditSafe } = require('./auditLog');
 
 const router = express.Router();
 
@@ -274,6 +275,18 @@ router.post('/reports', requireSession, async (req, res) => {
             ],
         );
         const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'content_report.filed',
+            targetKind: 'content_report',
+            targetId: row.id,
+            metadata: {
+                id: row.id,
+                targetKind,
+                targetId: canonicalTargetId,
+                reason,
+            },
+        });
         res.status(201).json({
             id: row.id,
             createdAt: row.created_at.toISOString(),

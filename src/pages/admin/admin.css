@@ -124,13 +124,12 @@
     box-shadow: none;
 }
 
-/* Main content panel */
+/* Main content panel — no overflow:hidden (clips native <select> dropdowns in filters) */
 .admin__body {
     background: var(--surface);
     border: 1px solid var(--line);
     border-top: none;
     border-radius: 0 0 var(--r-lg) var(--r-lg);
-    overflow: hidden;
 }
 
 .admin__body-pad {
@@ -163,13 +162,20 @@
     white-space: nowrap;
 }
 
-/* Overview priority strip */
-.admin__priority {
+.admin__audit-links {
     display: flex;
-    flex-wrap: wrap;
-    align-items: stretch;
-    gap: 24px 28px;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+/* Overview — explicit grids (not public-site flex / auto-fit .dl) */
+.admin__priority {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px 24px;
     padding: 18px 20px;
+    align-items: end;
 }
 
 .admin__priority--inset {
@@ -180,12 +186,12 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    min-width: 6.5rem;
+    min-width: 0;
 }
 
 .admin__priority-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--ink-3);
@@ -205,12 +211,13 @@
 }
 
 .admin__priority-link {
+    grid-column: 1 / -1;
     font-family: var(--font-mono);
     font-size: var(--fs-12);
     color: var(--accent-ink);
     text-decoration: none;
-    align-self: flex-end;
-    margin-left: auto;
+    justify-self: start;
+    padding-top: 4px;
 }
 
 .admin__priority-link:hover {
@@ -222,6 +229,8 @@
 }
 
 .admin__health .dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 20px 28px;
 }
 
@@ -252,7 +261,7 @@
 .admin__table th {
     text-align: left;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -290,8 +299,13 @@
     cursor: pointer;
 }
 
+.admin__table tbody tr.admin__row--clickable:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
 .admin__target-kind {
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--ink-3);
@@ -307,7 +321,7 @@
 
 .admin__context {
     margin-top: 6px;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.04em;
 }
 
@@ -356,7 +370,7 @@
 
 .admin__detail-id {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--ink-3);
@@ -396,7 +410,7 @@
 
 .admin__detail-dl dt {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--ink-3);
@@ -418,7 +432,7 @@
     margin: 0;
     padding: 10px 12px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-word;
@@ -441,8 +455,8 @@
 
 .admin__actions--inline {
     margin-top: 0;
-    padding-top: 0;
-    border-top: none;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
 }
 
 .admin__reviewed {
@@ -502,6 +516,48 @@
     margin-top: 20px;
 }
 
+/* Push notifications */
+.admin-push__lede {
+    margin: 0 0 18px;
+    font-size: var(--fs-14);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 52ch;
+}
+
+.admin-push__form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 36rem;
+}
+
+.admin-push__body {
+    min-height: 7rem;
+    resize: vertical;
+}
+
+.admin-push__flash {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    font-size: var(--fs-13);
+    line-height: 1.45;
+    border-radius: var(--r);
+    border: 1px solid var(--line);
+}
+
+.admin-push__flash--error {
+    background: var(--danger-tint);
+    border-color: var(--danger-edge);
+    color: var(--danger-ink);
+}
+
+.admin-push__flash--ok {
+    background: var(--success-tint);
+    border-color: var(--success-edge);
+    color: var(--success-ink);
+}
+
 /* Pager */
 .admin__pager {
     display: flex;
@@ -536,13 +592,12 @@
     }
 
     .admin__priority {
-        flex-direction: column;
-        gap: 16px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px 20px;
     }
 
-    .admin__priority-link {
-        margin-left: 0;
-        align-self: flex-start;
+    .admin__health .dl {
+        grid-template-columns: 1fr;
     }
 
     .admin__detail-dl div {

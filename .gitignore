@@ -29,6 +29,8 @@ deploy.env
 *.key
 *.secret
 .gitsecret/
+**/firebase-service-account*.json
+**/*firebase-adminsdk*.json
 
 # --- student enrollment data (PII; import with scripts/db/import_student_data.js) ---
 # Repo ships tiny stubs in studentCourses.json / courseStudents.json only.

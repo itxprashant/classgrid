@@ -9,6 +9,7 @@ import '../models/app_version_info.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../widgets/release_notes_body.dart';
 
 /// Blocks the app until the user installs a newer APK.
 class UpdateRequiredScreen extends StatefulWidget {
@@ -139,6 +140,19 @@ class _UpdateRequiredScreenState extends State<UpdateRequiredScreen> {
                 value: '${widget.required.version} (${widget.required.build})',
                 highlight: true,
               ),
+              if (widget.required.releaseNotes.isNotEmpty) ...[
+                const SizedBox(height: T.space16),
+                Text(
+                  'What\'s new',
+                  style: AppText.sans(size: T.fs13, weight: FontWeight.w600, color: T.ink),
+                ),
+                const SizedBox(height: T.space8),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: ReleaseNotesBody(notes: widget.required.releaseNotes),
+                  ),
+                ),
+              ],
               if (_status != null) ...[
                 const SizedBox(height: 20),
                 Text(

@@ -12,6 +12,7 @@ import {
 import { REPORT_REASONS, reportContextLabel } from '../../utils/feedback';
 import { snapshotFields, snapshotHeading } from './adminSnapshot';
 import { coursePolicyReportPath } from '../../utils/courseRoutes';
+import { adminSelectableRowProps } from '../../utils/adminSelectableRow';
 import './admin.css';
 
 const PAGE_SIZE = 30;
@@ -290,7 +291,11 @@ export default function AdminReports() {
                     <p className="status status--err">{error}</p>
                 </div>
             )}
-            {loading && <p className="admin__loading admin__body-pad">Loading reports…</p>}
+            {loading && (
+                <p className="admin__loading admin__body-pad" role="status" aria-live="polite">
+                    Loading reports…
+                </p>
+            )}
 
             {!loading && items.length === 0 && !error && (
                 <p className="admin__empty">No reports in this queue.</p>
@@ -302,21 +307,22 @@ export default function AdminReports() {
                         <table className="admin__table">
                             <thead>
                                 <tr>
-                                    <th>When</th>
-                                    <th>Status</th>
-                                    <th>Reason</th>
-                                    <th>Target</th>
-                                    <th>Reporter</th>
+                                    <th scope="col">When</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Reason</th>
+                                    <th scope="col">Target</th>
+                                    <th scope="col">Reporter</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {items.map((row) => {
                                     const isSelected = row.id === selectedId;
+                                    const toggleRow = () => setSelectedId(isSelected ? null : row.id);
                                     return (
                                         <tr
                                             key={row.id}
                                             className={`admin__row--clickable${isSelected ? ' admin__row--selected' : ''}`}
-                                            onClick={() => setSelectedId(isSelected ? null : row.id)}
+                                            {...adminSelectableRowProps(isSelected, toggleRow)}
                                         >
                                             <td className="mono">{formatDate(row.createdAt)}</td>
                                             <td>

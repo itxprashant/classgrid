@@ -5,6 +5,7 @@ const config = require('./config');
 const db = require('./db');
 const { readSession } = require('./session');
 const semesterData = require('./semesterData');
+const { auditActorFromSession, recordAuditSafe } = require('./auditLog');
 
 const router = express.Router();
 
@@ -105,6 +106,20 @@ router.post('/feedback', async (req, res) => {
             [kerberos, reporterName, reporterEmail, message, category, pageContext, client],
         );
         const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'feedback.submitted',
+            targetKind: 'app_feedback',
+            targetId: row.id,
+            metadata: {
+                id: row.id,
+                category,
+                client,
+                messagePreview: message.slice(0, 200),
+            },
+            actor: auditActorFromSession(session),
+            client,
+        });
         res.status(201).json({
             id: row.id,
             createdAt: row.created_at.toISOString(),

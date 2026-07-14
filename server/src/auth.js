@@ -10,8 +10,10 @@ const {
     setFlowCookie,
     clearFlowCookie,
     readFlow,
+    readSession,
 } = require('./session');
 const { desktopAuthSuccessHtml } = require('./desktopAuthPage');
+const { auditActorFromSession, recordAuditSafe } = require('./auditLog');
 
 const router = express.Router();
 
@@ -107,6 +109,18 @@ router.get('/callback', async (req, res) => {
             ...(hostel ? { hostel } : {}),
         });
 
+        recordAuditSafe({
+            req,
+            action: 'auth.login',
+            targetKind: 'session',
+            targetId: kerberos || 'unknown',
+            metadata: {
+                app: flow.app === 1,
+                desktop: flow.desktop === 1,
+            },
+            actor: auditActorFromSession({ kerberos, name }),
+        });
+
         if (flow.app === 1 && flow.desktop === 1) {
             res.type('html').send(desktopAuthSuccessHtml(sessionToken));
             return;
@@ -129,11 +143,31 @@ router.get('/callback', async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
+    const session = readSession(req);
+    if (session) {
+        recordAuditSafe({
+            req,
+            action: 'auth.logout',
+            targetKind: 'session',
+            targetId: session.kerberos || 'unknown',
+            actor: auditActorFromSession(session),
+        });
+    }
     clearSessionCookie(res);
     res.json({ ok: true });
 });
 
 router.get('/logout', (req, res) => {
+    const session = readSession(req);
+    if (session) {
+        recordAuditSafe({
+            req,
+            action: 'auth.logout',
+            targetKind: 'session',
+            targetId: session.kerberos || 'unknown',
+            actor: auditActorFromSession(session),
+        });
+    }
     clearSessionCookie(res);
     res.redirect(config.frontendOrigin);
 });

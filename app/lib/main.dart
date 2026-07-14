@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +17,7 @@ import 'api/feedback_api.dart';
 import 'api/reports_api.dart';
 import 'api/planner_api.dart';
 import 'api/reminders_api.dart';
+import 'api/fcm_api.dart';
 import 'state/auth_provider.dart';
 import 'state/catalog_provider.dart';
 import 'state/explorer_catalog_provider.dart';
@@ -23,9 +27,11 @@ import 'state/theme_controller.dart';
 import 'storage/attendance_store.dart';
 import 'storage/local_store.dart';
 import 'storage/reminder_store.dart';
+import 'storage/update_release_store.dart';
 import 'theme/app_palette_scope.dart';
 import 'theme/app_theme.dart';
 import 'notifications/class_notification_service.dart';
+import 'notifications/fcm_service.dart';
 import 'screens/home_shell.dart';
 import 'widgets/auth_deep_link_listener.dart';
 import 'widgets/version_gate.dart';
@@ -42,8 +48,22 @@ Future<void> main() async {
   await ClassNotificationService.instance.init();
 
   final apiClient = await ApiClient.create();
+
+  if (Platform.isAndroid) {
+    try {
+      await Firebase.initializeApp();
+      await FcmService.instance.init(
+        apiClient,
+        fcmApi: FcmApi(apiClient),
+      );
+    } catch (e) {
+      debugPrint('[FCM] init failed: $e');
+    }
+  }
+
   final localStore = await LocalStore.create();
   final prefs = localStore.sharedPreferences;
+  final updateReleaseStore = UpdateReleaseStore(prefs);
   final reminderStore = ReminderStore(
     prefs,
     ClassNotificationService.instance,
@@ -65,6 +85,7 @@ Future<void> main() async {
   runApp(ClassGridApp(
     apiClient: apiClient,
     localStore: localStore,
+    updateReleaseStore: updateReleaseStore,
     reminderStore: reminderStore,
     attendanceStore: attendanceStore,
     themeController: themeController,
@@ -76,6 +97,7 @@ class ClassGridApp extends StatelessWidget {
     super.key,
     required this.apiClient,
     required this.localStore,
+    required this.updateReleaseStore,
     required this.reminderStore,
     required this.attendanceStore,
     required this.themeController,
@@ -83,6 +105,7 @@ class ClassGridApp extends StatelessWidget {
 
   final ApiClient apiClient;
   final LocalStore localStore;
+  final UpdateReleaseStore updateReleaseStore;
   final ReminderStore reminderStore;
   final AttendanceStore attendanceStore;
   final ThemeController themeController;
@@ -108,6 +131,9 @@ class ClassGridApp extends StatelessWidget {
         planner.onUserChanged(auth.user);
         reminderStore.onAuthChanged(isLoggedIn: auth.isLoggedIn);
         attendanceStore.onAuthChanged(isLoggedIn: auth.isLoggedIn);
+        if (Platform.isAndroid) {
+          FcmService.instance.onAuthChanged(isLoggedIn: auth.isLoggedIn);
+        }
       }
     });
     auth.init();
@@ -116,6 +142,7 @@ class ClassGridApp extends StatelessWidget {
       providers: [
         Provider<ApiClient>.value(value: apiClient),
         Provider<LocalStore>.value(value: localStore),
+        Provider<UpdateReleaseStore>.value(value: updateReleaseStore),
         Provider<CalendarEventsApi>.value(value: CalendarEventsApi(apiClient)),
         Provider<PersonalEventsApi>.value(value: PersonalEventsApi(apiClient)),
         Provider<OccupiedRoomsApi>.value(value: OccupiedRoomsApi(apiClient)),
@@ -163,6 +190,7 @@ class ClassGridApp extends StatelessWidget {
                 },
                 home: VersionGate(
                   apiClient: apiClient,
+                  releaseStore: updateReleaseStore,
                   child: const HomeShell(),
                 ),
               );

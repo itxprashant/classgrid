@@ -31,6 +31,8 @@ export default function AdminShell() {
                 <NavLink to="/admin" end className={tabClass}>Overview</NavLink>
                 <NavLink to="/admin/feedback" className={tabClass}>Feedback</NavLink>
                 <NavLink to="/admin/reports" className={tabClass}>Reports</NavLink>
+                <NavLink to="/admin/push" className={tabClass}>Push</NavLink>
+                <NavLink to="/admin/logs" className={tabClass}>Logs</NavLink>
             </nav>
 
             <div className="admin__body">

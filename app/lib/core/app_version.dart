@@ -1,3 +1,5 @@
+import '../models/app_version_info.dart';
+
 /// Compare app version name (e.g. 1.0.0) and build number to server requirements.
 bool appVersionIsBehind({
   required String installedVersion,
@@ -9,6 +11,49 @@ bool appVersionIsBehind({
   if (cmp < 0) return true;
   if (cmp > 0) return false;
   return installedBuild < requiredBuild;
+}
+
+/// True when installed build is below the server minimum (force update).
+bool isForceUpdateRequired({
+  required AppReleaseStatus status,
+  required String installedVersion,
+  required int installedBuild,
+}) {
+  return appVersionIsBehind(
+    installedVersion: installedVersion,
+    installedBuild: installedBuild,
+    requiredVersion: status.minimum.version,
+    requiredBuild: status.minimum.build,
+  );
+}
+
+/// True when a newer optional release exists and minimum is satisfied.
+bool isOptionalUpdateAvailable({
+  required AppReleaseStatus status,
+  required String installedVersion,
+  required int installedBuild,
+}) {
+  if (isForceUpdateRequired(
+    status: status,
+    installedVersion: installedVersion,
+    installedBuild: installedBuild,
+  )) {
+    return false;
+  }
+  return appVersionIsBehind(
+    installedVersion: installedVersion,
+    installedBuild: installedBuild,
+    requiredVersion: status.latest.version,
+    requiredBuild: status.latest.build,
+  );
+}
+
+/// Show What's New once after the user installs a newer build.
+bool shouldShowWhatsNew({
+  required int seenReleaseBuild,
+  required int installedBuild,
+}) {
+  return installedBuild > seenReleaseBuild;
 }
 
 /// Negative if [a] < [b], zero if equal, positive if [a] > [b].

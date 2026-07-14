@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { withClient, parseArgs, repoRoot, computeCatalogEtag } = require('./pg');
+const { isStudentKerberos, normalizeKerberos } = require('./student_kerberos');
 
 const args = parseArgs(process.argv);
 const semesterCode = args.semester || '2601';
@@ -100,12 +101,14 @@ async function main() {
         await client.query('DELETE FROM student_enrollments WHERE semester_code = $1', [code]);
         for (const [kerberos, courseList] of Object.entries(studentCourses)) {
             if (!Array.isArray(courseList)) continue;
+            const kid = normalizeKerberos(kerberos);
+            if (!isStudentKerberos(kid)) continue;
             for (const cc of courseList) {
                 await client.query(
                     `INSERT INTO student_enrollments (semester_code, kerberos, course_code)
                      VALUES ($1, $2, $3)
                      ON CONFLICT DO NOTHING`,
-                    [code, kerberos.toLowerCase().trim(), String(cc).toUpperCase()],
+                    [code, kid, String(cc).toUpperCase()],
                 );
             }
         }
@@ -115,6 +118,8 @@ async function main() {
             if (!Array.isArray(roster)) continue;
             for (const row of roster) {
                 if (!row || !row.id) continue;
+                const kid = normalizeKerberos(row.id);
+                if (!isStudentKerberos(kid)) continue;
                 await client.query(
                     `INSERT INTO course_rosters (semester_code, course_code, student_kerberos, student_name)
                      VALUES ($1, $2, $3, $4)
@@ -122,7 +127,7 @@ async function main() {
                     [
                         code,
                         courseCode.toUpperCase(),
-                        row.id.toLowerCase().trim(),
+                        kid,
                         (row.name || '').trim(),
                     ],
                 );
@@ -149,8 +154,11 @@ async function main() {
 
         if (android) {
             await client.query(
-                `INSERT INTO app_release_config (platform, version, build, download_url, updated_at)
-                 VALUES ('android', $1, $2, $3, now())
+                `INSERT INTO app_release_config (
+                    platform, version, build, download_url,
+                    minimum_version, minimum_build, updated_at
+                 )
+                 VALUES ('android', $1, $2, $3, $1, $2, now())
                  ON CONFLICT (platform) DO UPDATE SET
                     version = EXCLUDED.version,
                     build = EXCLUDED.build,

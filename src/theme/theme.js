@@ -6,8 +6,8 @@ export const THEMES = {
 };
 
 const THEME_COLORS = {
-    light: '#faf8f5',
-    dark: '#1e1d28',
+    light: '#faf8f5', // matches :root --paper
+    dark: '#1e1d28', // matches [data-theme="dark"] --paper
 };
 
 export function readStoredTheme() {
@@ -35,7 +35,10 @@ export function applyTheme(resolvedTheme) {
     document.documentElement.style.colorScheme = theme;
 
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', THEME_COLORS[theme]);
+    if (meta) {
+        const paper = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
+        meta.setAttribute('content', paper || THEME_COLORS[theme]);
+    }
 }
 
 export function persistTheme(theme) {

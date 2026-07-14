@@ -56,6 +56,87 @@ export function roomPrefix(name) {
     return match ? match[1] : 'Other';
 }
 
+/** Browse tabs: LHC (lecture halls) + academic blocks I–VI. */
+export const ROOM_BUILDING_TABS = ['LHC', 'I', 'II', 'III', 'IV', 'V', 'VI'];
+
+export const DEFAULT_ROOM_BUILDING_TAB = 'LHC';
+
+/** Map a room name to a building tab (LHC or block I–VI). */
+export function roomBuildingGroup(name) {
+    const n = normalizeRoomName(name);
+    if (/^LH\b/i.test(n)) return 'LHC';
+    if (/^III\b/i.test(n)) return 'III';
+    if (/^IIA\b/i.test(n)) return 'II';
+    if (/^II\b/i.test(n)) return 'II';
+    if (/^IV\b/i.test(n)) return 'IV';
+    if (/^VI\b/i.test(n)) return 'VI';
+    if (/^V(?:\s|\d)/i.test(n)) return 'V';
+    if (/^I(?:\s|\d|LT)/i.test(n)) return 'I';
+    return 'Other';
+}
+
+/** First digit after "LH " is the floor (LH 121 → 1, LH 325 → 3). */
+export function lhFloor(name) {
+    const m = normalizeRoomName(name).match(/^LH\s+(\d)/i);
+    return m ? parseInt(m[1], 10) : null;
+}
+
+export function getBuildingTabCounts(rooms) {
+    const counts = new Map(ROOM_BUILDING_TABS.map((code) => [code, 0]));
+    let other = 0;
+    rooms.forEach(({ name }) => {
+        const group = roomBuildingGroup(name);
+        if (counts.has(group)) counts.set(group, counts.get(group) + 1);
+        else other += 1;
+    });
+    const tabs = ROOM_BUILDING_TABS.map((code) => ({ code, count: counts.get(code) || 0 }));
+    if (other > 0) tabs.push({ code: 'Other', count: other });
+    return tabs;
+}
+
+/** Group LH rooms by floor for the LHC tab. */
+export function groupLhRoomsByFloor(rooms) {
+    const byFloor = new Map();
+    rooms.forEach((room) => {
+        const floor = lhFloor(room.name) ?? 0;
+        if (!byFloor.has(floor)) byFloor.set(floor, []);
+        byFloor.get(floor).push(room);
+    });
+    return Array.from(byFloor.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([floor, list]) => ({
+            floor,
+            label: floor > 0 ? `Floor ${floor}` : 'Other',
+            rooms: list.sort((a, b) => compareRoomNames(a.name, b.name)),
+        }));
+}
+
+export function getBuildingTabCountsForRoomNames(roomNames) {
+    return getBuildingTabCounts(roomNames.map((name) => ({ name })));
+}
+
+export function filterEntriesByBuilding(entries, building, roomKey = 'room') {
+    if (!building) return entries;
+    return entries.filter((entry) => roomBuildingGroup(entry[roomKey]) === building);
+}
+
+/** Group hall entries by LHC floor (empty halls, same layout as /rooms). */
+export function groupLhEntriesByFloor(entries, roomKey = 'room') {
+    const byFloor = new Map();
+    entries.forEach((entry) => {
+        const floor = lhFloor(entry[roomKey]) ?? 0;
+        if (!byFloor.has(floor)) byFloor.set(floor, []);
+        byFloor.get(floor).push(entry);
+    });
+    return Array.from(byFloor.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([floor, list]) => ({
+            floor,
+            label: floor > 0 ? `Floor ${floor}` : 'Other',
+            entries: list.sort((a, b) => compareRoomNames(a[roomKey], b[roomKey])),
+        }));
+}
+
 function sortSessions(sessions) {
     return [...sessions].sort((a, b) => {
         const d = (DAY_ORDER[a.day] || 99) - (DAY_ORDER[b.day] || 99);
@@ -75,10 +156,12 @@ function compareRoomNames(a, b) {
 
 /**
  * Build room index + per-room weekly sessions from the semester catalog.
+ * @param {object[]} campusRooms - fallback room names when catalog has no venues
  */
-export function buildRoomCatalog(courses = [], extraOccupied = []) {
+export function buildRoomCatalog(courses = [], extraOccupied = [], campusRooms = []) {
     const sessionsByRoom = new Map();
     const roomNames = new Set();
+    const fallbackOnly = new Set();
 
     const addSession = (room, session) => {
         if (!room) return;
@@ -133,6 +216,21 @@ export function buildRoomCatalog(courses = [], extraOccupied = []) {
         });
     });
 
+    const catalogHasVenues = courses.some((c) => c.lectureHall);
+    let usingCampusRoomFallback = false;
+
+    if (!catalogHasVenues && campusRooms.length > 0) {
+        usingCampusRoomFallback = true;
+        campusRooms.forEach((raw) => {
+            const room = normalizeRoomName(raw);
+            if (!room) return;
+            if (!roomNames.has(room)) {
+                fallbackOnly.add(room);
+            }
+            roomNames.add(room);
+        });
+    }
+
     sessionsByRoom.forEach((list, room) => {
         sessionsByRoom.set(room, sortSessions(list));
     });
@@ -143,9 +241,11 @@ export function buildRoomCatalog(courses = [], extraOccupied = []) {
             name,
             prefix: roomPrefix(name),
             sessionCount: (sessionsByRoom.get(name) || []).length,
+            schedulePending: usingCampusRoomFallback
+                && fallbackOnly.has(name)
+                && (sessionsByRoom.get(name) || []).length === 0,
         }));
 
-    const catalogHasVenues = courses.some((c) => c.lectureHall);
     const catalogHasSessions = rooms.some((r) => r.sessionCount > 0);
 
     return {
@@ -153,6 +253,7 @@ export function buildRoomCatalog(courses = [], extraOccupied = []) {
         sessionsByRoom,
         catalogHasVenues,
         catalogHasSessions,
+        usingCampusRoomFallback,
     };
 }
 
@@ -171,9 +272,10 @@ export function getRoomPrefixes(rooms) {
         .map(([code, count]) => ({ code, count }));
 }
 
-export function filterRooms(rooms, { search = '', prefix = '' } = {}) {
+export function filterRooms(rooms, { search = '', prefix = '', building = '' } = {}) {
     const term = search.trim().toLowerCase();
     return rooms.filter((room) => {
+        if (building && roomBuildingGroup(room.name) !== building) return false;
         if (prefix && room.prefix !== prefix) return false;
         if (!term) return true;
         return room.name.toLowerCase().includes(term);

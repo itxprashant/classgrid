@@ -11,6 +11,8 @@ import { useSemesterData } from '../data/SemesterDataContext';
 import SemesterDataGate from '../data/SemesterDataGate';
 import { fetchPlan, savePlan } from '../utils/plannerApi';
 import { getAcademicDay, parseDateKey } from '../utils/semesterSchedule';
+import { useDialogA11y } from '../utils/useDialogA11y';
+import { useDebouncedValue } from '../utils/useDebouncedValue';
 
 function parseTimingStr(timingStr) {
     if (!timingStr) return [];
@@ -78,6 +80,8 @@ export default function Generator() {
     });
     const [searchQuery, setSearchQuery] = useState('');
     const [showAddCourse, setShowAddCourse] = useState(false);
+    const [activeResultIndex, setActiveResultIndex] = useState(0);
+    const debouncedSearchQuery = useDebouncedValue(searchQuery, 200);
     const [timetableData, setTimetableData] = useState(() => {
         try {
             const saved = localStorage.getItem('timetableData');
@@ -94,6 +98,10 @@ export default function Generator() {
 
     const timetableRef = useRef(null);
     const addCourseInputRef = useRef(null);
+    const addCourseDialogRef = useRef(null);
+    const autoFetchDialogRef = useRef(null);
+    const autoFetchOkRef = useRef(null);
+    const resultOptionRefs = useRef([]);
     const oauthLoadRef = useRef(false);
     const planSaveTimerRef = useRef(null);
     const skipNextSaveRef = useRef(false);
@@ -516,11 +524,19 @@ export default function Generator() {
     };
 
     const filteredCourses = useMemo(() => {
-        if (!searchQuery) return [];
+        if (!debouncedSearchQuery) return [];
         return allCourses
-            .filter((c) => c.courseCode.includes(searchQuery.toUpperCase()))
+            .filter((c) => c.courseCode.includes(debouncedSearchQuery.toUpperCase()))
             .slice(0, 10);
-    }, [searchQuery, allCourses]);
+    }, [debouncedSearchQuery, allCourses]);
+
+    useEffect(() => {
+        setActiveResultIndex(0);
+    }, [debouncedSearchQuery, filteredCourses.length]);
+
+    useEffect(() => {
+        resultOptionRefs.current[activeResultIndex]?.focus();
+    }, [activeResultIndex, filteredCourses]);
 
     // Stats: total credits and conflict count
     const stats = useMemo(() => {
@@ -564,28 +580,30 @@ export default function Generator() {
         setSearchQuery('');
     };
 
-    // Close add-course dialog on Escape; focus search when it opens.
-    useEffect(() => {
-        if (!showAddCourse) return undefined;
-        const t = window.setTimeout(() => addCourseInputRef.current?.focus(), 0);
-        const onKey = (e) => {
-            if (e.key === 'Escape') closeAddCourse();
-        };
-        document.addEventListener('keydown', onKey);
-        return () => {
-            window.clearTimeout(t);
-            document.removeEventListener('keydown', onKey);
-        };
-    }, [showAddCourse]);
+    useDialogA11y(addCourseDialogRef, {
+        onClose: closeAddCourse,
+        active: showAddCourse,
+        initialFocusRef: addCourseInputRef,
+    });
+    useDialogA11y(autoFetchDialogRef, {
+        onClose: closeAutoFetchConfirm,
+        active: showAutoFetchConfirm,
+        initialFocusRef: autoFetchOkRef,
+    });
 
-    useEffect(() => {
-        if (!showAutoFetchConfirm) return undefined;
-        const onKey = (e) => {
-            if (e.key === 'Escape') closeAutoFetchConfirm();
-        };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [showAutoFetchConfirm]);
+    const handleResultListKeyDown = (e) => {
+        if (!filteredCourses.length) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActiveResultIndex((i) => Math.min(i + 1, filteredCourses.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActiveResultIndex((i) => Math.max(i - 1, 0));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            addCourse(filteredCourses[activeResultIndex].courseCode);
+        }
+    };
 
     return (
         <SemesterDataGate>
@@ -657,6 +675,7 @@ export default function Generator() {
                     role="presentation"
                 >
                     <div
+                        ref={autoFetchDialogRef}
                         className="gen__dialog panel gen__dialog--confirm"
                         role="dialog"
                         aria-modal="true"
@@ -681,8 +700,8 @@ export default function Generator() {
                             <button
                                 type="button"
                                 className="btn btn--primary"
+                                ref={autoFetchOkRef}
                                 onClick={confirmAutoFetch}
-                                autoFocus
                             >
                                 OK
                             </button>
@@ -698,6 +717,7 @@ export default function Generator() {
                     role="presentation"
                 >
                     <div
+                        ref={addCourseDialogRef}
                         className="gen__dialog panel"
                         role="dialog"
                         aria-modal="true"
@@ -728,21 +748,40 @@ export default function Generator() {
                                 ref={addCourseInputRef}
                                 type="text"
                                 className="gen__search-input"
+                                role="combobox"
+                                aria-expanded={Boolean(searchQuery && debouncedSearchQuery && filteredCourses.length > 0)}
+                                aria-controls="gen-add-course-listbox"
+                                aria-activedescendant={
+                                    filteredCourses[activeResultIndex]
+                                        ? `gen-result-${filteredCourses[activeResultIndex].courseCode}`
+                                        : undefined
+                                }
+                                aria-autocomplete="list"
                                 placeholder="Search by course code (COL106, ELL201, MTL106…)"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={handleResultListKeyDown}
                             />
                         </div>
 
-                        {searchQuery && filteredCourses.length > 0 && (
-                            <div className="gen__results gen__results--dialog" role="listbox">
-                                {filteredCourses.map((c) => (
+                        {searchQuery && debouncedSearchQuery && filteredCourses.length > 0 && (
+                            <div
+                                id="gen-add-course-listbox"
+                                className="gen__results gen__results--dialog"
+                                role="listbox"
+                                aria-label="Course search results"
+                            >
+                                {filteredCourses.map((c, index) => (
                                     <div
                                         key={c.courseCode}
+                                        id={`gen-result-${c.courseCode}`}
+                                        ref={(el) => {
+                                            resultOptionRefs.current[index] = el;
+                                        }}
                                         className="gen__result"
                                         role="option"
-                                        aria-selected={false}
-                                        tabIndex={0}
+                                        aria-selected={index === activeResultIndex}
+                                        tabIndex={index === activeResultIndex ? 0 : -1}
                                         onClick={() => addCourse(c.courseCode)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') addCourse(c.courseCode);
@@ -760,7 +799,7 @@ export default function Generator() {
                             </div>
                         )}
 
-                        {searchQuery && filteredCourses.length === 0 && (
+                        {searchQuery && debouncedSearchQuery && filteredCourses.length === 0 && (
                             <p className="gen__dialog-empty">No courses match that code.</p>
                         )}
 
@@ -814,7 +853,7 @@ export default function Generator() {
 
                     {selectedCourses.length > 0 && (
                         <div className="gen__actions">
-                            <button className="btn btn--primary" onClick={generateICS}>
+                            <button type="button" className="btn btn--primary" onClick={generateICS}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                                     <line x1="16" y1="2" x2="16" y2="6" />
@@ -823,7 +862,7 @@ export default function Generator() {
                                 </svg>
                                 Export .ics
                             </button>
-                            <button className="btn" onClick={handleDownloadImage}>
+                            <button type="button" className="btn" onClick={handleDownloadImage}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                                     <polyline points="7 10 12 15 17 10" />

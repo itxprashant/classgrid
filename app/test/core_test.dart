@@ -13,6 +13,7 @@ import 'package:classgrid/core/room_schedule.dart';
 import 'package:classgrid/core/planner_classes.dart';
 import 'package:classgrid/core/attendance.dart';
 import 'package:classgrid/core/app_version.dart';
+import 'package:classgrid/models/app_version_info.dart';
 import 'package:classgrid/core/cgpa.dart';
 import 'package:classgrid/core/course_policy.dart';
 import 'package:classgrid/core/feedback.dart';
@@ -339,13 +340,57 @@ void main() {
       expect(catalog.sessionsByRoom['LH 121']!.first.day, 'Monday');
     });
 
-    test('filterRooms searches and filters by building', () {
+    test('buildRoomCatalog merges campus rooms when catalog has no venues', () {
+      final catalog = buildRoomCatalog(
+        [
+          courseWithHall(
+            code: 'COL106',
+            hall: '',
+            lectureTiming: '109001000',
+          ),
+        ],
+        campusRooms: const ['LH 111', 'NR 201'],
+      );
+      expect(catalog.catalogHasVenues, isFalse);
+      expect(catalog.usingCampusRoomFallback, isTrue);
+      expect(catalog.rooms.length, 2);
+      expect(catalog.rooms.every((r) => r.schedulePending), isTrue);
+      expect(catalog.rooms.every((r) => r.sessionCount == 0), isTrue);
+      expect(catalog.sessionsByRoom['LH 111'], isNull);
+    });
+
+    test('roomBuildingGroup maps LH to LHC and academic blocks', () {
+      expect(roomBuildingGroup('LH 121'), 'LHC');
+      expect(roomBuildingGroup('V707'), 'V');
+      expect(roomBuildingGroup('IIA 305'), 'II');
+      expect(roomBuildingGroup('VI LT 1'), 'VI');
+      expect(roomBuildingGroup('DH'), 'Other');
+    });
+
+    test('lhFloor uses first digit after LH', () {
+      expect(lhFloor('LH 121'), 1);
+      expect(lhFloor('LH 325'), 3);
+      expect(lhFloor('LH 413.1'), 4);
+    });
+
+    test('filterRooms searches and filters by building tab', () {
       final catalog = buildRoomCatalog([
         courseWithHall(code: 'A', hall: 'LH 101', lectureTiming: '109001000'),
-        courseWithHall(code: 'B', hall: 'NR 201', lectureTiming: '209001000'),
+        courseWithHall(code: 'B', hall: 'V 344', lectureTiming: '209001000'),
       ]);
       expect(filterRooms(catalog.rooms, search: '121').length, 0);
-      expect(filterRooms(catalog.rooms, prefix: 'LH').length, 1);
+      expect(filterRooms(catalog.rooms, building: 'LHC').length, 1);
+      expect(filterRooms(catalog.rooms, building: 'V').length, 1);
+    });
+
+    test('groupLhRoomsByFloor groups lecture halls by floor', () {
+      final catalog = buildRoomCatalog([
+        courseWithHall(code: 'A', hall: 'LH 121, LH 325', lectureTiming: '109001000'),
+      ]);
+      final sections = groupLhRoomsByFloor(catalog.rooms);
+      expect(sections.length, 2);
+      expect(sections[0].floor, 1);
+      expect(sections[1].floor, 3);
     });
 
     test('roomSessionOverlapIndices flags different courses', () {
@@ -538,6 +583,102 @@ void main() {
         ),
         isFalse,
       );
+    });
+  });
+
+  group('release status helpers', () {
+    AppReleaseStatus status({
+      String minVer = '1.0.0',
+      int minBuild = 2,
+      String latestVer = '1.1.0',
+      int latestBuild = 5,
+    }) {
+      return AppReleaseStatus(
+        minimum: AppVersionInfo(
+          version: minVer,
+          build: minBuild,
+          downloadUrl: 'https://example.com/min.apk',
+        ),
+        latest: AppVersionInfo(
+          version: latestVer,
+          build: latestBuild,
+          downloadUrl: 'https://example.com/latest.apk',
+          releaseNotes: '### Added\n- Feature',
+        ),
+      );
+    }
+
+    test('force update when below minimum', () {
+      expect(
+        isForceUpdateRequired(
+          status: status(),
+          installedVersion: '1.0.0',
+          installedBuild: 1,
+        ),
+        isTrue,
+      );
+    });
+
+    test('optional update when above minimum but below latest', () {
+      final s = status();
+      expect(
+        isOptionalUpdateAvailable(
+          status: s,
+          installedVersion: '1.0.0',
+          installedBuild: 2,
+        ),
+        isTrue,
+      );
+      expect(
+        isForceUpdateRequired(
+          status: s,
+          installedVersion: '1.0.0',
+          installedBuild: 2,
+        ),
+        isFalse,
+      );
+    });
+
+    test('no optional update when already on latest', () {
+      expect(
+        isOptionalUpdateAvailable(
+          status: status(),
+          installedVersion: '1.1.0',
+          installedBuild: 5,
+        ),
+        isFalse,
+      );
+    });
+
+    test('shouldShowWhatsNew when build increased', () {
+      expect(shouldShowWhatsNew(seenReleaseBuild: 4, installedBuild: 5), isTrue);
+      expect(shouldShowWhatsNew(seenReleaseBuild: 5, installedBuild: 5), isFalse);
+    });
+  });
+
+  group('AppReleaseStatus.fromJson', () {
+    test('parses nested minimum and latest', () {
+      final parsed = AppReleaseStatus.fromJson({
+        'minimum': {'version': '1.0.0', 'build': 2, 'downloadUrl': 'a'},
+        'latest': {
+          'version': '1.1.0',
+          'build': 5,
+          'downloadUrl': 'b',
+          'releaseNotes': 'Notes',
+        },
+      });
+      expect(parsed.minimum.build, 2);
+      expect(parsed.latest.releaseNotes, 'Notes');
+    });
+
+    test('legacy flat shape uses same minimum and latest', () {
+      final parsed = AppReleaseStatus.fromJson({
+        'version': '1.0.0',
+        'build': 3,
+        'downloadUrl': 'c',
+      });
+      expect(parsed.minimum.build, 3);
+      expect(parsed.latest.build, 3);
     });
   });
 

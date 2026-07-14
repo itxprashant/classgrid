@@ -78,40 +78,39 @@
 }
 
 .cal__summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-    margin-bottom: 40px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px 28px;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--line);
 }
 
 .cal__summary-card {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 14px 16px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--r-lg);
+    gap: 4px;
+    min-width: 0;
 }
 
 .cal__summary-label {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 11px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--ink-3);
 }
 
 .cal__summary-value {
-    font-size: 1rem;
+    font-size: var(--fs-14);
     font-weight: 500;
     color: var(--ink);
 }
 
 .cal__summary-value.tnum {
     font-family: var(--font-mono);
-    font-size: 1.4rem;
-    line-height: 1;
+    font-size: var(--fs-14);
+    line-height: 1.3;
 }
 
 .cal__section {
@@ -161,26 +160,27 @@
     padding: 13px 16px;
     background: var(--surface);
     border: 1px solid var(--line);
-    border-left: 3px solid var(--line-strong);
     border-radius: var(--r);
-    transition: transform var(--t-fast), box-shadow var(--t-fast);
+    transition: border-color var(--t-fast), background var(--t-fast);
 }
 
 .cal__item:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-card);
+    border-color: var(--line-strong);
 }
 
 .cal__item--holiday {
-    border-left-color: var(--danger-edge);
+    background: var(--danger-tint);
+    border-color: var(--danger-edge);
 }
 
 .cal__item--swap {
-    border-left-color: var(--accent-edge);
+    background: var(--accent-tint);
+    border-color: var(--accent-edge);
 }
 
 .cal__item--break {
-    border-left-color: var(--tutorial-edge);
+    background: var(--tutorial-tint);
+    border-color: var(--tutorial-edge);
 }
 
 .cal__item--next {

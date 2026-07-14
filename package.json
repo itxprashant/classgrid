@@ -20,7 +20,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "check:ui": "bash scripts/check-ui-classes.sh",
+    "check:ui": "bash scripts/check-ui-classes.sh && bash scripts/check-ui-layout.sh",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {

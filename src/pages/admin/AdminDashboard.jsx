@@ -99,9 +99,18 @@ export default function AdminDashboard() {
             </div>
 
             <div className="admin__actions admin__actions--inline admin__body-pad">
-                <Link to="/admin/reports" className="btn btn--primary btn--sm">Reports inbox</Link>
-                <Link to="/admin/feedback" className="btn btn--ghost btn--sm">Feedback inbox</Link>
-                <button type="button" className="btn btn--ghost btn--sm" onClick={load}>Refresh</button>
+                <Link to="/admin/reports" className="btn btn--primary btn--sm">
+                    Reports inbox
+                </Link>
+                <Link to="/admin/feedback" className="btn btn--ghost btn--sm">
+                    Feedback inbox
+                </Link>
+                <Link to="/admin/logs" className="btn btn--ghost btn--sm">
+                    Audit log
+                </Link>
+                <button type="button" className="btn btn--ghost btn--sm" onClick={load}>
+                    Refresh
+                </button>
             </div>
         </>
     );

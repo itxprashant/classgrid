@@ -1,0 +1,7 @@
+# Copy to android/key.properties and fill in (or run scripts/android-keystore-init.sh).
+# Never commit key.properties or *.keystore — both are gitignored.
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=classgrid
+storeFile=classgrid-release.keystore

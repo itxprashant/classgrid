@@ -30,18 +30,26 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
   RoomCatalog? _cachedCatalog;
   int? _cachedCoursesLen;
   int? _cachedExtraLen;
+  int? _cachedCampusLen;
 
-  RoomCatalog _roomCatalog(CatalogProvider catalog, List<dynamic> extraOccupied) {
+  RoomCatalog _roomCatalog(CatalogProvider catalog, SemesterDataProvider semester) {
     final coursesLen = catalog.courses.length;
-    final extraLen = extraOccupied.length;
+    final extraLen = semester.extraOccupied.length;
+    final campusLen = semester.campusRooms.length;
     if (_cachedCatalog != null &&
         _cachedCoursesLen == coursesLen &&
-        _cachedExtraLen == extraLen) {
+        _cachedExtraLen == extraLen &&
+        _cachedCampusLen == campusLen) {
       return _cachedCatalog!;
     }
-    _cachedCatalog = buildRoomCatalog(catalog.courses, extraOccupied: extraOccupied);
+    _cachedCatalog = buildRoomCatalog(
+      catalog.courses,
+      extraOccupied: semester.extraOccupied,
+      campusRooms: semester.campusRooms,
+    );
     _cachedCoursesLen = coursesLen;
     _cachedExtraLen = extraLen;
+    _cachedCampusLen = campusLen;
     return _cachedCatalog!;
   }
 
@@ -58,19 +66,22 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
       subtitle: (catalog.loading && !catalog.isReady) || (semester.loading && !semester.isReady)
           ? null
           : Text(
-              _subtitle(catalog, semester.extraOccupied, normalized),
+              _subtitle(catalog, semester, normalized),
               style: AppText.sans(size: T.fs13, color: T.ink2),
             ),
       body: (catalog.loading && !catalog.isReady) || (semester.loading && !semester.isReady)
           ? const Center(child: CircularProgressIndicator())
-          : _buildBody(catalog, semester.extraOccupied, normalized, semester.schedule?.code),
+          : _buildBody(catalog, semester, normalized, semester.schedule?.code),
     );
   }
 
-  String _subtitle(CatalogProvider catalog, List<dynamic> extraOccupied, String normalized) {
-    final roomCatalog = _roomCatalog(catalog, extraOccupied);
-    final exists = roomCatalog.rooms.any((r) => r.name == normalized);
-    if (!exists) return 'Not in semester catalog';
+  String _subtitle(CatalogProvider catalog, SemesterDataProvider semester, String normalized) {
+    final roomCatalog = _roomCatalog(catalog, semester);
+    final roomMeta = roomCatalog.rooms.where((r) => r.name == normalized).firstOrNull;
+    if (roomMeta == null) return 'Not in semester catalog';
+    if (roomMeta.schedulePending) {
+      return 'Room allotment for this semester is not released yet';
+    }
 
     final sessions = sessionsForRoom(roomCatalog.sessionsByRoom, normalized);
     final conflicts = roomSessionOverlapIndices(sessions);
@@ -80,14 +91,14 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
 
   Widget _buildBody(
     CatalogProvider catalog,
-    List<dynamic> extraOccupied,
+    SemesterDataProvider semester,
     String normalized,
     String? activeSemesterCode,
   ) {
-    final roomCatalog = _roomCatalog(catalog, extraOccupied);
-    final exists = roomCatalog.rooms.any((r) => r.name == normalized);
+    final roomCatalog = _roomCatalog(catalog, semester);
+    final roomMeta = roomCatalog.rooms.where((r) => r.name == normalized).firstOrNull;
 
-    if (!exists) {
+    if (roomMeta == null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -135,7 +146,9 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         const SizedBox(height: 16),
         if (sessions.isEmpty)
           EmptyState(
-            message: 'No classes scheduled in this room in the current catalog.',
+            message: roomMeta.schedulePending
+                ? 'Weekly schedules for this room will appear once the Room Allotment Chart for this semester is published and imported into the catalog.'
+                : 'No classes scheduled in this room in the current catalog.',
             icon: Icons.event_busy,
           )
         else

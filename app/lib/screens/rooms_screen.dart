@@ -29,23 +29,31 @@ class _RoomsScreenState extends State<RoomsScreen> {
   final _searchController = TextEditingController();
   Timer? _debounce;
   String _query = '';
-  String? _building;
+  String _building = kDefaultRoomBuildingTab;
   int _limit = _pageSize;
   RoomCatalog? _cachedCatalog;
   int? _cachedCoursesLen;
   int? _cachedExtraLen;
+  int? _cachedCampusLen;
 
-  RoomCatalog _roomCatalog(CatalogProvider catalog, List<dynamic> extraOccupied) {
+  RoomCatalog _roomCatalog(CatalogProvider catalog, SemesterDataProvider semester) {
     final coursesLen = catalog.courses.length;
-    final extraLen = extraOccupied.length;
+    final extraLen = semester.extraOccupied.length;
+    final campusLen = semester.campusRooms.length;
     if (_cachedCatalog != null &&
         _cachedCoursesLen == coursesLen &&
-        _cachedExtraLen == extraLen) {
+        _cachedExtraLen == extraLen &&
+        _cachedCampusLen == campusLen) {
       return _cachedCatalog!;
     }
-    _cachedCatalog = buildRoomCatalog(catalog.courses, extraOccupied: extraOccupied);
+    _cachedCatalog = buildRoomCatalog(
+      catalog.courses,
+      extraOccupied: semester.extraOccupied,
+      campusRooms: semester.campusRooms,
+    );
     _cachedCoursesLen = coursesLen;
     _cachedExtraLen = extraLen;
+    _cachedCampusLen = campusLen;
     return _cachedCatalog!;
   }
 
@@ -95,14 +103,17 @@ class _RoomsScreenState extends State<RoomsScreen> {
       );
     }
 
-    final roomCatalog = _roomCatalog(catalog, semester.extraOccupied);
-    final buildings = roomBuildingCounts(roomCatalog.rooms);
+    final roomCatalog = _roomCatalog(catalog, semester);
+    final buildingTabs = buildingTabCounts(roomCatalog.rooms);
     final filtered = filterRooms(
       roomCatalog.rooms,
       search: _query,
-      prefix: _building,
+      building: _building,
     );
     final visible = filtered.take(_limit).toList();
+    final lhcSections = _building == kDefaultRoomBuildingTab
+        ? groupLhRoomsByFloor(visible)
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -111,7 +122,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
           eyebrow: 'Campus',
           title: 'Rooms',
           subtitle: Text(
-            '${filtered.length} room${filtered.length == 1 ? '' : 's'} from catalog',
+            roomCatalog.usingCampusRoomFallback && _query.isEmpty
+                ? '${filtered.length} campus room${filtered.length == 1 ? '' : 's'} · schedule pending'
+                : '${filtered.length} room${filtered.length == 1 ? '' : 's'} from catalog',
             style: AppText.mono(size: T.fs12, color: T.ink3),
           ),
         ),
@@ -133,7 +146,15 @@ class _RoomsScreenState extends State<RoomsScreen> {
             ],
           ),
         ),
-        if (!roomCatalog.catalogHasVenues)
+        if (roomCatalog.usingCampusRoomFallback)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: StatusBanner(
+              kind: 'warn',
+              text: 'Room allotment for this semester is not released yet. Showing campus rooms from the last allotment chart; weekly schedules will appear when the catalog is updated.',
+            ),
+          )
+        else if (!roomCatalog.catalogHasVenues)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: StatusBanner(
@@ -160,13 +181,13 @@ class _RoomsScreenState extends State<RoomsScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              _buildingChip('All', _building == null, () => setState(() => _building = null)),
-              for (final b in buildings)
-                _buildingChip(
-                  '${b.code} (${b.count})',
-                  _building == b.code,
+              for (final tab in buildingTabs)
+                _buildingTab(
+                  tab.code,
+                  tab.count,
+                  _building == tab.code,
                   () => setState(() {
-                    _building = b.code;
+                    _building = tab.code;
                     _limit = _pageSize;
                   }),
                 ),
@@ -177,39 +198,80 @@ class _RoomsScreenState extends State<RoomsScreen> {
         Expanded(
           child: filtered.isEmpty
               ? EmptyState(
-                  message: 'No rooms match your search.',
+                  message: 'No rooms in this building match your search.',
                   icon: Icons.meeting_room_outlined,
                 )
-              : ListView.builder(
-                  controller: _scroll,
-                  padding: const EdgeInsets.only(bottom: 16),
-                  itemCount: visible.length + (visible.length < filtered.length ? 1 : 0),
-                  itemBuilder: (context, i) {
-                    if (i >= visible.length) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    return _roomRow(visible[i]);
-                  },
-                ),
+              : lhcSections != null
+                  ? ListView.builder(
+                      controller: _scroll,
+                      padding: const EdgeInsets.only(bottom: 16),
+                      itemCount: _lhcItemCount(lhcSections, visible.length < filtered.length),
+                      itemBuilder: (context, i) => _lhcItem(lhcSections, i),
+                    )
+                  : ListView.builder(
+                      controller: _scroll,
+                      padding: const EdgeInsets.only(bottom: 16),
+                      itemCount: visible.length + (visible.length < filtered.length ? 1 : 0),
+                      itemBuilder: (context, i) {
+                        if (i >= visible.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+                        return _roomRow(visible[i], badge: _building == 'LHC' ? 'LHC' : null);
+                      },
+                    ),
         ),
       ],
     );
   }
 
-  Widget _buildingChip(String label, bool selected, VoidCallback onTap) => Padding(
+  int _lhcItemCount(List<LhFloorSection> sections, bool hasMore) {
+    var count = 0;
+    for (final section in sections) {
+      count += 1 + section.rooms.length;
+    }
+    if (hasMore) count += 1;
+    return count;
+  }
+
+  Widget _lhcItem(List<LhFloorSection> sections, int index) {
+    var cursor = 0;
+    for (final section in sections) {
+      if (index == cursor) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Text(
+            section.label.toUpperCase(),
+            style: AppText.mono(size: T.fs11, weight: FontWeight.w600, color: T.ink3),
+          ),
+        );
+      }
+      cursor += 1;
+      for (final room in section.rooms) {
+        if (index == cursor) return _roomRow(room, badge: 'LHC');
+        cursor += 1;
+      }
+    }
+    return const Padding(
+      padding: EdgeInsets.all(16),
+      child: Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildingTab(String code, int count, bool selected, VoidCallback onTap) => Padding(
         padding: const EdgeInsets.only(right: 6),
         child: AppChoiceChip(
-          label: label,
+          label: '$code ($count)',
           selected: selected,
           onSelected: (_) => onTap(),
           compact: true,
         ),
       );
 
-  Widget _roomRow(RoomInfo room) {
+  Widget _roomRow(RoomInfo room, {String? badge}) {
+    final pill = badge ?? room.prefix;
     return InkWell(
       onTap: () => pushAppRoute(
         context,
@@ -227,13 +289,15 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   Text(room.name, style: AppText.mono(size: T.fs14, weight: FontWeight.w600)),
                   const SizedBox(height: 4),
                   Text(
-                    '${room.sessionCount} session${room.sessionCount == 1 ? '' : 's'}',
+                    room.schedulePending
+                        ? 'Schedule pending'
+                        : '${room.sessionCount} session${room.sessionCount == 1 ? '' : 's'}',
                     style: AppText.sans(size: T.fs12, color: T.ink3),
                   ),
                 ],
               ),
             ),
-            Pill(room.prefix, tint: T.surfaceSunk, edge: T.line, ink: T.ink2),
+            Pill(pill, tint: T.surfaceSunk, edge: T.line, ink: T.ink2),
             const SizedBox(width: 8),
             const Icon(Icons.chevron_right, size: 18),
           ],

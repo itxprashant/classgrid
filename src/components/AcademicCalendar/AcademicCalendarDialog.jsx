@@ -1,20 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useRef } from 'react';
 import AcademicCalendarContent from './AcademicCalendarContent';
+import { useDialogA11y } from '../../utils/useDialogA11y';
 import './AcademicCalendar.css';
 import './AcademicCalendarDialog.css';
 
 export default function AcademicCalendarDialog({ onClose }) {
-    useEffect(() => {
-        const onKey = (e) => {
-            if (e.key === 'Escape') onClose();
-        };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [onClose]);
+    const dialogRef = useRef(null);
+    useDialogA11y(dialogRef, { onClose, active: true });
 
     return (
         <div className="acal-backdrop" onClick={onClose} role="presentation">
             <div
+                ref={dialogRef}
                 className="acal-dialog panel"
                 role="dialog"
                 aria-modal="true"

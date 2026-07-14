@@ -92,7 +92,9 @@ export default function AdminFeedback() {
             )}
 
             {loading && (
-                <p className="admin__loading admin__body-pad">Loading feedback…</p>
+                <p className="admin__loading admin__body-pad" role="status" aria-live="polite">
+                    Loading feedback…
+                </p>
             )}
 
             {!loading && items.length === 0 && !error && (
@@ -104,11 +106,11 @@ export default function AdminFeedback() {
                     <table className="admin__table">
                         <thead>
                             <tr>
-                                <th>When</th>
-                                <th>Category</th>
-                                <th>From</th>
-                                <th>Client</th>
-                                <th>Message</th>
+                                <th scope="col">When</th>
+                                <th scope="col">Category</th>
+                                <th scope="col">From</th>
+                                <th scope="col">Client</th>
+                                <th scope="col">Message</th>
                             </tr>
                         </thead>
                         <tbody>

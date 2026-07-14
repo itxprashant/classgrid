@@ -8,9 +8,11 @@ import '../core/app_version.dart';
 import '../models/app_version_info.dart';
 import '../screens/intro_screen.dart';
 import '../screens/update_required_screen.dart';
+import '../storage/update_release_store.dart';
 import '../theme/app_palette_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import 'update_prompt_host.dart';
 
 enum _VersionGatePhase { intro, ready, updateRequired, checkFailed }
 
@@ -19,10 +21,12 @@ class VersionGate extends StatefulWidget {
   const VersionGate({
     super.key,
     required this.apiClient,
+    required this.releaseStore,
     required this.child,
   });
 
   final ApiClient apiClient;
+  final UpdateReleaseStore releaseStore;
   final Widget child;
 
   @override
@@ -33,7 +37,7 @@ class _VersionGateState extends State<VersionGate> {
   static const _minIntro = Duration(milliseconds: 1400);
 
   _VersionGatePhase _phase = _VersionGatePhase.intro;
-  AppVersionInfo? _required;
+  AppReleaseStatus? _status;
   String _installedVersion = '';
   int _installedBuild = 0;
   String? _checkError;
@@ -74,11 +78,11 @@ class _VersionGateState extends State<VersionGate> {
         return;
       }
 
-      final required = await AppVersionApi(widget.apiClient).fetchAndroidRequirement();
+      final status = await AppVersionApi(widget.apiClient).fetchAndroidReleaseStatus();
       await _waitMinIntro(started);
       if (!mounted) return;
 
-      if (required == null || required.version.isEmpty) {
+      if (status == null || status.minimum.version.isEmpty) {
         setState(() {
           _checkError = 'Invalid version response from server.';
           _phase = _VersionGatePhase.checkFailed;
@@ -86,16 +90,15 @@ class _VersionGateState extends State<VersionGate> {
         return;
       }
 
-      _required = required;
-      final behind = appVersionIsBehind(
+      _status = status;
+      final forceUpdate = isForceUpdateRequired(
+        status: status,
         installedVersion: _installedVersion,
         installedBuild: _installedBuild,
-        requiredVersion: required.version,
-        requiredBuild: required.build,
       );
 
       setState(() {
-        _phase = behind ? _VersionGatePhase.updateRequired : _VersionGatePhase.ready;
+        _phase = forceUpdate ? _VersionGatePhase.updateRequired : _VersionGatePhase.ready;
       });
     } catch (e) {
       await _waitMinIntro(started);
@@ -127,7 +130,14 @@ class _VersionGateState extends State<VersionGate> {
       case _VersionGatePhase.ready:
         return KeyedSubtree(
           key: const ValueKey('ready'),
-          child: widget.child,
+          child: UpdatePromptHost(
+            apiClient: widget.apiClient,
+            releaseStore: widget.releaseStore,
+            installedVersion: _installedVersion,
+            installedBuild: _installedBuild,
+            initialStatus: _status,
+            child: widget.child,
+          ),
         );
       case _VersionGatePhase.updateRequired:
         return KeyedSubtree(
@@ -135,7 +145,7 @@ class _VersionGateState extends State<VersionGate> {
           child: UpdateRequiredScreen(
             installedVersion: _installedVersion,
             installedBuild: _installedBuild,
-            required: _required!,
+            required: _status!.latest,
             onRetry: _runCheck,
           ),
         );

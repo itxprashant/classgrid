@@ -81,8 +81,8 @@ router.get('/students/search', withDb(async (req, res) => {
 
 router.get('/students/:kerberos/offerings', withDb(async (req, res) => {
     const kerberos = semesterData.normalizeKerberos(decodeURIComponent(req.params.kerberos || ''));
-    if (!kerberos || !/^[a-z0-9]{2,32}$/.test(kerberos)) {
-        res.status(400).json({ error: 'invalid_kerberos' });
+    if (!kerberos || !semesterData.isStudentKerberos(kerberos)) {
+        res.status(404).json({ error: 'student_not_found' });
         return;
     }
     const data = await semesterData.getStudentOfferings(kerberos);

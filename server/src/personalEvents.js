@@ -4,6 +4,7 @@ const express = require('express');
 const config = require('./config');
 const db = require('./db');
 const { requireSession } = require('./session');
+const { recordAuditSafe } = require('./auditLog');
 
 const router = express.Router();
 
@@ -118,6 +119,15 @@ function validateEventBody(body, { partial } = { partial: false }) {
     return { value: out };
 }
 
+function auditMetaFromRow(row) {
+    return {
+        id: row.id,
+        title: row.title,
+        type: row.type,
+        date: pgDateToKey(row.event_date),
+    };
+}
+
 router.get('/me/events', requireSession, async (req, res) => {
     if (!config.databaseUrl) {
         dbUnavailable(res);
@@ -195,8 +205,16 @@ router.post('/me/events', requireSession, async (req, res) => {
                 body.note,
             ]
         );
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'personal_event.created',
+            targetKind: 'personal_event',
+            targetId: row.id,
+            metadata: auditMetaFromRow(row),
+        });
         res.status(201).json({
-            event: rowToEvent(result.rows[0], req.session.name || kerberos),
+            event: rowToEvent(row, req.session.name || kerberos),
         });
     } catch (e) {
         console.error('[personalEvents] create failed:', e.message);
@@ -283,7 +301,15 @@ router.patch('/me/events/:id', requireSession, async (req, res) => {
             res.status(404).json({ error: 'not_found' });
             return;
         }
-        res.json({ event: rowToEvent(result.rows[0], req.session.name || kerberos) });
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'personal_event.updated',
+            targetKind: 'personal_event',
+            targetId: row.id,
+            metadata: auditMetaFromRow(row),
+        });
+        res.json({ event: rowToEvent(row, req.session.name || kerberos) });
     } catch (e) {
         console.error('[personalEvents] update failed:', e.message);
         res.status(500).json({ error: 'internal_error' });
@@ -312,14 +338,22 @@ router.delete('/me/events/:id', requireSession, async (req, res) => {
         const result = await db.query(
             `DELETE FROM personal_events
              WHERE id = $1::uuid AND kerberos = $2
-             RETURNING id`,
+             RETURNING id, event_date, title, type`,
             [id, kerberos]
         );
         if (result.rowCount === 0) {
             res.status(404).json({ error: 'not_found' });
             return;
         }
-        res.json({ ok: true, id: result.rows[0].id });
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'personal_event.deleted',
+            targetKind: 'personal_event',
+            targetId: row.id,
+            metadata: auditMetaFromRow(row),
+        });
+        res.json({ ok: true, id: row.id });
     } catch (e) {
         console.error('[personalEvents] delete failed:', e.message);
         res.status(500).json({ error: 'internal_error' });

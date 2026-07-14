@@ -19,6 +19,7 @@ import '../widgets/app_navigation.dart';
 import '../widgets/common.dart';
 import '../widgets/instructor_links.dart';
 import 'prof_detail_screen.dart';
+import 'course_detail_screen.dart';
 
 class CourseOfferingScreen extends StatefulWidget {
   const CourseOfferingScreen({
@@ -207,6 +208,20 @@ class _CourseOfferingScreenState extends State<CourseOfferingScreen> {
           ),
           const SizedBox(height: T.space16),
           _factsCard(course, offering),
+          if (offering.isActive) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => pushAppRoute(
+                  context,
+                  CourseDetailScreen(courseCode: widget.courseCode),
+                ),
+                icon: const Icon(Icons.history, size: 18),
+                label: const Text('Previous offerings'),
+              ),
+            ),
+            const SizedBox(height: T.space8),
+          ],
           _sessionsCard('Lecture', parseTimingStr(course.slot.lectureTiming), course.lectureHall),
           _sessionsCard('Tutorial', parseTimingStr(course.slot.tutorialTiming), null),
           _sessionsCard('Lab', parseTimingStr(course.slot.labTiming), null),

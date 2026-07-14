@@ -6,6 +6,7 @@ import {
     offeringTimingSummary,
     sortOfferingsBySemesterDesc,
 } from '../utils/historyApi';
+import { isStudentKerberos } from '../utils/kerberosMeta';
 import './StudentDetail.css';
 
 function formatHostel(hostel) {
@@ -21,8 +22,8 @@ export default function StudentDetail() {
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        if (!kerberos || !/^[a-z0-9]{2,32}$/.test(kerberos)) {
-            setError('Invalid kerberos id.');
+        if (!kerberos || !isStudentKerberos(kerberos)) {
+            setError('Invalid student kerberos id.');
             setLoading(false);
             return undefined;
         }

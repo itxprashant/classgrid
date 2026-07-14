@@ -37,6 +37,7 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
   bool _loading = false;
   bool _initialized = false;
   String? _markingsError;
+  String _building = kDefaultRoomBuildingTab;
   EmptyHallsResult? _cachedResult;
   String? _resultCacheKey;
 
@@ -388,12 +389,15 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
     final extraOccupied = semester.extraOccupied;
     final r = _resultFor(catalog, extraOccupied);
 
-    final groups = <String, List<EmptyHallEntry>>{};
-    for (final e in r.entries) {
-      final key = RegExp(r'^(\w+)').firstMatch(e.room)?.group(1) ?? 'Other';
-      (groups[key] ??= []).add(e);
-    }
-    final groupKeys = groups.keys.toList()..sort();
+    final buildingTabs = buildingTabCountsForRoomNames(r.entries.map((e) => e.room));
+    final filteredEntries = filterEntriesByBuilding(
+      r.entries,
+      _building,
+      (e) => e.room,
+    );
+    final lhcSections = _building == kDefaultRoomBuildingTab
+        ? groupLhEntriesByFloor(filteredEntries, (e) => e.room)
+        : null;
 
     return RefreshIndicator(
       onRefresh: _loadMarkings,
@@ -452,6 +456,26 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
               _stat('Tracked', '${r.totalTracked}', T.ink2),
             ]),
           ),
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                for (final tab in buildingTabs)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: AppChoiceChip(
+                      label: '${tab.code} (${tab.count})',
+                      selected: _building == tab.code,
+                      onSelected: (_) => setState(() => _building = tab.code),
+                      compact: true,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
           if (_loading) const LinearProgressIndicator(minHeight: 2),
           if (_markingsError != null)
             EmptyState(
@@ -466,8 +490,15 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
                   : 'Every tracked room is occupied. Try a different date or time.',
               icon: Icons.meeting_room_outlined,
             )
+          else if (filteredEntries.isEmpty)
+            EmptyState(
+              message: 'No rooms in $_building at this time. Try another building tab, date, or time.',
+              icon: Icons.meeting_room_outlined,
+            )
+          else if (lhcSections != null)
+            for (final section in lhcSections) _lhcSection(section)
           else
-            for (final key in groupKeys) _group(key, groups[key]!),
+            _blockSection(_building, filteredEntries),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
@@ -496,62 +527,82 @@ class _EmptyHallsScreenState extends State<EmptyHallsScreen> {
         ),
       );
 
-  Widget _group(String key, List<EmptyHallEntry> entries) {
-    entries.sort((a, b) {
-      double n(String s) => double.tryParse(s.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0;
-      return n(a.room).compareTo(n(b.room));
-    });
+  Widget _lhcSection(LhFloorEntrySection<EmptyHallEntry> section) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            section.label.toUpperCase(),
+            style: AppText.mono(size: T.fs11, weight: FontWeight.w600, color: T.ink3),
+          ),
+          const SizedBox(height: 8),
+          _hallWrap(section.items),
+        ],
+      ),
+    );
+  }
+
+  Widget _blockSection(String building, List<EmptyHallEntry> entries) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Text(key, style: AppText.mono(size: T.fs13, color: T.ink2, weight: FontWeight.w600)),
+            Text(building, style: AppText.mono(size: T.fs13, color: T.ink2, weight: FontWeight.w600)),
             const SizedBox(width: 6),
             Text('${entries.length}', style: AppText.mono(size: T.fs12, color: T.ink3)),
           ]),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final e in entries)
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InkWell(
-                      onTap: () => _openSchedule(e.room),
-                      borderRadius: BorderRadius.circular(T.rSm),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: e.marked ? T.dangerTint : T.successTint,
-                          border: Border.all(color: e.marked ? T.dangerEdge : T.successEdge),
-                          borderRadius: BorderRadius.circular(T.rSm),
-                        ),
-                        child: Text(e.room,
-                            style: AppText.mono(size: T.fs13, color: e.marked ? T.danger : T.successInk)),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    TextButton(
-                      onPressed: () => _onMarkTap(e),
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(48, 48),
-                        padding: const EdgeInsets.symmetric(horizontal: T.space12),
-                      ),
-                      child: Text(
-                        e.marked ? 'Details' : (context.read<AuthProvider>().isLoggedIn ? 'Mark' : 'Sign in'),
-                        style: AppText.sans(size: T.fs12, color: T.ink3),
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
+          _hallWrap(entries),
         ],
       ),
+    );
+  }
+
+  Widget _hallWrap(List<EmptyHallEntry> entries) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [for (final e in entries) _hallTile(e)],
+    );
+  }
+
+  Widget _hallTile(EmptyHallEntry e) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: () => _openSchedule(e.room),
+          borderRadius: BorderRadius.circular(T.rSm),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: e.marked ? T.dangerTint : T.successTint,
+              border: Border.all(color: e.marked ? T.dangerEdge : T.successEdge),
+              borderRadius: BorderRadius.circular(T.rSm),
+            ),
+            child: Text(
+              e.room,
+              style: AppText.mono(size: T.fs13, color: e.marked ? T.danger : T.successInk),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextButton(
+          onPressed: () => _onMarkTap(e),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: T.space12),
+          ),
+          child: Text(
+            e.marked ? 'Details' : (context.read<AuthProvider>().isLoggedIn ? 'Mark' : 'Sign in'),
+            style: AppText.sans(size: T.fs12, color: T.ink3),
+          ),
+        ),
+      ],
     );
   }
 }

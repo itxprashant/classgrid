@@ -19,6 +19,7 @@ const SemesterDataContext = createContext({
     explorerCourses: [],
     semesterCode: null,
     extraOccupied: [],
+    campusRooms: [],
     schedule: null,
     retry: async () => {},
 });
@@ -30,17 +31,30 @@ export function SemesterDataProvider({ children }) {
     const [explorerCourses, setExplorerCourses] = useState([]);
     const [semesterCode, setSemesterCode] = useState(null);
     const [extraOccupied, setExtraOccupied] = useState([]);
+    const [campusRooms, setCampusRooms] = useState([]);
     const [schedule, setSchedule] = useState(null);
+
+    const loadCampusRooms = useCallback(async () => {
+        try {
+            const res = await fetch(`${process.env.PUBLIC_URL || ''}/campus_rooms.json`);
+            if (!res.ok) return [];
+            const data = await res.json();
+            return Array.isArray(data.rooms) ? data.rooms : [];
+        } catch {
+            return [];
+        }
+    }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const [catalogRes, explorerRes, scheduleRes, extraRes] = await Promise.all([
+            const [catalogRes, explorerRes, scheduleRes, extraRes, roomsList] = await Promise.all([
                 apiFetch('/api/catalog'),
                 apiFetch('/api/catalog/explorer'),
                 apiFetch('/api/semester/schedule'),
                 apiFetch('/api/extra-occupied'),
+                loadCampusRooms(),
             ]);
 
             if (!catalogRes.ok) {
@@ -66,6 +80,7 @@ export function SemesterDataProvider({ children }) {
             setExplorerCourses(Array.isArray(explorer.courses) ? explorer.courses : courseList);
             setSemesterCode(catalog.semesterCode || scheduleData.semester?.code || null);
             setExtraOccupied(Array.isArray(extraData.slots) ? extraData.slots : []);
+            setCampusRooms(roomsList);
 
             const sched = createSemesterSchedule(scheduleData);
             setActiveSemesterSchedule(sched);
@@ -75,12 +90,13 @@ export function SemesterDataProvider({ children }) {
             setCourses([]);
             setExplorerCourses([]);
             setExtraOccupied([]);
+            setCampusRooms([]);
             setSchedule(null);
             setActiveSemesterSchedule(null);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [loadCampusRooms]);
 
     useEffect(() => {
         load();
@@ -94,10 +110,11 @@ export function SemesterDataProvider({ children }) {
             explorerCourses,
             semesterCode,
             extraOccupied,
+            campusRooms,
             schedule,
             retry: load,
         }),
-        [loading, error, courses, explorerCourses, semesterCode, extraOccupied, schedule, load]
+        [loading, error, courses, explorerCourses, semesterCode, extraOccupied, campusRooms, schedule, load]
     );
 
     return (

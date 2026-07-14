@@ -51,6 +51,9 @@ const config = {
         .split(',')
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean),
+
+    // Path to Firebase Admin SDK service account JSON (FCM broadcast). Optional.
+    firebaseServiceAccountPath: (process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim() || null,
 };
 
 config.isProd = config.nodeEnv === 'production';

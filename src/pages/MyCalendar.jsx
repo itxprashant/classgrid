@@ -35,6 +35,7 @@ import {
     patchLocalPersonalEvent,
     removeLocalPersonalEvent,
 } from '../utils/personalEventsLocal';
+import { useDialogA11y } from '../utils/useDialogA11y';
 import {
     eventActorFromUser,
 } from '../utils/calendarEvents';
@@ -613,6 +614,8 @@ export default function MyCalendar() {
     const [showClasses, setShowClasses] = useState(false);
     const [enrolledCodes, setEnrolledCodes] = useState([]);
     const migratedLocalRef = useRef(false);
+    const modalDialogRef = useRef(null);
+    const reportDialogRef = useRef(null);
 
     const plannerCourses = useMemo(() => loadPlannerCourses(), []);
     const courseOptions = useMemo(() => buildCourseOptions(catalogCourses), [catalogCourses]);
@@ -820,6 +823,11 @@ export default function MyCalendar() {
         setEventFormView('form');
     };
 
+    useDialogA11y(modalDialogRef, { onClose: closeModal, active: !!modal });
+
+    const closeReportDialog = () => setReportingEvent(null);
+    useDialogA11y(reportDialogRef, { onClose: closeReportDialog, active: !!reportingEvent });
+
     const updateModalDraft = (updater) => {
         setModal((prev) => {
             if (!prev || prev.type !== 'form') return prev;
@@ -849,15 +857,6 @@ export default function MyCalendar() {
             return { type: 'day', ...prev.pickCtx };
         });
     };
-
-    useEffect(() => {
-        if (!modal) return undefined;
-        const onKey = (e) => {
-            if (e.key === 'Escape') closeModal();
-        };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [modal]);
 
     const openEdit = (evt, dayCtx = null) => {
         setEventFormView('form');
@@ -1089,6 +1088,12 @@ export default function MyCalendar() {
             }
             role="button"
             tabIndex={0}
+            aria-label={[
+                e.isPersonal ? 'Personal event' : e.courseCode,
+                TYPE_LABELS[e.type],
+                e.title,
+                formatEventSchedule(e),
+            ].filter(Boolean).join(', ')}
             onClick={(ev) => {
                 ev.stopPropagation();
                 openEdit(e);
@@ -1386,6 +1391,7 @@ export default function MyCalendar() {
                     role="presentation"
                 >
                     <div
+                            ref={modalDialogRef}
                             className={
                                 'mycal__modal panel' +
                                 (modal.type === 'form' ? ' mycal__modal--form' : '') +
@@ -1794,10 +1800,11 @@ export default function MyCalendar() {
             {reportingEvent && (
                 <div
                     className="mycal__modal-backdrop"
-                    onClick={() => setReportingEvent(null)}
+                    onClick={closeReportDialog}
                     role="presentation"
                 >
                     <div
+                        ref={reportDialogRef}
                         className="mycal__modal mycal__modal--form panel"
                         role="dialog"
                         aria-modal="true"
@@ -1811,7 +1818,7 @@ export default function MyCalendar() {
                             <button
                                 type="button"
                                 className="btn btn--sm btn--ghost"
-                                onClick={() => setReportingEvent(null)}
+                                onClick={closeReportDialog}
                                 aria-label="Close"
                             >
                                 ×
@@ -1822,8 +1829,8 @@ export default function MyCalendar() {
                             targetKind="course_event"
                             targetId={reportingEvent.id}
                             contextLabel={`${reportingEvent.courseCode} · ${reportingEvent.title} · ${reportingEvent.date}`}
-                            onDone={() => setReportingEvent(null)}
-                            onCancel={() => setReportingEvent(null)}
+                            onDone={closeReportDialog}
+                            onCancel={closeReportDialog}
                         />
                     </div>
                 </div>

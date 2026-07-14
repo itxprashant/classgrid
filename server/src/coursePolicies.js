@@ -5,6 +5,7 @@ const config = require('./config');
 const db = require('./db');
 const { requireSession } = require('./session');
 const semesterData = require('./semesterData');
+const { recordAuditSafe } = require('./auditLog');
 
 const router = express.Router();
 
@@ -215,6 +216,22 @@ router.put('/courses/:courseCode/policy', requireSession, async (req, res, next)
             );
             rows = result.rows;
         }
+
+        recordAuditSafe({
+            req,
+            action: 'course_policy.upserted',
+            targetKind: 'course_policy',
+            targetId: `${semesterCode}:${courseCode}`,
+            metadata: {
+                semesterCode,
+                courseCode,
+                created: existing.length === 0,
+                hasMarkingScheme: Boolean(markingScheme),
+                hasAttendancePolicy: Boolean(attendancePolicy),
+                hasAuditWithdrawalPolicy: Boolean(auditWithdrawalPolicy),
+                hasOtherNotes: Boolean(otherNotes),
+            },
+        });
 
         res.json({ policy: rowToPolicy(rows[0]) });
     } catch (e) {

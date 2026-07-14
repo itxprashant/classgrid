@@ -19,15 +19,17 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 export default function RoomDetail() {
     const { roomSlug } = useParams();
-    const { courses, extraOccupied, semesterCode } = useSemesterData();
+    const { courses, extraOccupied, campusRooms, semesterCode } = useSemesterData();
     const roomName = slugToRoom(roomSlug);
     const { rooms, sessionsByRoom } = useMemo(
-        () => buildRoomCatalog(courses, extraOccupied),
-        [courses, extraOccupied]
+        () => buildRoomCatalog(courses, extraOccupied, campusRooms),
+        [courses, extraOccupied, campusRooms]
     );
     const [view, setView] = useState('list');
 
-    const roomExists = rooms.some((r) => r.name === roomName);
+    const roomMeta = rooms.find((r) => r.name === roomName);
+    const roomExists = Boolean(roomMeta);
+    const schedulePending = roomMeta?.schedulePending ?? false;
     const sessions = useMemo(
         () => getSessionsForRoom(sessionsByRoom, roomName),
         [sessionsByRoom, roomName]
@@ -73,8 +75,10 @@ export default function RoomDetail() {
                 <div className="rd__eyebrow">{roomPrefix(roomName)}</div>
                 <h1 className="rd__title serif">{roomName}</h1>
                 <p className="rd__sub">
-                    {sessions.length} session{sessions.length === 1 ? '' : 's'} this semester
-                    {overlapCount > 0 && (
+                    {schedulePending
+                        ? 'Room allotment for this semester is not released yet.'
+                        : `${sessions.length} session${sessions.length === 1 ? '' : 's'} this semester`}
+                    {!schedulePending && overlapCount > 0 && (
                         <span className="rd__warn">
                             {' '}· {overlapCount} overlap{overlapCount === 1 ? '' : 's'} flagged
                         </span>
@@ -111,8 +115,9 @@ export default function RoomDetail() {
             {sessions.length === 0 ? (
                 <div className="rd__empty panel">
                     <p className="muted">
-                        No classes are scheduled in this room in the current catalog. It may still appear
-                        on the rooms list if it is referenced without timing data.
+                        {schedulePending
+                            ? 'Weekly schedules for this room will appear here once the Room Allotment Chart for this semester is published and imported into the catalog.'
+                            : 'No classes are scheduled in this room in the current catalog. It may still appear on the rooms list if it is referenced without timing data.'}
                     </p>
                 </div>
             ) : view === 'calendar' ? (

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Extract course → venues map from room allotment PDF. Prints JSON to stdout."""
 
+import argparse
 import json
 import os
 import re
@@ -8,6 +9,7 @@ import ssl
 import sys
 import urllib.request
 from collections import defaultdict
+from datetime import datetime, timezone
 
 try:
     import PyPDF2
@@ -21,6 +23,8 @@ PDF_URL = os.environ.get(
     'https://web.iitd.ac.in/~tti/timetable/Room_Allotment_Chart_2025_2026_2.pdf',
 )
 LOCAL_PDF_PATH = os.path.join(SCRIPT_DIR, '../data/Room_Allotment_Chart.pdf')
+SOURCE_PDF_NAME = os.path.basename(PDF_URL)
+SOURCE_SEMESTER = os.environ.get('ROOM_ALLOTMENT_SOURCE_SEMESTER', '2502')
 
 COURSE_REGEX = r"\b([A-Z]{3}\d{3,4}[A-Z]?)\b"
 VENUE_PATTERNS = [
@@ -36,7 +40,11 @@ VENUE_REGEX = r"(" + "|".join(VENUE_PATTERNS) + r")"
 def normalize_venue(v):
     if not v:
         return None
-    return " ".join(v.split())
+    s = " ".join(v.split())
+    lh = re.match(r"^LH\s*(.+)$", s, re.I)
+    if lh:
+        return f"LH {lh.group(1).strip()}"
+    return s
 
 
 def parse_pdf(pdf_path):
@@ -72,22 +80,63 @@ def parse_pdf(pdf_path):
     return {k: sorted(v) for k, v in pdf_courses.items()}
 
 
+def unique_rooms(pdf_courses):
+    rooms = set()
+    for venues in pdf_courses.values():
+        for v in venues:
+            n = normalize_venue(v)
+            if n:
+                rooms.add(n)
+    return sorted(rooms, key=_room_sort_key)
+
+
+def _room_sort_key(name):
+    prefix = re.match(r"^(\w+)", name)
+    p = prefix.group(1) if prefix else "Other"
+    nums = re.findall(r"[\d.]+", name)
+    num = float(nums[0]) if nums else 0.0
+    return (p, num, name)
+
+
 def download_pdf(url, local_path):
     context = ssl._create_unverified_context()
     with urllib.request.urlopen(url, context=context) as response, open(local_path, 'wb') as out:
         out.write(response.read())
 
 
-def main():
-    pdf_path = LOCAL_PDF_PATH
+def ensure_pdf(pdf_path):
     if not os.path.exists(pdf_path):
         try:
             download_pdf(PDF_URL, pdf_path)
         except Exception as e:
             print(f"PDF download failed: {e}", file=sys.stderr)
             sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Extract venues from room allotment PDF")
+    parser.add_argument(
+        '--rooms-list',
+        action='store_true',
+        help='Emit unique campus room names (for client fallback list)',
+    )
+    args = parser.parse_args()
+
+    pdf_path = LOCAL_PDF_PATH
+    ensure_pdf(pdf_path)
     data = parse_pdf(pdf_path)
-    json.dump(data, sys.stdout)
+
+    if args.rooms_list:
+        payload = {
+            'sourcePdf': SOURCE_PDF_NAME,
+            'sourceSemester': SOURCE_SEMESTER,
+            'generatedAt': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'rooms': unique_rooms(data),
+        }
+        json.dump(payload, sys.stdout, indent=2)
+        sys.stdout.write('\n')
+    else:
+        json.dump(data, sys.stdout)
 
 
 if __name__ == '__main__':

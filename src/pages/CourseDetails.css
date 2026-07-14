@@ -40,6 +40,10 @@
     margin-bottom: 12px;
 }
 
+.cd__head-action {
+    margin-left: auto;
+}
+
 .cd__not-offered {
     font-size: 0.68rem;
     letter-spacing: 0.06em;

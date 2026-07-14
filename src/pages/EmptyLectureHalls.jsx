@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useSemesterData } from '../data/SemesterDataContext';
 import SemesterDataGate from '../data/SemesterDataGate';
 import { describeAcademicDay } from '../utils/semesterSchedule';
 import { computeEmptyHallsState } from '../utils/emptyHalls';
-import { normalizeRoomName, roomToSlug } from '../utils/roomSchedule';
+import { normalizeRoomName, roomToSlug, DEFAULT_ROOM_BUILDING_TAB, getBuildingTabCountsForRoomNames, filterEntriesByBuilding, groupLhEntriesByFloor } from '../utils/roomSchedule';
 import {
     fetchOccupiedRooms,
     createOccupiedRoom,
@@ -14,6 +14,7 @@ import {
 import './EmptyLectureHalls.css';
 import ReportContentPanel from '../components/ReportContent/ReportContentPanel';
 import FormField from '../components/FormField/FormField';
+import { useDialogA11y } from '../utils/useDialogA11y';
 
 function formatDateYMD(date) {
     const y = date.getFullYear();
@@ -50,24 +51,6 @@ function addMinutesToHHMM(hhmm, minutes) {
     return `${String(h).padStart(2, '0')}${String(m).padStart(2, '0')}`;
 }
 
-function groupHalls(entries) {
-    const groups = {};
-    entries.forEach(({ room }) => {
-        const match = room.match(/^(\w+)\s*(.*)/);
-        const key = match ? match[1] : 'Other';
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(room);
-    });
-    Object.keys(groups).forEach((key) => {
-        groups[key].sort((a, b) => {
-            const na = parseFloat(a.replace(/[^\d.]/g, '')) || 0;
-            const nb = parseFloat(b.replace(/[^\d.]/g, '')) || 0;
-            return na - nb;
-        });
-    });
-    return groups;
-}
-
 const EmptyLectureHalls = () => {
     const { user, login } = useAuth();
     const { courses, extraOccupied, schedule } = useSemesterData();
@@ -84,6 +67,7 @@ const EmptyLectureHalls = () => {
     const [markSubmitting, setMarkSubmitting] = useState(false);
     const [markError, setMarkError] = useState(null);
     const [markingDialogView, setMarkingDialogView] = useState('detail');
+    const [building, setBuilding] = useState(DEFAULT_ROOM_BUILDING_TAB);
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -137,8 +121,20 @@ const EmptyLectureHalls = () => {
         [courses, extraOccupied, currentTime, manualMarkings]
     );
 
-    const grouped = useMemo(() => groupHalls(displayEntries), [displayEntries]);
-    const groupKeys = Object.keys(grouped).sort();
+    const buildingTabs = useMemo(
+        () => getBuildingTabCountsForRoomNames(displayEntries.map((e) => e.room)),
+        [displayEntries]
+    );
+
+    const filteredEntries = useMemo(
+        () => filterEntriesByBuilding(displayEntries, building),
+        [displayEntries, building]
+    );
+
+    const lhcFloorSections = useMemo(
+        () => (building === 'LHC' ? groupLhEntriesByFloor(filteredEntries) : null),
+        [building, filteredEntries]
+    );
 
     const hallEntryByRoom = useMemo(() => {
         const map = new Map();
@@ -186,6 +182,16 @@ const EmptyLectureHalls = () => {
         setMarkError(null);
     };
 
+    const closeMarkingDetail = useCallback(() => {
+        setSelectedMarking(null);
+        setMarkingDialogView('detail');
+    }, []);
+
+    const markingDetailDialogRef = useRef(null);
+    const markRoomDialogRef = useRef(null);
+    useDialogA11y(markingDetailDialogRef, { onClose: closeMarkingDetail, active: !!selectedMarking });
+    useDialogA11y(markRoomDialogRef, { onClose: closeMarkDialog, active: !!markDialog });
+
     const submitMark = async () => {
         if (!markDialog) return;
         setMarkSubmitting(true);
@@ -223,6 +229,54 @@ const EmptyLectureHalls = () => {
     };
 
     const timeValue = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+
+    const renderHallRow = (room) => {
+        const entry = hallEntryByRoom.get(room);
+        const isMarked = entry && entry.status === 'marked';
+        const scheduleTo = `/rooms/${roomToSlug(room)}`;
+        return (
+            <div
+                key={room}
+                className={'eh__hall-row' + (isMarked ? ' eh__hall-row--marked' : '')}
+            >
+                <Link
+                    to={scheduleTo}
+                    className={'eh__hall' + (isMarked ? ' eh__hall--marked' : '')}
+                >
+                    {room}
+                </Link>
+                {isMarked ? (
+                    <button
+                        type="button"
+                        className="eh__hall-action"
+                        onClick={() => {
+                            setMarkingDialogView('detail');
+                            setSelectedMarking(entry.marking);
+                        }}
+                        aria-label={`Who marked ${room} occupied`}
+                    >
+                        Details
+                    </button>
+                ) : user ? (
+                    <button
+                        type="button"
+                        className="eh__hall-action"
+                        onClick={() => openMarkDialog(room)}
+                    >
+                        Mark
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        className="eh__hall-action eh__hall-action--ghost"
+                        onClick={login}
+                    >
+                        Sign in
+                    </button>
+                )}
+            </div>
+        );
+    };
 
     return (
         <SemesterDataGate>
@@ -308,6 +362,22 @@ const EmptyLectureHalls = () => {
                 </div>
             </div>
 
+            <div className="eh__tabs" role="tablist" aria-label="Building">
+                {buildingTabs.map(({ code, count }) => (
+                    <button
+                        key={code}
+                        type="button"
+                        role="tab"
+                        aria-selected={building === code}
+                        className={'eh__tab' + (building === code ? ' is-active' : '')}
+                        onClick={() => setBuilding(code)}
+                    >
+                        {code}
+                        <span className="eh__tab-count tnum">{count}</span>
+                    </button>
+                ))}
+            </div>
+
             {markingsLoading && displayEntries.length === 0 ? (
                 <p className="eh__loading muted">Loading room markings…</p>
             ) : displayEntries.length === 0 ? (
@@ -315,74 +385,39 @@ const EmptyLectureHalls = () => {
                     <strong>Every tracked room is occupied</strong>
                     Try a different date or time, or check back later.
                 </div>
-            ) : (
+            ) : filteredEntries.length === 0 ? (
+                <div className="empty">
+                    <strong>No rooms in {building} at this time</strong>
+                    Try another building tab, date, or time.
+                </div>
+            ) : lhcFloorSections ? (
                 <div className="eh__groups">
-                    {groupKeys.map((key) => (
-                        <section key={key} className="eh__group">
+                    {lhcFloorSections.map(({ floor, label, entries }) => (
+                        <section key={floor} className="eh__group">
                             <header className="eh__group-head">
-                                <h2 className="eh__group-title">
-                                    <span className="mono">{key}</span>
-                                    <span className="muted tnum">{grouped[key].length}</span>
-                                </h2>
+                                <h2 className="eh__floor-title">{label}</h2>
                                 <span className="eh__group-rule" aria-hidden="true" />
                             </header>
                             <div className="eh__halls">
-                                {grouped[key].map((room) => {
-                                    const entry = hallEntryByRoom.get(room);
-                                    const isMarked = entry && entry.status === 'marked';
-                                    const scheduleTo = `/rooms/${roomToSlug(room)}`;
-                                    return (
-                                        <div
-                                            key={room}
-                                            className={
-                                                'eh__hall-row' +
-                                                (isMarked ? ' eh__hall-row--marked' : '')
-                                            }
-                                        >
-                                            <Link
-                                                to={scheduleTo}
-                                                className={
-                                                    'eh__hall' +
-                                                    (isMarked ? ' eh__hall--marked' : '')
-                                                }
-                                            >
-                                                {room}
-                                            </Link>
-                                            {isMarked ? (
-                                                <button
-                                                    type="button"
-                                                    className="eh__hall-action"
-                                                    onClick={() => {
-                                                        setMarkingDialogView('detail');
-                                                        setSelectedMarking(entry.marking);
-                                                    }}
-                                                    aria-label={`Who marked ${room} occupied`}
-                                                >
-                                                    Details
-                                                </button>
-                                            ) : user ? (
-                                                <button
-                                                    type="button"
-                                                    className="eh__hall-action"
-                                                    onClick={() => openMarkDialog(room)}
-                                                >
-                                                    Mark
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    className="eh__hall-action eh__hall-action--ghost"
-                                                    onClick={login}
-                                                >
-                                                    Sign in
-                                                </button>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                {entries.map((entry) => renderHallRow(entry.room))}
                             </div>
                         </section>
                     ))}
+                </div>
+            ) : (
+                <div className="eh__groups">
+                    <section className="eh__group">
+                        <header className="eh__group-head">
+                            <h2 className="eh__group-title">
+                                <span className="mono">{building}</span>
+                                <span className="muted tnum">{filteredEntries.length}</span>
+                            </h2>
+                            <span className="eh__group-rule" aria-hidden="true" />
+                        </header>
+                        <div className="eh__halls">
+                            {filteredEntries.map((entry) => renderHallRow(entry.room))}
+                        </div>
+                    </section>
                 </div>
             )}
 
@@ -394,13 +429,11 @@ const EmptyLectureHalls = () => {
             {selectedMarking && (
                 <div
                     className="eh__dialog-backdrop"
-                    onClick={() => {
-                        setSelectedMarking(null);
-                        setMarkingDialogView('detail');
-                    }}
+                    onClick={closeMarkingDetail}
                     role="presentation"
                 >
                     <div
+                        ref={markingDetailDialogRef}
                         className="eh__dialog panel"
                         role="dialog"
                         aria-modal="true"
@@ -529,6 +562,7 @@ const EmptyLectureHalls = () => {
                     role="presentation"
                 >
                     <div
+                        ref={markRoomDialogRef}
                         className="eh__dialog panel"
                         role="dialog"
                         aria-modal="true"

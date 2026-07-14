@@ -7,7 +7,7 @@
 #   ./deploy.sh                        # build + upload (static + API)
 #   ./deploy.sh --setup                # first-time nginx + certbot + systemd, then deploy
 #   ./deploy.sh --static               # SPA only
-#   ./deploy.sh --api                  # API + data files only
+#   ./deploy.sh --api                  # API only (rsync server/, restart systemd)
 #   ./deploy.sh --apk                  # upload dist/app/classgrid.apk to nginx web root
 #
 # SSH: uses ~/.ssh/config Host alias mydevclub by default (same as `ssh mydevclub`).
@@ -256,6 +256,7 @@ deploy_apk() {
 
 deploy_api() {
     echo "Uploading API source to ${REMOTE}:${REMOTE_API_DIR}/ ..."
+    echo "(No semester data import — use scripts/db/run_on_prod.sh for Postgres seed jobs.)"
     rsync -avz --delete \
         --exclude node_modules \
         --exclude data \
@@ -305,10 +306,10 @@ case "${1:-}" in
         echo ""
         echo "Legacy explicit SSH: DEPLOY_HOST, DEPLOY_USER, SSH_IDENTITY"
         echo ""
-        echo "  (no args)  build + rsync static and API"
+        echo "  (no args)  build + rsync static and API (no DB imports)"
         echo "  --setup    configure nginx + certbot + systemd, then deploy"
         echo "  --static   only build and rsync the CRA bundle"
-        echo "  --api      only rsync the API and restart classgrid-api"
+        echo "  --api      only rsync the API and restart classgrid-api (no DB imports)"
         echo "  --apk      only rsync the release APK to /app/classgrid.apk on the web host"
         ;;
     "")

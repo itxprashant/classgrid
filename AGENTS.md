@@ -47,12 +47,18 @@ Routes (declared in [src/App.js](src/App.js)):
 - `/student/:kerberos` → [src/pages/StudentDetail.jsx](src/pages/StudentDetail.jsx)
   — registered courses (past and current), branch/entry year from kerberos, optional hostel from `students` table.
 - `/rooms` → [src/pages/RoomSchedules.jsx](src/pages/RoomSchedules.jsx) —
-  browse all campus rooms from the catalog (`lectureHall` + extra-occupied API);
-  search by name and filter by building prefix (e.g. LH). Primary entry to **Empty halls**
-  via button → `/empty-halls`.
+  browse campus rooms from the active catalog (`lectureHall` + extra-occupied API);
+  when the catalog has no venue data yet, merges the static
+  [`campus_rooms.json`](public/campus_rooms.json) fallback (last room allotment PDF;
+  **Schedule pending** labels, no weekly sessions). Search by name; **building tabs**
+  below search (**LHC** default, Blocks **I**–**VI** via `roomBuildingGroup` in
+  [roomSchedule.js](src/utils/roomSchedule.js); LHC tab groups rooms by floor — first
+  digit after `LH`, e.g. `LH 121` → Floor 1). Primary entry to **Empty halls** via
+  button → `/empty-halls`.
 - `/rooms/:roomSlug` → [src/pages/RoomDetail.jsx](src/pages/RoomDetail.jsx) —
   per-room weekly schedule as a list or calendar grid; data from
-  [src/utils/roomSchedule.js](src/utils/roomSchedule.js).
+  [src/utils/roomSchedule.js](src/utils/roomSchedule.js). Fallback-only rooms show
+  an empty schedule with allotment-not-released copy until catalog venues arrive.
 - `/empty-halls` → [src/pages/EmptyLectureHalls.jsx](src/pages/EmptyLectureHalls.jsx)
   — free campus rooms at a chosen **date and time** vs the live timetable
   (lecture, tutorial, and lab slots; all `lectureHall` tokens, not LH-only).
@@ -80,8 +86,14 @@ Routes (declared in [src/App.js](src/App.js)):
   `ADMIN_KERBERSES` (see [server/src/adminAuth.js](server/src/adminAuth.js)).
   Separate chrome (no `Navbar`/`Footer`). Tabs: **Overview** (health + inbox
   counts), **Feedback** (read-only `app_feedback` table), **Reports** (triage
-  `content_reports`: dismiss/review, or remove reported UGC and mark `actioned`).
-  Client gate: `GET /api/admin/me`; data via [adminApi.js](src/utils/adminApi.js).
+  `content_reports`: dismiss/review, or remove reported UGC and mark `actioned`),
+  **Push** (`/admin/push` — FCM broadcast to Android; see [docs/FCM_SETUP.md](docs/FCM_SETUP.md)),
+  **Logs** (`/admin/logs` — paginated `app_audit_log` with action/target/date/actor
+  filters; detail panel with metadata). Client gate: `GET /api/admin/me`; data via
+  [adminApi.js](src/utils/adminApi.js) and [adminAuditLog.js](src/utils/adminAuditLog.js).
+  **UI register:** dense product tool, not public editorial pages — styles live in
+  [admin.css](src/pages/admin/admin.css) only; see [Admin surfaces](#admin-surfaces)
+  in [docs/DESIGN.md](docs/DESIGN.md) and [Admin panel UI](#admin-panel-ui-agents) below.
 
 `Navbar` links: Plan · **Explore** (dropdown: Courses · Professors · Students) · Rooms · Calendar (plus IITD login). **Empty halls** is linked from `/rooms` (not a top-level nav item).
 `Footer` wraps every public route; `/admin*` uses its own shell without navbar/footer.
@@ -97,7 +109,8 @@ Routes (declared in [src/App.js](src/App.js)):
   planner cache; signed-in planner and calendars fetch from the API. Auth
   state lives in [src/auth/AuthContext.jsx](src/auth/AuthContext.jsx).
   Semester catalog data (active + explorer) loads at boot via
-  [SemesterDataContext.jsx](src/data/SemesterDataContext.jsx).
+  [SemesterDataContext.jsx](src/data/SemesterDataContext.jsx) (also fetches static
+  `/campus_rooms.json` for the rooms browse fallback when catalog venues are missing).
 - No CSS framework — hand-authored CSS using design tokens in
   [src/index.css](src/index.css) and shared primitives in
   [src/styles/ui.css](src/styles/ui.css).
@@ -219,6 +232,9 @@ applied migrations in place. `./deploy.sh --api` does **not** run migrations.
 | `011_feedback_reports.sql` | `app_feedback`, `content_reports` | Feature suggestions (optional auth) + UGC reports (session required; triaged via `/admin`) |
 | `012_admin_report_review.sql` | `content_reports` | `reviewed_by_kerberos`, `reviewed_at` audit columns for admin triage |
 | `013_students.sql` | `students` | Optional per-kerberos profile overlay (`hostel`; null until populated) + roster kerberos search index |
+| `014_app_release_changelog.sql` | `app_release_config` (min columns), `app_release_history` | Optional vs force-update thresholds; per-release changelog notes |
+| `015_app_audit_log.sql` | `app_audit_log` | Structured audit trail for UGC writes, auth, and admin actions |
+| `016_user_fcm_tokens.sql` | `user_fcm_tokens` | Android FCM device tokens (optional kerberos for signed-in multicast) |
 
 Azure NSG `myvm-nsg` exposes TCP **5432** publicly for remote admin (DBeaver).
 Restrict the rule to your IP when you can. The API connects on `127.0.0.1:5432`.
@@ -293,9 +309,12 @@ Semester reference data is stored in Postgres (migration `008_semester_data.sql`
 | `course_rosters` | `(semester_code, course_code, student_kerberos)` + name |
 | `students` | `kerberos` PK + optional `hostel` (profile overlay; search uses rosters/enrollments) |
 | `extra_occupied_slots` | Legacy overlay slots not in the catalog |
-| `app_release_config` | Minimum Android APK version + download URL |
+| `app_release_config` | Android **latest** APK (`version`, `build`, `download_url`) + **minimum** force-update floor (`minimum_version`, `minimum_build`) |
+| `app_release_history` | One row per `(platform, build)` with `release_notes` (from [CHANGELOG.md](CHANGELOG.md)) and `published_at` |
 
 Import via [`scripts/db/`](scripts/db/) (see [README.md](README.md)). Legacy `src/courses.json`, `src/studentCourses.json`, `src/courseStudents.json`, and `src/extra_occupied.json` are seed inputs only — not bundled into clients.
+
+**Client-bundled campus rooms** (not Postgres): [`data/campus_rooms.json`](data/campus_rooms.json) — unique venue names from the last room allotment PDF. Served at `/campus_rooms.json` (web) and `app/assets/campus_rooms.json` (Flutter). Regenerate with [`scripts/generate_campus_rooms.sh`](scripts/generate_campus_rooms.sh) (`extract_venue_map.py --rooms-list`); deploy static assets after regen. Used only when the active catalog has no `lectureHall` — does **not** replace `sync_venues.js` for Postgres venue sync.
 
 **Course object shape** (in `catalog_courses.course_data`):
   ```jsonc
@@ -364,6 +383,26 @@ shape used everywhere downstream is
 | Course policy | `course_policies` | Enrolled students only (active semester) | `GET/PUT /api/courses/:code/policy` — [coursePolicyApi.js](src/utils/coursePolicyApi.js), [coursePolicies.js](server/src/coursePolicies.js), [course_policy_api.dart](app/lib/api/course_policy_api.dart) |
 | Feature feedback | `app_feedback` | Optional kerberos attribution | `POST /api/feedback` — [feedbackApi.js](src/utils/feedbackApi.js), [feedback.js](server/src/feedback.js), [feedback_api.dart](app/lib/api/feedback_api.dart) |
 | Content reports | `content_reports` | Session required; server-side target snapshot | `POST /api/reports` — [reportsApi.js](src/utils/reportsApi.js), [reports.js](server/src/reports.js), [reports_api.dart](app/lib/api/reports_api.dart); admin triage via `/api/admin/*` |
+| Audit log | `app_audit_log` | Append-only action history (admin read) | [auditLog.js](server/src/auditLog.js) — written by UGC/auth/admin routers; `GET /api/admin/audit-log` |
+| FCM device tokens | `user_fcm_tokens` | Android install tokens (kerberos when logged in) | `POST/DELETE /api/me/fcm-token` — [fcmTokens.js](server/src/fcmTokens.js), [fcm_api.dart](app/lib/api/fcm_api.dart) |
+| FCM admin broadcast | n/a (Firebase) | Operator sends via admin panel | `POST /api/admin/push` — [firebaseAdmin.js](server/src/firebaseAdmin.js); requires `FIREBASE_SERVICE_ACCOUNT_PATH` |
+
+**Audit logging** — [server/src/auditLog.js](server/src/auditLog.js) inserts rows
+after successful writes via `recordAuditSafe()` (failures are logged, never block
+the user request). Actions use dot notation (`course_event.created`, `auth.login`,
+`admin.report.reviewed`, …). Metadata holds summaries only — no JWTs, OAuth codes,
+or full policy/feedback bodies. Optional `X-ClassGrid-Client: web|android` header;
+`req.requestId` (UUID) may appear in metadata for correlation.
+
+**Logged:** shared/personal calendar CRUD, room mark/unmark, course policy upsert,
+feedback submit, content report file, auth login/logout, admin report triage and
+content deletes.
+
+**Not logged (noisy mobile sync):** `PUT /api/me/plan`, all `/api/me/attendance*`,
+all `/api/me/reminders*`.
+
+Apply migration `015` on prod (`migrate.sh`) before `./deploy.sh --api` when
+shipping audit instrumentation. No retention job in v1 — prune old rows manually if needed.
 
 **Planner (Generator)** — keys synced to `localStorage` on every change:
 
@@ -450,7 +489,7 @@ file under `server/db/migrations/`.
 A small Express app. Files:
 
 - [server/src/index.js](server/src/index.js) — wires `cookie-parser`, JSON,
-  `trust proxy 1`, and routers (`/auth`, `/api` → courses, catalog,
+  `trust proxy 1`, per-request `req.requestId`, and routers (`/auth`, `/api` → courses, catalog,
   calendarEvents, planner, occupiedRooms, personalEvents, reminders, attendance,
   semesterRoutes, history, coursePolicies, feedback, reports). `GET /` returns `{ name, ok }`.
 - [server/src/config.js](server/src/config.js) — env loader. Looks for
@@ -502,11 +541,17 @@ A small Express app. Files:
   - `GET /api/catalog/meta` — `{ semesterCode, count, etag }` for cheap
     revalidation. Web SPA loads active catalog + explorer via
     [SemesterDataContext.jsx](src/data/SemesterDataContext.jsx) at boot.
-- [server/src/appVersion.js](server/src/appVersion.js) — minimum Flutter APK
-  from `app_release_config` table. `GET /api/app/version` →
-  `{ android: { version, build, downloadUrl } }`. Release APK at
-  `https://classgrid.devclub.in/app/classgrid.apk` (`./deploy.sh --apk`).
-  Run `./scripts/release-android-apk.sh` to bump DB row + deploy.
+- [server/src/appVersion.js](server/src/appVersion.js) — Android release gate + changelog (public):
+  - `GET /api/app/version` — `{ android: { version, build, downloadUrl, minimum, latest } }`.
+    Flat `version` / `build` / `downloadUrl` alias **latest** (keeps web
+    [AndroidAppPromo.jsx](src/components/AndroidAppPromo/AndroidAppPromo.jsx) working).
+    `minimum` = force-update floor; `latest` includes `releaseNotes` for the
+    newest APK. Source: `app_release_config` + notes join on `app_release_history`.
+  - `GET /api/app/changelog?platform=android&limit=&offset=` — paginated
+    `{ releases: [{ version, build, downloadUrl, releaseNotes, publishedAt }], total }`.
+  - Release APK at `https://classgrid.devclub.in/app/classgrid.apk` (stable) and
+    versioned `classgrid-X.Y.Z+N.apk`. See [Android APK release](#android-apk-release)
+    below.
 - [server/src/db.js](server/src/db.js) — lazy `pg` pool from `DATABASE_URL`.
 - [server/src/planner.js](server/src/planner.js) — per-user timetable plan:
   - `GET /api/me/plan` — load saved plan (requires session).
@@ -560,6 +605,9 @@ A small Express app. Files:
   - `POST /api/feedback` — `{ message, category?, pageContext?, client? }`; attaches kerberos when logged in; `429 rate_limited` after 10/hour per kerberos.
 - [server/src/reports.js](server/src/reports.js) — **content reports** (session required):
   - `POST /api/reports` — `{ targetKind, targetId, reason, details? }`; builds `target_snapshot` server-side; `409 duplicate_report` for open duplicate; `404 target_not_found`.
+- [server/src/auditLog.js](server/src/auditLog.js) — **audit trail** (insert-only helper):
+  - `recordAuditSafe({ req, action, targetKind, targetId, metadata, actor?, client? })` — best-effort `INSERT INTO app_audit_log`; no-op when `DATABASE_URL` unset.
+  - `auditActorFromSession(session)` — `{ kerberos, name }` for optional-session routes (feedback).
 - [server/src/adminAuth.js](server/src/adminAuth.js) — **admin gate** (session + allowlist):
   - Parses `ADMIN_KERBERSES` from env (comma-separated lowercase kerberos ids; empty list → all admin routes 403).
   - `requireAdmin` middleware: 401 `not_authenticated`, 403 `not_admin`.
@@ -568,10 +616,16 @@ A small Express app. Files:
   - `GET /api/admin/summary` — health stats, explorer counts, feedback totals, open report count.
   - `GET /api/admin/feedback?limit=&offset=&category=` — paginated `app_feedback`.
   - `GET /api/admin/reports?status=&limit=&offset=` — paginated `content_reports`.
+  - `GET /api/admin/audit-log?limit=&offset=&action=&targetKind=&since=&actorKerberos=` — paginated `app_audit_log` (newest first).
   - `PATCH /api/admin/reports/:id` — `{ status }` (`open` \| `reviewed` \| `dismissed` \| `actioned`); sets `reviewed_by_kerberos` + `reviewed_at`.
   - `DELETE /api/admin/content/course-events/:id` — admin delete (no creator check).
   - `DELETE /api/admin/content/occupied-rooms/:id` — admin delete (bypass marker restriction).
   - `DELETE /api/admin/content/course-policies/:semester/:courseCode` — remove policy row.
+  - `POST /api/admin/push` — `{ title, body, audience: 'all' | 'signed_in' }`; FCM topic `classgrid_broadcast` or multicast to signed-in tokens; `503 fcm_unconfigured` when `FIREBASE_SERVICE_ACCOUNT_PATH` unset; audit `admin.push_sent`.
+- [server/src/fcmTokens.js](server/src/fcmTokens.js) — **FCM token registration** (optional session on POST):
+  - `POST /api/me/fcm-token` — `{ token, platform: 'android' }`; upsert `user_fcm_tokens` (kerberos from session when logged in).
+  - `DELETE /api/me/fcm-token` — `{ token }` (session required); logout cleanup.
+- [server/src/firebaseAdmin.js](server/src/firebaseAdmin.js) — lazy `firebase-admin` from `FIREBASE_SERVICE_ACCOUNT_PATH`; `sendBroadcast({ title, body, audience })`; prunes stale tokens on multicast failure.
 
 Postgres routers return 503 `{ error: "database_unavailable" }` when
 `DATABASE_URL` is unset.
@@ -638,6 +692,7 @@ app/
 │   ├── api/                      # thin REST wrappers over ApiClient
 │   │   ├── api_client.dart       # dio + secure session + ApiException
 │   │   ├── catalog_api.dart
+│   │   ├── app_version_api.dart
 │   │   ├── planner_api.dart
 │   │   ├── calendar_events_api.dart
 │   │   ├── personal_events_api.dart
@@ -652,11 +707,13 @@ app/
 │   │   ├── course_policy.dart    # policy draft validation, policyPayload
 │   │   ├── planner_classes.dart  # show-classes overlay for calendar
 │   │   ├── attendance.dart       # bucket stats, mark transitions, prompt keys
+│   │   ├── app_version.dart      # force vs optional update comparison
 │   │   └── ics.dart              # RFC 5545 generateICS
 │   ├── models/                   # JSON (de)serialization
 │   │   ├── course.dart, session.dart, plan.dart, user.dart
 │   │   ├── calendar_event.dart, occupied_room.dart, actor.dart
 │   │   ├── course_policy.dart
+│   │   ├── app_version_info.dart # AppReleaseStatus, AppReleaseEntry
 │   │   └── academic_day.dart
 │   ├── state/
 │   │   ├── auth_provider.dart    # GET /api/me, login/logout
@@ -666,6 +723,7 @@ app/
 │   ├── storage/
 │   │   ├── local_store.dart      # SharedPreferences (planner, catalog, guest events)
 │   │   ├── reminder_store.dart
+│   │   ├── update_release_store.dart  # seen What's New / dismissed optional update builds
 │   │   ├── attendance_store.dart # attendance buckets + post-class notify prefs
 │   │   └── cgpa_store.dart       # CGPA calculator prefs (prior CGPA, semester rows)
 │   ├── notifications/
@@ -680,9 +738,15 @@ app/
 │   │   ├── course_detail_screen.dart
 │   │   ├── empty_halls_screen.dart
 │   │   ├── attendance_screen.dart
+│   │   ├── about_screen.dart
+│   │   ├── changelog_screen.dart
 │   │   └── calendar_screen.dart
 │   └── widgets/
 │       ├── auth_deep_link_listener.dart  # app_links → AuthProvider
+│       ├── version_gate.dart       # startup min-version check
+│       ├── update_prompt_host.dart # What's New + optional update sheets
+│       ├── update_sheets.dart      # showWhatsNewSheet, showOptionalUpdateSheet
+│       ├── release_notes_body.dart
 │       ├── common.dart           # Pill, StatusBanner, EmptyState, PageHeader
 │       ├── profile_button.dart   # IITD login / account menu
 │       ├── timetable_grid.dart
@@ -703,8 +767,8 @@ iOS scaffold exists under `app/ios/` but the app is **Android-first**; no iOS-sp
 | `/` Generator | **Plan** tab — [plan_screen.dart](app/lib/screens/plan_screen.dart) | Push routes for add-course sheet, edit-timing sheet |
 | `/course-explorer` | **Courses** tab — [courses_screen.dart](app/lib/screens/courses_screen.dart) | `ExplorerCatalogProvider`; **Not offered** pill on historical rows |
 | `/course/:code` | **Course detail** — [course_detail_screen.dart](app/lib/screens/course_detail_screen.dart) | Active catalog → explorer → offerings API; **Not offered** banner; roster/policy only when offered |
-| `/rooms` | **Rooms** tab — [rooms_screen.dart](app/lib/screens/rooms_screen.dart) | Search + building filter; button → Empty halls |
-| `/rooms/:roomSlug` | **Room detail** — [room_detail_screen.dart](app/lib/screens/room_detail_screen.dart) | Pushed from Rooms list; list + week grid |
+| `/rooms` | **Rooms** tab — [rooms_screen.dart](app/lib/screens/rooms_screen.dart) | Search + building tabs (LHC default, Blocks I–VI; LHC floor sections); campus-room fallback; button → Empty halls |
+| `/rooms/:roomSlug` | **Room detail** — [room_detail_screen.dart](app/lib/screens/room_detail_screen.dart) | Pushed from Rooms list; list + week grid; schedule-pending copy for fallback rooms |
 | `/empty-halls` | **Empty halls** — [empty_halls_screen.dart](app/lib/screens/empty_halls_screen.dart) | Pushed from Rooms (not a bottom-nav tab) |
 | (drawer Tools) | **Attendance** — [attendance_screen.dart](app/lib/screens/attendance_screen.dart) | Pushed from drawer; not a bottom-nav tab |
 | (drawer Tools) | **Prof explorer** — [prof_explorer_screen.dart](app/lib/screens/prof_explorer_screen.dart) | Search instructors; [prof_detail_screen.dart](app/lib/screens/prof_detail_screen.dart) for offerings |
@@ -725,14 +789,23 @@ iOS scaffold exists under `app/ios/` but the app is **Android-first**; no iOS-sp
 2. `ApiClient.create()` — loads persisted `cg_session` from secure storage,
    attaches dio interceptor.
 3. `LocalStore.create()` — SharedPreferences singleton.
-4. `VersionGate` — `GET /api/app/version` vs `package_info_plus`; outdated builds
-   stay on [update_required_screen.dart](app/lib/screens/update_required_screen.dart).
-   Skip locally: `--dart-define=SKIP_VERSION_CHECK=true`.
+3a. `UpdateReleaseStore` — tracks `cg_seen_release_build` and
+   `cg_dismissed_optional_build` for update prompts.
+4. `VersionGate` — `GET /api/app/version`; blocks when installed build is
+   **below `minimum`**. Passes through to [UpdatePromptHost](app/lib/widgets/update_prompt_host.dart)
+   when OK. Force block: [update_required_screen.dart](app/lib/screens/update_required_screen.dart)
+   (shows latest release notes + APK sideload). Skip locally:
+   `--dart-define=SKIP_VERSION_CHECK=true`.
+4a. `UpdatePromptHost` (inside ready gate) — after first frame:
+   **What's New** once per installed build; **optional update** sheet when
+   installed ≥ minimum but < latest (dismissible per latest build). About →
+   **Check for updates** re-fetches via [app_update_check.dart](app/lib/core/app_update_check.dart).
 5. `CatalogProvider.load()` — seed from cache, then `GET /api/catalog` with
    `If-None-Match` revalidation (active semester; planner + add-course).
 5a. `ExplorerCatalogProvider.load()` — `GET /api/catalog/explorer` (Courses tab).
-5b. `SemesterDataProvider.load()` — schedule + extra-occupied from API; sets
-   active `SemesterScheduleConfig` for `getAcademicDay()`.
+5b. `SemesterDataProvider.load()` — schedule + extra-occupied from API; loads
+   bundled `assets/campus_rooms.json` for rooms browse fallback; sets active
+   `SemesterScheduleConfig` for `getAcademicDay()`.
 6. `PlannerStore.initGuest()` — read `selectedCourses` / `timetableData` locally.
 7. `AuthProvider.init()` → `GET /api/me`; on auth change,
    `PlannerStore.onUserChanged()` loads DB plan or silent auto-fetch on first login.
@@ -788,7 +861,7 @@ reads the same JWT from the deep link.
 | Wrapper | Endpoints | Auth |
 |---------|-----------|------|
 | [catalog_api.dart](app/lib/api/catalog_api.dart) | `GET /api/catalog` | none |
-| [app_version_api.dart](app/lib/api/app_version_api.dart) | `GET /api/app/version` | none |
+| [app_version_api.dart](app/lib/api/app_version_api.dart) | `GET /api/app/version`, `GET /api/app/changelog` | none |
 | [planner_api.dart](app/lib/api/planner_api.dart) | `GET/PUT /api/me/plan`, `GET /api/me/courses` | session |
 | [calendar_events_api.dart](app/lib/api/calendar_events_api.dart) | `GET/POST/PATCH/DELETE /api/events` | read public; write session |
 | [personal_events_api.dart](app/lib/api/personal_events_api.dart) | `GET/POST/PATCH/DELETE /api/me/events` | session |
@@ -799,9 +872,28 @@ reads the same JWT from the deep link.
 | [feedback_api.dart](app/lib/api/feedback_api.dart) | `POST /api/feedback` | optional session |
 | [reports_api.dart](app/lib/api/reports_api.dart) | `POST /api/reports` | session |
 | [occupied_rooms_api.dart](app/lib/api/occupied_rooms_api.dart) | `GET/POST/DELETE /api/rooms/occupied` | read public; write session |
+| [fcm_api.dart](app/lib/api/fcm_api.dart) | `POST/DELETE /api/me/fcm-token` | optional session on POST; DELETE session |
 
 Payload shapes match the web `src/utils/*Api.js` modules and Postgres tables
 documented above.
+
+### FCM broadcast (Android)
+
+Operator broadcasts (semester updates, announcements) via Firebase Cloud Messaging.
+**Local class reminders stay unchanged** — still `ClassNotificationService` +
+`/api/me/reminders` sync only.
+
+Setup: [docs/FCM_SETUP.md](docs/FCM_SETUP.md) (Firebase Console, `google-services.json`,
+`FIREBASE_SERVICE_ACCOUNT_PATH` on the API host).
+
+- [fcm_service.dart](app/lib/notifications/fcm_service.dart) — `Firebase.initializeApp()` in
+  [main.dart](app/lib/main.dart); subscribe to topic `classgrid_broadcast`; register token via
+  [fcm_api.dart](app/lib/api/fcm_api.dart); foreground/background messages shown on channel
+  `classgrid_push` through [class_notification_service.dart](app/lib/notifications/class_notification_service.dart).
+- Re-register token on auth change so `user_fcm_tokens.kerberos` is set after IITD login;
+  `DELETE /api/me/fcm-token` on logout.
+- Admin sends from `/admin/push` → `POST /api/admin/push` (`audience: all` → topic;
+  `signed_in` → DB token multicast).
 
 ### Local notifications
 
@@ -868,8 +960,9 @@ loads `GET /api/catalog/explorer` at boot. Powers the Courses tab list; each
 explorer then `HistoryApi` offerings (`Course.fromOffering(..., offeredThisSemester: false)`).
 
 **SemesterDataProvider** ([semester_data_provider.dart](app/lib/state/semester_data_provider.dart)):
-loads `GET /api/semester/schedule` and `GET /api/extra-occupied`; sets active
-schedule via `setActiveSemesterSchedule()`; caches in SharedPreferences.
+loads `GET /api/semester/schedule`, `GET /api/extra-occupied`, and bundled
+`assets/campus_rooms.json` (rooms browse fallback); sets active schedule via
+`setActiveSemesterSchedule()`; caches schedule/extra in SharedPreferences.
 
 **LocalStore** ([local_store.dart](app/lib/storage/local_store.dart)):
 
@@ -879,7 +972,33 @@ schedule via `setActiveSemesterSchedule()`; caches in SharedPreferences.
 | `cg_catalog_cache`, `cg_catalog_etag` | Catalog offline fallback |
 | `cg_calendar_events` | Guest-only personal events (legacy key name) |
 
+**UpdateReleaseStore** ([update_release_store.dart](app/lib/storage/update_release_store.dart)):
+
+| Key | Purpose |
+|-----|---------|
+| `cg_seen_release_build` | Last build for which **What's New** was shown |
+| `cg_dismissed_optional_build` | Latest build the user dismissed the optional update sheet for |
+
 Signed-in personal events use Postgres via `/api/me/events`, not local storage.
+
+### App updates (mobile)
+
+Two server thresholds drive client behaviour ([app_version.dart](app/lib/core/app_version.dart)):
+
+| Installed vs server | UX |
+|---------------------|-----|
+| Below **`minimum`** | Hard block on launch (`UpdateRequiredScreen`) |
+| ≥ minimum, below **`latest`** | App usable; dismissible optional update sheet (once per latest build) |
+| Just updated (build > last seen) | **What's New** sheet once |
+| On latest | No prompt (About → **Check for updates** still works) |
+
+**Default release policy:** `./scripts/release-android-apk.sh` bumps **latest** only;
+**minimum** stays until `--bump-minimum` (use for breaking/API-incompatible releases).
+Release notes are authored in repo-root [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog
+format); import via [import_app_version.js](scripts/db/import_app_version.js).
+
+**About** ([about_screen.dart](app/lib/screens/about_screen.dart)) — drawer → About:
+**Check for updates**, **Release history** → [changelog_screen.dart](app/lib/screens/changelog_screen.dart).
 
 ### Core logic (keep in sync with web)
 
@@ -925,8 +1044,9 @@ roster link only for currently offered courses; past offerings history for all.
 **Empty halls** — date + time pickers (defaults to now), `getAcademicDay` for
 effective weekday; [empty_halls.dart](app/lib/core/empty_halls.dart) checks
 lecture/tutorial/lab. Tap room → `RoomDetailScreen`; Mark/Details for Postgres
-markings (login required). If catalog `lectureHall` is null, only manual
-markings appear — run `scripts/db/sync_venues.js` and restart the API.
+markings (login required). Still depends on live catalog timings for “free now”
+(not the campus-room fallback list). If catalog `lectureHall` is null, only manual
+markings appear — run `scripts/db/sync_venues.js` and restart the API for timed slots.
 
 **Calendar** — Monday-first month grid, academic day markers, shared + personal
 events, day-tap picker (course vs personal), [event_form_sheet.dart](app/lib/widgets/event_form_sheet.dart),
@@ -970,9 +1090,36 @@ Emulator uses `10.0.2.2`; physical device needs your LAN IP. Prod catalog requir
 DB import + `./deploy.sh --api`. Explorer list is larger (~3k+ codes when historical
 data is imported) — only the Courses tab fetches `/api/catalog/explorer`.
 
-**Deploy:** sideload APK via `./scripts/release-android-apk.sh` (rsyncs to
-`/var/www/classgrid/app/classgrid.apk`). Default `./deploy.sh` does not upload the
+**Deploy:** sideload APK via `./scripts/release-android-apk.sh` (see
+[Android APK release](#android-apk-release)). Default `./deploy.sh` does not upload the
 APK. Backend/catalog deploy is shared with web.
+
+### Android APK release
+
+Workflow (from repo root):
+
+0. **Once:** `./scripts/android-keystore-init.sh` — creates `app/android/key.properties`
+   + release keystore (see [docs/ANDROID_SIGNING.md](docs/ANDROID_SIGNING.md)). Required for
+   `--build`; all production APKs must use the same key.
+1. Add a `## [X.Y.Z] - date` section to [CHANGELOG.md](CHANGELOG.md).
+2. Bump `version:` in [app/pubspec.yaml](app/pubspec.yaml) (`X.Y.Z+BUILD`).
+3. `./scripts/release-android-apk.sh --build` — validates CHANGELOG, stages APK,
+   upserts `app_release_config` + `app_release_history` via
+   [import_app_version.js](scripts/db/import_app_version.js), `./deploy.sh --api`,
+   `./deploy.sh --apk`.
+
+Flags:
+
+| Flag | Effect |
+|------|--------|
+| `--build` | `flutter build apk --release` first |
+| `--no-deploy` | DB import only; run `./deploy.sh --api && ./deploy.sh --apk` manually |
+| `--apk-only` | Skip `./deploy.sh --api` (API code already on prod); still imports version + deploys APK |
+| `--bump-minimum` | Set `minimum_*` = new release (force-update everyone below) |
+
+By default only **latest** moves; **minimum** is unchanged (optional-update window).
+Requires migration `014` applied on prod before first changelog release.
+[run_on_prod.sh](scripts/db/run_on_prod.sh) syncs only the inputs needed for the target importer by default; pass `--with-data` for full semester seed sync (refresh / `seed_from_files.js`). `./deploy.sh` never runs importers — use `run_on_prod.sh` for Postgres data jobs.
 
 ### Deferred / parity gaps
 
@@ -984,7 +1131,7 @@ APK. Backend/catalog deploy is shared with web.
 | Local class reminders | n/a | Calendar day dialog: 30‑min before class/timed event; signed-in sync via `/api/me/reminders` |
 | Attendance tracker | n/a | Drawer → Attendance; `/api/me/attendance`; post-class mark notifications (opt-in) |
 | CGPA calculator | n/a | Drawer → CGPA calculator; client-only SGPA/CGPA |
-| Push notifications (FCM / server) | n/a | not implemented (reminders are local OS alarms + API sync only) |
+| Push notifications (FCM admin broadcast) | `/admin/push` only | Android: topic `classgrid_broadcast` + token registration; local class reminders unchanged |
 | Catalog `If-None-Match` revalidation | n/a | implemented in `catalog_provider.dart` |
 | Bearer / mobile OAuth routes | n/a | intentionally not used |
 
@@ -1034,12 +1181,30 @@ APK. Backend/catalog deploy is shared with web.
   on `/api/catalog` only.
 - **Bump ICS semester window:** [core/ics.dart](app/lib/core/ics.dart) and web
   Generator constants together.
+- **Ship Android release / changelog:** edit [CHANGELOG.md](CHANGELOG.md) → bump
+  [app/pubspec.yaml](app/pubspec.yaml) → `./scripts/release-android-apk.sh --build`
+  (add `--bump-minimum` when the release must be mandatory). Server:
+  [appVersion.js](server/src/appVersion.js), [semesterData.js](server/src/semesterData.js)
+  `getAppReleaseConfig` / `listAppReleaseHistory`; migration `014`. Mobile:
+  [version_gate.dart](app/lib/widgets/version_gate.dart),
+  [update_prompt_host.dart](app/lib/widgets/update_prompt_host.dart),
+  [update_sheets.dart](app/lib/widgets/update_sheets.dart),
+  [update_release_store.dart](app/lib/storage/update_release_store.dart),
+  [app_version.dart](app/lib/core/app_version.dart),
+  [about_screen.dart](app/lib/screens/about_screen.dart),
+  [changelog_screen.dart](app/lib/screens/changelog_screen.dart). Parser:
+  [scripts/lib/parse_changelog.js](scripts/lib/parse_changelog.js).
 - **Touch class notifications:** [class_notification_service.dart](app/lib/notifications/class_notification_service.dart)
   (schedule/cancel/reschedule), [reminder_store.dart](app/lib/storage/reminder_store.dart)
   + [reminders_api.dart](app/lib/api/reminders_api.dart) (signed-in sync),
   [server/src/reminders.js](server/src/reminders.js) + migration `006_user_reminders.sql`,
   [main.dart](app/lib/main.dart) (init + `onAuthChanged`). Android manifest + Gradle
   desugaring (see [Local notifications](#local-notifications)).
+- **Touch FCM broadcast:** [fcm_service.dart](app/lib/notifications/fcm_service.dart),
+  [fcm_api.dart](app/lib/api/fcm_api.dart), [fcmTokens.js](server/src/fcmTokens.js),
+  [firebaseAdmin.js](server/src/firebaseAdmin.js), migration `016_user_fcm_tokens.sql`,
+  [AdminPush.jsx](src/pages/admin/AdminPush.jsx); prod setup in [docs/FCM_SETUP.md](docs/FCM_SETUP.md).
+  Do not replace local reminder scheduling with FCM.
 
 ### Mobile gotchas
 
@@ -1057,6 +1222,11 @@ APK. Backend/catalog deploy is shared with web.
 - **Catalog size** — active catalog JSON (~500+ KB) downloads once per cold start;
   cached locally in `CatalogProvider`. Explorer catalog is larger (historical codes);
   fetched separately by `ExplorerCatalogProvider` for the Courses tab only.
+- **Optional vs force APK updates** — `GET /api/app/version` returns both
+  `minimum` (block) and `latest` (optional prompt). Releasing without
+  `--bump-minimum` leaves older builds usable; users between minimum and latest
+  see a dismissible sheet. Same version name + higher build still compares on
+  build number. Dev bypass: `--dart-define=SKIP_VERSION_CHECK=true`.
 - **`use_null_aware_elements` lint** is disabled in [analysis_options.yaml](app/analysis_options.yaml)
   (stylistic preference for explicit `if` spreads in widgets).
 - **Local notifications on Android** — users must grant notification permission
@@ -1118,7 +1288,39 @@ Reference implementations: [FeedbackForm.jsx](src/components/FeedbackForm/Feedba
 [EmptyLectureHalls.jsx](src/pages/EmptyLectureHalls.jsx) (`eh__controls`),
 [AdminFeedback.jsx](src/pages/admin/AdminFeedback.jsx).
 
-Run `npm run check:ui` before shipping new form UI (blocks invented `field__*` classes).
+Run `npm run check:ui` before shipping UI (form class guardrails + layout regressions; see ship gate below).
+
+### UI design ship gate (agents)
+
+**Required for every UI change** (pages, admin, components, CSS). A passing
+`/impeccable audit` or token checklist does **not** replace this.
+
+1. **`npm run check:ui`** — runs [check-ui-classes.sh](scripts/check-ui-classes.sh)
+   (form primitives) and [check-ui-layout.sh](scripts/check-ui-layout.sh) (overflow,
+   dashboard grids). Fix failures before merge.
+2. **Browser pass** — for any new/changed filter toolbar, modal, or panel with native
+   `<select>`, `<input type="date">`, or `<input type="time">`: open each control and
+   confirm the full menu is visible (not clipped by the card edge).
+3. **Responsive pass** — resize to ~960px and ~640px; grids with a **fixed item count**
+   must still look intentional (even columns, no large empty deserts).
+
+**Layout rules (all surfaces)**
+
+| Situation | Do | Do not |
+|-----------|-----|--------|
+| Filter / toolbar row (`*__controls`, `.admin__controls`) | `overflow: visible`; scroll only inner table wrappers | `overflow: hidden` on toolbar or panel body ancestor |
+| Panel / card body (`*__body`, `.admin__body`) | `border-radius` on the shell; `overflow-x: auto` on `.table-wrap` / list scroller | `overflow: hidden` to “clip corners” when filters or selects live inside |
+| Dashboard metrics (fixed N items) | Explicit `grid-template-columns: repeat(N, …)` scoped to that page | Reuse global `.dl` `auto-fit` or a flex strip that clusters left |
+| Dense tool UI (admin, tables) | Product register: grids + tables in [admin.css](src/pages/admin/admin.css) | Public editorial flex strips, identical stat cards, modal-first filters |
+| Popovers / native menus | Ancestor chain stays `overflow: visible`, or use a portaled custom menu | Hidden overflow on any wrapper between root and the control |
+
+**Automated checks** ([check-ui-layout.sh](scripts/check-ui-layout.sh)): forbids
+`overflow: hidden` on `admin.css`, `*__body` in pages, and `*__controls`; enforces
+admin overview 4-col / 3-col grids (no `auto-fit` in admin CSS).
+
+Admin-specific detail: [Admin panel UI](#admin-panel-ui-agents). Design reference:
+[Layout & native controls](docs/DESIGN.md#layout--native-controls) and
+[Admin surfaces](docs/DESIGN.md#admin-surfaces).
 
 ## Common edit recipes
 
@@ -1129,6 +1331,9 @@ Run `npm run check:ui` before shipping new form UI (blocks invented `field__*` c
   with its own CSS. Import design tokens; don't redeclare them.
 - **Add form inputs:** use [FormField.jsx](src/components/FormField/FormField.jsx);
   see [Form fields (web)](#form-fields-web). Run `npm run check:ui`.
+- **Add or change UI surfaces** (pages, admin, panels, filter rows): follow
+  [UI design ship gate](#ui-design-ship-gate-agents); run `npm run check:ui`; browser-test
+  every native `<select>` / date control in the changed toolbar.
 - **Refresh course/venue/student data for a new semester:** run
   `./scripts/db/refresh_semester.sh SEMCODE` (or individual importers in
   `scripts/db/`), then `./deploy.sh --api`. Edit `data/academic_calendar.json`
@@ -1189,12 +1394,36 @@ Run `npm run check:ui` before shipping new form UI (blocks invented `field__*` c
   [server/src/occupiedRooms.js](server/src/occupiedRooms.js), table
   `occupied_rooms`. Shared logic in `emptyHalls.js` / `empty_halls.dart`.
   Date + time pickers; room name → weekly schedule; **Mark** for manual occupancy.
+- **Touch campus room fallback (no DB):** [`scripts/generate_campus_rooms.sh`](scripts/generate_campus_rooms.sh)
+  + [`extract_venue_map.py`](scripts/extract_venue_map.py) `--rooms-list` →
+  [`data/campus_rooms.json`](data/campus_rooms.json) (copy to `public/` + `app/assets/`).
+  Core merge in [roomSchedule.js](src/utils/roomSchedule.js) /
+  [room_schedule.dart](app/lib/core/room_schedule.dart) (`campusRooms`, `schedulePending`,
+  `usingCampusRoomFallback`). Boot load: [SemesterDataContext.jsx](src/data/SemesterDataContext.jsx),
+  [semester_data_provider.dart](app/lib/state/semester_data_provider.dart). UI:
+  [RoomSchedules.jsx](src/pages/RoomSchedules.jsx), [RoomDetail.jsx](src/pages/RoomDetail.jsx),
+  [rooms_screen.dart](app/lib/screens/rooms_screen.dart),
+  [room_detail_screen.dart](app/lib/screens/room_detail_screen.dart). Fallback stops when
+  catalog `lectureHall` is populated (via catalog import + optional `sync_venues.js`).
+  Deploy `./deploy.sh --static` after regen. Empty halls unchanged.
+- **Touch room browse tabs / LHC floors:** [roomSchedule.js](src/utils/roomSchedule.js) /
+  [room_schedule.dart](app/lib/core/room_schedule.dart) — `roomBuildingGroup` (LHC + Blocks
+  I–VI; `IIA` → II, `V707` → V), `lhFloor`, `groupLhRoomsByFloor`, `filterRooms({ building })`.
+  UI: [RoomSchedules.jsx](src/pages/RoomSchedules.jsx) + [RoomSchedules.css](src/pages/RoomSchedules.css),
+  [rooms_screen.dart](app/lib/screens/rooms_screen.dart). Default tab: **LHC**.
 - **Touch web admin panel:** routes in [src/App.js](src/App.js) (`/admin*` without
   navbar/footer); UI under [src/pages/admin/](src/pages/admin/); API wrappers in
   [adminApi.js](src/utils/adminApi.js); server [admin.js](server/src/admin.js) +
   [adminAuth.js](server/src/adminAuth.js). Add admins via `ADMIN_KERBERSES` in
   `server/.env` / `/etc/classgrid/api.env`. Run migration `012` before relying on
   `reviewed_by_kerberos` columns. No public nav link — admins visit `/admin` directly.
+  Audit history UI: `/admin/logs` ([AdminAuditLog.jsx](src/pages/admin/AdminAuditLog.jsx));
+  API `GET /api/admin/audit-log` (migration `015`); instrument new write
+  routes with `recordAuditSafe` in [auditLog.js](server/src/auditLog.js) — skip plan,
+  attendance, reminders. **UI:** follow [Admin panel UI](#admin-panel-ui-agents); use
+  [FormField.jsx](src/components/FormField/FormField.jsx) for filter toolbars; never
+  put `overflow: hidden` on `.admin__body` (clips native `<select>` menus). After
+  CSS changes, open every filter dropdown in the browser before shipping.
 - **Touch academic calendar (holidays/swaps):** shared
   [src/utils/semesterSchedule.js](src/utils/semesterSchedule.js); modal
   [src/components/AcademicCalendar/AcademicCalendarButton.jsx](src/components/AcademicCalendar/AcademicCalendarButton.jsx)
@@ -1204,10 +1433,49 @@ Run `npm run check:ui` before shipping new form UI (blocks invented `field__*` c
   `sudo bash -c 'set -a && source /etc/classgrid/db.env && set +a && /opt/classgrid-db/migrate.sh'`
   on the VM (azureuser cannot read `/etc/classgrid/db.env` without sudo).
   `./deploy.sh --api` does **not** run migrations or restart Postgres.
+- **Android APK release:** [CHANGELOG.md](CHANGELOG.md) → pubspec bump →
+  `./scripts/release-android-apk.sh --build`. Use `--bump-minimum` for mandatory
+  releases; `--apk-only` when API is already deployed. `./deploy.sh --api` rsyncs
+  server code only (no semester seed scripts). `./deploy.sh --apk` alone uploads a
+  staged APK without DB/changelog update.
 - **Course policy 500 after deploy:** if `/api/courses/:code/policy` throws
   `resolveSemesterCode is not a function`, ensure
   [semesterData.js](server/src/semesterData.js) exports `resolveSemesterCode`
   (used by [coursePolicies.js](server/src/coursePolicies.js)).
+
+## Admin panel UI (agents)
+
+Subset of [UI design ship gate](#ui-design-ship-gate-agents). The admin shell is **product register** (dense tool UI), not the public paper-planner
+marketing layout. Tokens still come from [src/index.css](src/index.css); layout and
+components are scoped to [admin.css](src/pages/admin/admin.css).
+
+**Layout rules**
+
+| Surface | Pattern | Do not use |
+|---------|---------|------------|
+| Overview priority counts | `.admin__priority` — 4-column grid | Flex strip that clusters left with empty space |
+| Overview health facts | `.admin__health .dl` — 3-column grid | Global `.dl` `auto-fit` alone (wraps unevenly at 6 items) |
+| Filter toolbars | `.admin__controls` + `FormField` + `.field` | Modals for filters |
+| Data tables | `.admin__table` inside `.admin__table-wrap` | Card grids |
+| Row detail (Reports, Logs) | `.admin__split` + keyboard rows via [adminSelectableRow.js](src/utils/adminSelectableRow.js) | Click-only `<tr>` without keyboard |
+
+**Critical CSS**
+
+- **Never** set `overflow: hidden` on `.admin__body` or any ancestor of filter
+  `<select>` elements. Native select option lists render outside the box and get
+  clipped (Audit log Action filter is the usual failure). Rounded corners on the
+  panel use `border-radius` only; scroll clipping belongs on `.admin__table-wrap`
+  (`overflow-x: auto`), not the whole body.
+- Use explicit column counts for dashboard stats; `repeat(auto-fit, minmax(...))`
+  is for unknown-length content (course detail facts), not fixed admin metric rows.
+
+**Verification (required after admin UI edits)**
+
+1. Open `/admin`, `/admin/logs`, `/admin/reports` in the browser (or `./deploy.sh --static` + local `npm start`).
+2. Expand **every** native `<select>` in the filter row; confirm the full option list is visible (especially Action on Logs with optgroups).
+3. Check Overview at ~960px and ~640px width: priority stats fill the row; health facts form even rows.
+
+A passing `/impeccable audit` score does **not** replace this browser pass — audits measure tokens/ARIA, not select clipping or grid balance.
 
 ## Gotchas
 
@@ -1259,6 +1527,11 @@ Run `npm run check:ui` before shipping new form UI (blocks invented `field__*` c
   `catalog_courses` (~3k+ when archives are imported). Do not point the planner
   or room schedules at the explorer endpoint — stale slot data for retired courses
   is intentional for browsing, not for live timetable logic.
+- **Campus room fallback vs venue sync:** when the active catalog has no
+  `lectureHall`, `/rooms` merges bundled `campus_rooms.json` (room names only;
+  **Schedule pending**, no sessions). Regen via `generate_campus_rooms.sh`; this
+  does not write Postgres. After allotment is published, import catalog and run
+  `sync_venues.js` — fallback auto-disables once `catalogHasVenues` is true.
 - **My Calendar course filter:** shared events are fetched only for planner +
   enrolled course codes (never the full catalog — avoids HTTP 414). Personal
   events load independently when logged in.
@@ -1271,6 +1544,16 @@ Run `npm run check:ui` before shipping new form UI (blocks invented `field__*` c
 - **Flutter app:** see [Mobile gotchas](#mobile-gotchas) — browser OAuth deep link,
   compile-time `API_BASE`, and core-logic parity with `src/` are the usual
   footguns.
+- **Admin panel selects clipped:** if an admin filter dropdown scrolls inside the
+  card but options are cut off, an ancestor has `overflow: hidden` — usually
+  `.admin__body`. Remove it; see [Admin panel UI](#admin-panel-ui-agents).
+- **Admin overview layout looks empty or uneven:** do not reuse public `.dl`
+  `auto-fit` for fixed metric counts; use `.admin__priority` (4-col) and
+  `.admin__health .dl` (3-col) in [admin.css](src/pages/admin/admin.css).
+- **UI layout / clipped dropdowns (general):** token or a11y audits do not catch
+  native `<select>` menus cut off by `overflow: hidden`. Run `npm run check:ui`
+  (includes [check-ui-layout.sh](scripts/check-ui-layout.sh)) and the browser pass
+  in [UI design ship gate](#ui-design-ship-gate-agents) on every toolbar/panel change.
 
 ## Out of scope
 

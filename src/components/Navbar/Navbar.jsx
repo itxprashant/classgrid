@@ -80,6 +80,24 @@ export default function Navbar() {
         return () => document.removeEventListener('mousedown', onClick);
     }, [exploreMenuOpen]);
 
+    useEffect(() => {
+        if (!exploreMenuOpen) return undefined;
+        const onKey = (e) => {
+            if (e.key === 'Escape') setExploreMenuOpen(false);
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [exploreMenuOpen]);
+
+    useEffect(() => {
+        if (!userMenuOpen) return undefined;
+        const onKey = (e) => {
+            if (e.key === 'Escape') setUserMenuOpen(false);
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [userMenuOpen]);
+
     const authBlock = loading ? null : user ? (
         <div className="nav__user" ref={userMenuRef}>
             <button
@@ -149,7 +167,7 @@ export default function Navbar() {
     );
 
     return (
-        <nav className="nav">
+        <nav className="nav" aria-label="Primary">
             <div className="nav__inner">
                 <Link to="/calendar" className="nav__brand" aria-label="ClassGrid, home">
                     <span className="nav__mark" aria-hidden="true" />

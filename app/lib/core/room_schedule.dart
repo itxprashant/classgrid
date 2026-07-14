@@ -24,11 +24,13 @@ class RoomInfo {
   final String name;
   final String prefix;
   final int sessionCount;
+  final bool schedulePending;
 
   const RoomInfo({
     required this.name,
     required this.prefix,
     required this.sessionCount,
+    this.schedulePending = false,
   });
 }
 
@@ -62,12 +64,14 @@ class RoomCatalog {
   final Map<String, List<RoomSession>> sessionsByRoom;
   final bool catalogHasVenues;
   final bool catalogHasSessions;
+  final bool usingCampusRoomFallback;
 
   const RoomCatalog({
     required this.rooms,
     required this.sessionsByRoom,
     required this.catalogHasVenues,
     required this.catalogHasSessions,
+    this.usingCampusRoomFallback = false,
   });
 }
 
@@ -88,6 +92,141 @@ String normalizeRoomName(String? name) {
 String roomPrefix(String name) {
   final m = RegExp(r'^(\w+)').firstMatch(name);
   return m != null ? m.group(1)! : 'Other';
+}
+
+/// Browse tabs: LHC (lecture halls) + academic blocks I–VI.
+const List<String> kRoomBuildingTabs = ['LHC', 'I', 'II', 'III', 'IV', 'V', 'VI'];
+
+const String kDefaultRoomBuildingTab = 'LHC';
+
+String roomBuildingGroup(String name) {
+  final n = normalizeRoomName(name);
+  if (RegExp(r'^LH\b', caseSensitive: false).hasMatch(n)) return 'LHC';
+  if (RegExp(r'^III\b', caseSensitive: false).hasMatch(n)) return 'III';
+  if (RegExp(r'^IIA\b', caseSensitive: false).hasMatch(n)) return 'II';
+  if (RegExp(r'^II\b', caseSensitive: false).hasMatch(n)) return 'II';
+  if (RegExp(r'^IV\b', caseSensitive: false).hasMatch(n)) return 'IV';
+  if (RegExp(r'^VI\b', caseSensitive: false).hasMatch(n)) return 'VI';
+  if (RegExp(r'^V(?:\s|\d)', caseSensitive: false).hasMatch(n)) return 'V';
+  if (RegExp(r'^I(?:\s|\d|LT)', caseSensitive: false).hasMatch(n)) return 'I';
+  return 'Other';
+}
+
+/// First digit after "LH " is the floor (LH 121 → 1, LH 325 → 3).
+int? lhFloor(String name) {
+  final m = RegExp(r'^LH\s+(\d)', caseSensitive: false).firstMatch(normalizeRoomName(name));
+  return m != null ? int.parse(m.group(1)!) : null;
+}
+
+class LhFloorSection {
+  final int floor;
+  final String label;
+  final List<RoomInfo> rooms;
+
+  const LhFloorSection({
+    required this.floor,
+    required this.label,
+    required this.rooms,
+  });
+}
+
+List<BuildingCount> buildingTabCounts(List<RoomInfo> rooms) {
+  final counts = {for (final code in kRoomBuildingTabs) code: 0};
+  var other = 0;
+  for (final room in rooms) {
+    final group = roomBuildingGroup(room.name);
+    if (counts.containsKey(group)) {
+      counts[group] = counts[group]! + 1;
+    } else {
+      other += 1;
+    }
+  }
+  final tabs = kRoomBuildingTabs
+      .map((code) => BuildingCount(code, counts[code] ?? 0))
+      .toList();
+  if (other > 0) tabs.add(BuildingCount('Other', other));
+  return tabs;
+}
+
+List<LhFloorSection> groupLhRoomsByFloor(List<RoomInfo> rooms) {
+  final byFloor = <int, List<RoomInfo>>{};
+  for (final room in rooms) {
+    final floor = lhFloor(room.name) ?? 0;
+    byFloor.putIfAbsent(floor, () => []).add(room);
+  }
+  final floors = byFloor.keys.toList()..sort();
+  return floors
+      .map(
+        (floor) => LhFloorSection(
+          floor: floor,
+          label: floor > 0 ? 'Floor $floor' : 'Other',
+          rooms: byFloor[floor]!..sort((a, b) => _compareRoomNames(a.name, b.name)),
+        ),
+      )
+      .toList();
+}
+
+class LhFloorEntrySection<T> {
+  final int floor;
+  final String label;
+  final List<T> items;
+
+  const LhFloorEntrySection({
+    required this.floor,
+    required this.label,
+    required this.items,
+  });
+}
+
+List<BuildingCount> buildingTabCountsForRoomNames(Iterable<String> roomNames) {
+  final counts = {for (final code in kRoomBuildingTabs) code: 0};
+  var other = 0;
+  for (final name in roomNames) {
+    final group = roomBuildingGroup(name);
+    if (counts.containsKey(group)) {
+      counts[group] = counts[group]! + 1;
+    } else {
+      other += 1;
+    }
+  }
+  final tabs = kRoomBuildingTabs
+      .map((code) => BuildingCount(code, counts[code] ?? 0))
+      .toList();
+  if (other > 0) tabs.add(BuildingCount('Other', other));
+  return tabs;
+}
+
+List<T> filterEntriesByBuilding<T>(
+  List<T> entries,
+  String building,
+  String Function(T item) roomName,
+) {
+  if (building.isEmpty) return entries;
+  return entries
+      .where((entry) => roomBuildingGroup(roomName(entry)) == building)
+      .toList();
+}
+
+List<LhFloorEntrySection<T>> groupLhEntriesByFloor<T>(
+  List<T> entries,
+  String Function(T item) roomName,
+) {
+  final byFloor = <int, List<T>>{};
+  for (final entry in entries) {
+    final floor = lhFloor(roomName(entry)) ?? 0;
+    byFloor.putIfAbsent(floor, () => []).add(entry);
+  }
+  final floors = byFloor.keys.toList()..sort();
+  return floors
+      .map(
+        (floor) => LhFloorEntrySection<T>(
+          floor: floor,
+          label: floor > 0 ? 'Floor $floor' : 'Other',
+          items: byFloor[floor]!
+            ..sort((a, b) => _compareRoomNames(roomName(a), roomName(b))),
+        ),
+      )
+      .toList();
 }
 
 List<String> splitRoomNames(String? lectureHall) {
@@ -128,9 +267,11 @@ List<RoomSession> _sortSessions(List<RoomSession> sessions) {
 RoomCatalog buildRoomCatalog(
   List<Course> courses, {
   List<dynamic> extraOccupied = const [],
+  List<String> campusRooms = const [],
 }) {
   final sessionsByRoom = <String, List<RoomSession>>{};
   final roomNames = <String>{};
+  final fallbackOnly = <String>{};
 
   void addSession(String room, RoomSession session) {
     if (room.isEmpty) return;
@@ -191,6 +332,21 @@ RoomCatalog buildRoomCatalog(
     );
   }
 
+  final catalogHasVenues = courses.any((c) => (c.lectureHall ?? '').isNotEmpty);
+  var usingCampusRoomFallback = false;
+
+  if (!catalogHasVenues && campusRooms.isNotEmpty) {
+    usingCampusRoomFallback = true;
+    for (final raw in campusRooms) {
+      final room = normalizeRoomName(raw);
+      if (room.isEmpty) continue;
+      if (!roomNames.contains(room)) {
+        fallbackOnly.add(room);
+      }
+      roomNames.add(room);
+    }
+  }
+
   final sortedSessions = <String, List<RoomSession>>{};
   for (final e in sessionsByRoom.entries) {
     sortedSessions[e.key] = _sortSessions(e.value);
@@ -203,11 +359,13 @@ RoomCatalog buildRoomCatalog(
           name: name,
           prefix: roomPrefix(name),
           sessionCount: sortedSessions[name]?.length ?? 0,
+          schedulePending: usingCampusRoomFallback
+              && fallbackOnly.contains(name)
+              && (sortedSessions[name]?.length ?? 0) == 0,
         ),
       )
       .toList();
 
-  final catalogHasVenues = courses.any((c) => (c.lectureHall ?? '').isNotEmpty);
   final catalogHasSessions = roomInfos.any((r) => r.sessionCount > 0);
 
   return RoomCatalog(
@@ -215,6 +373,7 @@ RoomCatalog buildRoomCatalog(
     sessionsByRoom: sortedSessions,
     catalogHasVenues: catalogHasVenues,
     catalogHasSessions: catalogHasSessions,
+    usingCampusRoomFallback: usingCampusRoomFallback,
   );
 }
 
@@ -222,24 +381,19 @@ List<RoomSession> sessionsForRoom(Map<String, List<RoomSession>> byRoom, String 
   return byRoom[normalizeRoomName(roomName)] ?? const [];
 }
 
-List<BuildingCount> roomBuildingCounts(List<RoomInfo> rooms) {
-  final counts = <String, int>{};
-  for (final r in rooms) {
-    counts[r.prefix] = (counts[r.prefix] ?? 0) + 1;
-  }
-  return counts.entries
-      .map((e) => BuildingCount(e.key, e.value))
-      .toList()
-    ..sort((a, b) => a.code.compareTo(b.code));
-}
+List<BuildingCount> roomBuildingCounts(List<RoomInfo> rooms) => buildingTabCounts(rooms);
 
 List<RoomInfo> filterRooms(
   List<RoomInfo> rooms, {
   String search = '',
   String? prefix,
+  String? building,
 }) {
   final term = search.trim().toLowerCase();
   return rooms.where((room) {
+    if (building != null && building.isNotEmpty && roomBuildingGroup(room.name) != building) {
+      return false;
+    }
     if (prefix != null && prefix.isNotEmpty && room.prefix != prefix) return false;
     if (term.isEmpty) return true;
     return room.name.toLowerCase().contains(term);
