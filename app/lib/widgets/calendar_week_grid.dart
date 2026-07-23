@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/calendar_events.dart';
@@ -19,10 +21,21 @@ const double _headCompact = 40;
 const double _headCompactNotes = 52;
 
 const Map<String, String> _kindType = {
-  'lecture': 'Lecture',
-  'tutorial': 'Tutorial',
-  'lab': 'Lab',
+  'lecture': 'LEC',
+  'tutorial': 'TUT',
+  'lab': 'LAB',
 };
+
+/// First hall + "+…" when multi-venue (full list stays in tooltips).
+String _shortHall(String loc) {
+  final parts = loc
+      .split(RegExp(r'\s*,\s*'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+  if (parts.length <= 1) return loc.trim();
+  return '${parts.first}+…';
+}
 
 /// Planner-style week grid over seven calendar dates. Mirrors web CalendarWeekGrid.
 class CalendarWeekGrid extends StatelessWidget {
@@ -104,6 +117,7 @@ class CalendarWeekGrid extends StatelessWidget {
           kindLabel: _kindType[s.kind] ?? s.kindLabel,
           start: s.start,
           end: s.end,
+          location: s.location,
         ));
       }
 
@@ -196,25 +210,30 @@ class CalendarWeekGrid extends StatelessWidget {
                         SizedBox(width: TimetableLayout.railWidth),
                         for (final col in columns)
                           Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: T.paper2,
-                                border: Border(
-                                  right: col.colIdx < 6
-                                      ? BorderSide(color: T.line)
-                                      : BorderSide.none,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  for (final evt in col.allDay)
-                                    _AllDayPill(
-                                      event: evt,
-                                      onTap: () => onEventTap(evt, col.date),
+                            child: Material(
+                              color: T.paper2,
+                              child: InkWell(
+                                onTap: () => onDayTap(col.date),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      right: col.colIdx < 6
+                                          ? BorderSide(color: T.line)
+                                          : BorderSide.none,
                                     ),
-                                ],
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      for (final evt in col.allDay)
+                                        _AllDayPill(
+                                          event: evt,
+                                          onTap: () => onEventTap(evt, col.date),
+                                        ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -225,81 +244,99 @@ class CalendarWeekGrid extends StatelessWidget {
                 Divider(height: 1, color: T.line),
                 SizedBox(
                   height: plotHeight,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      for (int h = TimetableLayout.startHour;
-                          h <= TimetableLayout.endHour;
-                          h++)
-                        Positioned(
-                          top: TimetableLayout.lineTopForHour(h),
-                          left: 0,
-                          right: 0,
-                          child: TimetableHourRail(hour: h),
-                        ),
-                      LayoutBuilder(
-                        builder: (context, plotConstraints) {
-                          final dayAreaWidth =
-                              plotConstraints.maxWidth - TimetableLayout.railWidth;
-                          final colWidth = dayAreaWidth / 7;
-                          return Stack(
-                            children: [
-                              for (int i = 0; i < 7; i++)
-                                Positioned(
-                                  top: 0,
-                                  bottom: 0,
-                                  left: TimetableLayout.railWidth + i * colWidth,
-                                  child: Container(width: 1, color: T.line),
+                  width: double.infinity,
+                  child: LayoutBuilder(
+                    builder: (context, plotConstraints) {
+                      final dayAreaWidth =
+                          plotConstraints.maxWidth - TimetableLayout.railWidth;
+                      final colWidth = dayAreaWidth / 7;
+                      return Stack(
+                        fit: StackFit.expand,
+                        clipBehavior: Clip.none,
+                        children: [
+                          for (int h = TimetableLayout.startHour;
+                              h <= TimetableLayout.endHour;
+                              h++)
+                            Positioned(
+                              top: TimetableLayout.lineTopForHour(h),
+                              left: 0,
+                              right: 0,
+                              child: TimetableHourRail(hour: h),
+                            ),
+                          for (int i = 0; i < 7; i++)
+                            Positioned(
+                              top: 0,
+                              bottom: 0,
+                              left: TimetableLayout.railWidth + i * colWidth,
+                              child: Container(width: 1, color: T.line),
+                            ),
+                          for (final col in columns)
+                            Positioned(
+                              top: 0,
+                              bottom: 0,
+                              left: TimetableLayout.railWidth + col.colIdx * colWidth,
+                              width: colWidth,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => onDayTap(col.date),
                                 ),
-                              for (final col in columns)
-                                Positioned(
-                                  top: 0,
-                                  bottom: 0,
-                                  left: TimetableLayout.railWidth + col.colIdx * colWidth,
-                                  width: colWidth,
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      onTap: () => onDayTap(col.date),
+                              ),
+                            ),
+                          for (final col in columns)
+                            for (final item in col.timed)
+                              _TimedBlock(
+                                item: item,
+                                colWidth: colWidth,
+                                compact: compact,
+                                // Events open the form; class blocks open the day sheet
+                                // (same as tapping empty space in the column).
+                                onTap: item.event != null
+                                    ? () => onEventTap(item.event!, col.date)
+                                    : () => onDayTap(col.date),
+                              ),
+                          _NowLine(
+                            todayColIdx: columns
+                                .where((c) => c.isToday)
+                                .map((c) => c.colIdx)
+                                .firstOrNull,
+                            colWidth: colWidth,
+                          ),
+                          if (!hasAnyTimed && !hasAnyAllDay)
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'NOTHING THIS WEEK',
+                                          style: AppText.mono(
+                                            size: T.fs12,
+                                            color: T.ink3,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Tap a day column or + to add an event.',
+                                          style: AppText.sans(
+                                            size: T.fs13,
+                                            color: T.ink3,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                              for (final col in columns)
-                                for (final item in col.timed)
-                                  _TimedBlock(
-                                    item: item,
-                                    colWidth: colWidth,
-                                    compact: compact,
-                                    onEventTap: item.event != null
-                                        ? () => onEventTap(item.event!, col.date)
-                                        : null,
-                                  ),
-                            ],
-                          );
-                        },
-                      ),
-                      if (!hasAnyTimed && !hasAnyAllDay)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'NOTHING THIS WEEK',
-                                  style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Tap a day header or + to add an event.',
-                                  style: AppText.sans(size: T.fs13, color: T.ink3),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],
@@ -346,6 +383,7 @@ class _TimedItem {
     this.courseCode,
     this.kind,
     this.kindLabel,
+    this.location = '',
     this.event,
   });
 
@@ -356,6 +394,7 @@ class _TimedItem {
     required String kindLabel,
     required String start,
     required String end,
+    String location = '',
   }) =>
       _TimedItem(
         colIdx: colIdx,
@@ -365,6 +404,7 @@ class _TimedItem {
         courseCode: courseCode,
         kind: kind,
         kindLabel: kindLabel,
+        location: location,
       );
 
   factory _TimedItem.event({
@@ -388,6 +428,7 @@ class _TimedItem {
   final String? courseCode;
   final String? kind;
   final String? kindLabel;
+  final String location;
   final CalendarEvent? event;
 }
 
@@ -441,80 +482,70 @@ class _DayHead extends StatelessWidget {
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     final note = _noteText;
-    return Container(
-      padding: EdgeInsets.fromLTRB(compact ? 2 : 6, compact ? 4 : 6, compact ? 1 : 4, compact ? 3 : 5),
-      decoration: BoxDecoration(
-        color: _bg,
-        border: Border(
-          right: column.colIdx < 6 ? BorderSide(color: T.line) : BorderSide.none,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+    return Material(
+      color: _bg ?? Colors.transparent,
+      child: InkWell(
+        onTap: onDayTap,
+        child: Container(
+          padding: EdgeInsets.fromLTRB(compact ? 2 : 6, compact ? 4 : 6, compact ? 1 : 4, compact ? 3 : 5),
+          decoration: BoxDecoration(
+            border: Border(
+              right: column.colIdx < 6 ? BorderSide(color: T.line) : BorderSide.none,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: InkWell(
-                  onTap: onDayTap,
-                  borderRadius: BorderRadius.circular(T.rSm),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        compact ? _dowLabel : _dowLabel.toUpperCase(),
-                        style: AppText.mono(
-                          size: compact ? 9 : 10,
-                          color: T.ink3,
-                          letterSpacing: compact ? 0 : 1,
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          compact ? _dowLabel : _dowLabel.toUpperCase(),
+                          style: AppText.mono(
+                            size: compact ? 9 : 10,
+                            color: T.ink3,
+                            letterSpacing: compact ? 0 : 1,
+                          ),
                         ),
-                      ),
-                      Text(
-                        '${column.date.day}',
-                        style: AppText.mono(
-                          size: compact ? T.fs14 : T.fs16,
-                          color: column.isToday ? T.accentInk : T.ink,
-                          weight: FontWeight.w600,
+                        Text(
+                          '${column.date.day}',
+                          style: AppText.mono(
+                            size: compact ? T.fs14 : T.fs16,
+                            color: column.isToday ? T.accentInk : T.ink,
+                            weight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                  if (!compact)
+                    Icon(Icons.add, size: 16, color: T.ink3)
+                  else
+                    Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(Icons.add, size: 14, color: T.ink3),
+                    ),
+                ],
               ),
-              if (!compact)
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                  onPressed: onDayTap,
-                  icon: Icon(Icons.add, size: 16, color: T.ink3),
-                  tooltip: 'Add event',
-                )
-              else
-                InkWell(
-                  onTap: onDayTap,
-                  borderRadius: BorderRadius.circular(T.rSm),
-                  child: Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: Icon(Icons.add, size: 14, color: T.ink3),
+              if (note != null) ...[
+                SizedBox(height: compact ? 1 : 2),
+                Text(
+                  note,
+                  maxLines: compact ? 1 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.mono(
+                    size: compact ? 8 : 9,
+                    color: _noteColor(),
+                    height: 1.2,
                   ),
                 ),
+              ],
             ],
           ),
-          if (note != null) ...[
-            SizedBox(height: compact ? 1 : 2),
-            Text(
-              note,
-              maxLines: compact ? 1 : 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppText.mono(
-                size: compact ? 8 : 9,
-                color: _noteColor(),
-                height: 1.2,
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -591,13 +622,13 @@ class _TimedBlock extends StatelessWidget {
     required this.item,
     required this.colWidth,
     required this.compact,
-    this.onEventTap,
+    this.onTap,
   });
 
   final _TimedItem item;
   final double colWidth;
   final bool compact;
-  final VoidCallback? onEventTap;
+  final VoidCallback? onTap;
 
   static Widget _fittedLine(String text, TextStyle style) {
     return FittedBox(
@@ -623,6 +654,7 @@ class _TimedBlock extends StatelessWidget {
 
     Color tint, edge, ink;
     String body, sub;
+    var locLine = '';
 
     if (item.isClass) {
       switch (item.kind) {
@@ -640,7 +672,17 @@ class _TimedBlock extends StatelessWidget {
           ink = T.lectureInk;
       }
       body = item.courseCode ?? '';
-      sub = item.kindLabel ?? '';
+      final hall = item.location.isNotEmpty ? _shortHall(item.location) : '';
+      // ≤1h blocks: fold LH into type line (avoids mid-glyph clip). Longer: own line below.
+      if (hall.isNotEmpty && span < 1.25) {
+        final kind = item.kindLabel ?? '';
+        sub = kind.isEmpty ? hall : '$kind · $hall';
+      } else {
+        sub = item.kindLabel ?? '';
+        if (hall.isNotEmpty && !blockCompact) {
+          locLine = hall;
+        }
+      }
     } else {
       final e = item.event!;
       if (e.isPersonal) {
@@ -718,6 +760,14 @@ class _TimedBlock extends StatelessWidget {
                 color: ink,
               ),
             ),
+            if (locLine.isNotEmpty)
+              _fittedLine(
+                locLine,
+                AppText.mono(
+                  size: blockCompact ? 8 : (compact ? 9 : 10),
+                  color: ink,
+                ),
+              ),
           ],
         ),
       ),
@@ -728,16 +778,154 @@ class _TimedBlock extends StatelessWidget {
       left: left,
       width: width,
       height: height,
-      child: onEventTap != null
+      child: onTap != null
           ? Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: onEventTap,
+                onTap: onTap,
                 borderRadius: BorderRadius.circular(T.rSm),
                 child: block,
               ),
             )
           : block,
+    );
+  }
+}
+
+/// Current-time indicator for today's column only (glowing line + dot).
+class _NowLine extends StatefulWidget {
+  const _NowLine({
+    required this.todayColIdx,
+    required this.colWidth,
+  });
+
+  final int? todayColIdx;
+  final double colWidth;
+
+  @override
+  State<_NowLine> createState() => _NowLineState();
+}
+
+class _NowLineState extends State<_NowLine> with SingleTickerProviderStateMixin {
+  late DateTime _now;
+  Timer? _timer;
+  late AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+    _scheduleTick();
+  }
+
+  void _scheduleTick() {
+    _timer?.cancel();
+    final next = Duration(
+      milliseconds: (60 - _now.second) * 1000 - _now.millisecond,
+    );
+    _timer = Timer(next < const Duration(milliseconds: 250) ? const Duration(milliseconds: 250) : next, () {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
+      _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+        if (!mounted) return;
+        setState(() => _now = DateTime.now());
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    AppPaletteScope.watch(context);
+    final colIdx = widget.todayColIdx;
+    if (colIdx == null) return const SizedBox.shrink();
+
+    final offset = (_now.hour - TimetableLayout.startHour) + _now.minute / 60.0;
+    if (offset < 0 || offset > TimetableLayout.hourCount) {
+      return const SizedBox.shrink();
+    }
+
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final top = offset * TimetableLayout.rowHeight;
+    final left = TimetableLayout.railWidth + colIdx * widget.colWidth;
+    final width = widget.colWidth;
+
+    return Positioned(
+      top: top - 4,
+      left: left,
+      width: width,
+      height: 8,
+      child: IgnorePointer(
+        child: AnimatedBuilder(
+          animation: _pulse,
+          builder: (context, _) {
+            final t = reduceMotion ? 0.5 : _pulse.value;
+            final glow = 0.35 + 0.35 * t;
+            return Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.centerLeft,
+              children: [
+                Positioned(
+                  left: 4,
+                  right: 4,
+                  top: 3,
+                  child: Container(
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: T.danger,
+                      borderRadius: BorderRadius.circular(1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: T.danger.withValues(alpha: 0.55 * glow),
+                          blurRadius: 4 + 4 * t,
+                          spreadRadius: 0.5,
+                        ),
+                        BoxShadow(
+                          color: T.danger.withValues(alpha: 0.35 * glow),
+                          blurRadius: 10 + 8 * t,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 4,
+                  top: 0,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: T.danger,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: T.surface, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: T.danger.withValues(alpha: 0.7 * glow),
+                          blurRadius: 6 + 6 * t,
+                        ),
+                        BoxShadow(
+                          color: T.danger.withValues(alpha: 0.4 * glow),
+                          blurRadius: 14 + 8 * t,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }

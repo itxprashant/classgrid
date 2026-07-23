@@ -10,6 +10,7 @@ class SheetScaffold extends StatelessWidget {
   const SheetScaffold({
     super.key,
     required this.title,
+    this.eyebrow,
     this.subtitle,
     this.actions,
     required this.body,
@@ -22,6 +23,8 @@ class SheetScaffold extends StatelessWidget {
   });
 
   final String title;
+  /// Optional mono label above the serif title (e.g. day kicker).
+  final String? eyebrow;
   final Widget? subtitle;
   final List<Widget>? actions;
   final Widget body;
@@ -52,6 +55,7 @@ class SheetScaffold extends StatelessWidget {
                 if (child is SheetScaffold) {
                   return SheetScaffold(
                     title: child.title,
+                    eyebrow: child.eyebrow,
                     subtitle: child.subtitle,
                     actions: child.actions,
                     body: child.body,
@@ -75,10 +79,12 @@ class SheetScaffold extends StatelessWidget {
     AppPaletteScope.watch(context);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
+    // Must use max main-axis size: [Expanded] body needs a bounded Column height
+    // (DraggableScrollableSheet). `min` + `Expanded` collapsed the body to 0 on
+    // some devices, which hid day-event lists.
     return Material(
       color: T.surface,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: T.space8),
           Center(
@@ -100,6 +106,18 @@ class SheetScaffold extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (eyebrow != null) ...[
+                        Text(
+                          eyebrow!,
+                          style: AppText.mono(
+                            size: T.fs12,
+                            color: T.ink3,
+                            weight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: T.space4),
+                      ],
                       Text(
                         title,
                         style: AppText.serif(size: T.fs21, weight: FontWeight.w600, color: T.ink),

@@ -7,7 +7,7 @@ const SESSION_COOKIE = 'cg_session';
 const FLOW_COOKIE = 'cg_flow';
 
 const SESSION_TTL = '30d';
-const FLOW_TTL = '10m';
+const FLOW_TTL = '60m';
 
 function cookieOpts(maxAgeMs) {
     return {
@@ -56,7 +56,7 @@ function setFlowCookie(res, payload) {
         audience: 'classgrid',
         subject: 'flow',
     });
-    res.cookie(FLOW_COOKIE, token, cookieOpts(10 * 60 * 1000));
+    res.cookie(FLOW_COOKIE, token, cookieOpts(60 * 60 * 1000));
 }
 
 function clearFlowCookie(res) {

@@ -9,6 +9,8 @@ import {
     auditSiteLinks,
     auditSummary,
     formatAuditAction,
+    formatAuditActor,
+    formatClient,
     formatTargetKind,
 } from '../../utils/adminAuditLog';
 import { adminSelectableRowProps } from '../../utils/adminSelectableRow';
@@ -46,7 +48,7 @@ function AuditDetail({ entry }) {
             <p className="admin__detail-text">
                 <span className="badge">{formatTargetKind(entry.targetKind)}</span>
                 {' · '}
-                <span className="mono">{entry.actorKerberos || entry.actorName || '—'}</span>
+                <span className="mono">{formatAuditActor(entry)}</span>
             </p>
 
             <dl className="admin__detail-dl">
@@ -275,15 +277,24 @@ export default function AdminAuditLog() {
                                             <td>
                                                 <span className="badge">{formatAuditAction(row.action)}</span>
                                             </td>
-                                            <td className="mono">
-                                                {row.actorKerberos || row.actorName || '—'}
+                                            <td>
+                                                {row.actorName
+                                                    && row.actorKerberos
+                                                    && row.actorName.toLowerCase() !== row.actorKerberos.toLowerCase() ? (
+                                                    <>
+                                                        <div>{row.actorName}</div>
+                                                        <div className="mono admin__target-kind">{row.actorKerberos}</div>
+                                                    </>
+                                                ) : (
+                                                    <span className="mono">{formatAuditActor(row)}</span>
+                                                )}
                                             </td>
                                             <td>
                                                 <div className="mono">{truncateId(row.targetId)}</div>
                                                 <div className="admin__target-kind">{row.targetKind}</div>
                                             </td>
                                             <td>{auditSummary(row)}</td>
-                                            <td className="mono">{row.client || '—'}</td>
+                                            <td className="mono">{formatClient(row.client)}</td>
                                         </tr>
                                     );
                                 })}

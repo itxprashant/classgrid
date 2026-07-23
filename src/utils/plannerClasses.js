@@ -48,6 +48,13 @@ export function getClassesForDate(date, courses, timetableData) {
             if (!Array.isArray(slots)) continue;
             for (const slot of slots) {
                 if (!slot || slot.day !== academic.effectiveDay) continue;
+                // Match Plan timetable: per-slot location, else course lectureHall for lectures.
+                const location =
+                    (slot.location && String(slot.location).trim())
+                    || (kind === 'lecture' && course.lectureHall
+                        ? String(course.lectureHall).trim()
+                        : '')
+                    || '';
                 sessions.push({
                     id: `${course.courseCode}-${kind}-${slot.start}-${slot.end}`,
                     courseCode: course.courseCode,
@@ -56,6 +63,7 @@ export function getClassesForDate(date, courses, timetableData) {
                     start: slot.start,
                     end: slot.end,
                     timeLabel: formatSessionTime(slot.start),
+                    location,
                 });
             }
         }

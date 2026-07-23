@@ -308,6 +308,66 @@
     color: var(--danger);
 }
 
+/* Current-time indicator — today's column only */
+.tt__now {
+    position: absolute;
+    z-index: 12;
+    pointer-events: none;
+    height: 0;
+}
+
+.tt__now-line {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    top: 0;
+    height: 2px;
+    background: var(--danger);
+    transform: translateY(-50%);
+    border-radius: 1px;
+    box-shadow:
+        0 0 4px color-mix(in oklch, var(--danger) 70%, transparent),
+        0 0 10px color-mix(in oklch, var(--danger) 45%, transparent);
+}
+
+.tt__now-dot {
+    position: absolute;
+    left: 4px;
+    top: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    transform: translateY(-50%);
+    box-shadow:
+        0 0 0 2px var(--surface),
+        0 0 6px color-mix(in oklch, var(--danger) 80%, transparent),
+        0 0 14px color-mix(in oklch, var(--danger) 50%, transparent);
+    animation: tt-now-pulse 2.4s var(--ease-out) infinite;
+}
+
+@keyframes tt-now-pulse {
+    0%,
+    100% {
+        box-shadow:
+            0 0 0 2px var(--surface),
+            0 0 6px color-mix(in oklch, var(--danger) 80%, transparent),
+            0 0 14px color-mix(in oklch, var(--danger) 50%, transparent);
+    }
+    50% {
+        box-shadow:
+            0 0 0 2px var(--surface),
+            0 0 10px color-mix(in oklch, var(--danger) 90%, transparent),
+            0 0 22px color-mix(in oklch, var(--danger) 55%, transparent);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tt__now-dot {
+        animation: none;
+    }
+}
+
 .tt__col-tap {
     position: absolute;
     top: 0;

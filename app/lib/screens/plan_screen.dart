@@ -19,6 +19,7 @@ import '../theme/tokens.dart';
 import '../widgets/academic_calendar_sheet.dart';
 import '../widgets/common.dart';
 import '../widgets/edit_timing_sheet.dart';
+import '../widgets/sheet_scaffold.dart';
 import '../widgets/timetable_grid.dart';
 
 class PlanScreen extends StatefulWidget {
@@ -29,6 +30,79 @@ class PlanScreen extends StatefulWidget {
 }
 
 class _PlanScreenState extends State<PlanScreen> {
+  static String _fmtTime(String hhmm) {
+    if (hhmm.length != 4) return hhmm;
+    return '${hhmm.substring(0, 2)}:${hhmm.substring(2)}';
+  }
+
+  static String _typeLabel(String type) {
+    switch (type) {
+      case 'LEC':
+      case 'Lecture':
+        return 'Lecture';
+      case 'TUT':
+      case 'Tutorial':
+        return 'Tutorial';
+      case 'LAB':
+      case 'Lab':
+        return 'Lab';
+      default:
+        return type;
+    }
+  }
+
+  Future<void> _openDaySheet(String day, List<GridSession> allSessions) async {
+    final sessions = allSessions.where((s) => s.day == day).toList()
+      ..sort((a, b) {
+        final c = a.start.compareTo(b.start);
+        return c != 0 ? c : a.courseCode.compareTo(b.courseCode);
+      });
+
+    final title = sessions.isEmpty
+        ? 'No classes'
+        : '${sessions.length} class${sessions.length == 1 ? '' : 'es'}';
+
+    await SheetScaffold.show<void>(
+      context: context,
+      child: SheetScaffold(
+        title: title,
+        eyebrow: day.toUpperCase(),
+        body: sessions.isEmpty
+            ? Text(
+                'Nothing scheduled on $day.',
+                style: AppText.sans(size: T.fs14, color: T.ink3),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Classes',
+                    style: AppText.sans(size: T.fs12, color: T.ink3, weight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  for (final s in sessions)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.schedule_outlined, color: T.lectureInk, size: 22),
+                      title: Text(
+                        s.courseCode,
+                        style: AppText.mono(weight: FontWeight.w600, size: T.fs14),
+                      ),
+                      subtitle: Text(
+                        [
+                          _typeLabel(s.type),
+                          '${_fmtTime(s.start)} – ${_fmtTime(s.end)}',
+                          if (s.location.trim().isNotEmpty) s.location.trim(),
+                        ].join(' · '),
+                        style: AppText.sans(size: T.fs12, color: T.ink3),
+                      ),
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+
   Future<void> _startLogin() async {
     if (AppConfig.usesDesktopLogin) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -163,9 +237,11 @@ class _PlanScreenState extends State<PlanScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final credits = totalCredits(planner.selectedCourses);
-    final conflicts = countConflicts(planner.selectedCourses, planner.timetableData);
-    final gridSessions = flattenSessions(planner.selectedCourses, planner.timetableData);
+    final catalog = context.watch<CatalogProvider>();
+    final coursesWithHalls = catalog.enrichSelectedCourses(planner.selectedCourses);
+    final credits = totalCredits(coursesWithHalls);
+    final conflicts = countConflicts(coursesWithHalls, planner.timetableData);
+    final gridSessions = flattenSessions(coursesWithHalls, planner.timetableData);
     final gridConflicts = conflictIndices(gridSessions);
 
     return ListView(
@@ -227,20 +303,21 @@ class _PlanScreenState extends State<PlanScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: T.space16),
           child: TimetableGrid(
-            courses: planner.selectedCourses,
+            courses: coursesWithHalls,
             timetableData: planner.timetableData,
             sessions: gridSessions,
             conflicts: gridConflicts,
+            onDayTap: (day) => _openDaySheet(day, gridSessions),
           ),
         ),
         const SectionHeader('Selected courses'),
-        if (planner.selectedCourses.isEmpty)
+        if (coursesWithHalls.isEmpty)
           EmptyState(
             message: 'No courses yet. Add a course or auto-fetch your registered courses.',
             icon: Icons.event_available_outlined,
           )
         else
-          ...planner.selectedCourses.map((c) => _courseTile(c, planner)),
+          ...coursesWithHalls.map((c) => _courseTile(c, planner)),
         const SizedBox(height: T.space32),
       ],
     );

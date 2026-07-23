@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import {
     formatDateKey,
     getAcademicDay,
@@ -39,7 +46,7 @@ import { useDialogA11y } from '../utils/useDialogA11y';
 import {
     eventActorFromUser,
 } from '../utils/calendarEvents';
-import AcademicCalendarButton from '../components/AcademicCalendar/AcademicCalendarButton';
+import AcademicCalendarDialog from '../components/AcademicCalendar/AcademicCalendarDialog';
 import AndroidAppPromo from '../components/AndroidAppPromo/AndroidAppPromo';
 import CalendarWeekGrid from '../components/Calendar/CalendarWeekGrid';
 import { useAuth, apiFetch } from '../auth/AuthContext';
@@ -66,6 +73,9 @@ const WEEK_HEADERS = [
 
 const MAX_CELL_EVENTS = 2;
 const MAX_CELL_CLASSES = 2;
+const SIDEBAR_UPCOMING_LIMIT = 6;
+const SIDEBAR_HOLIDAY_LIMIT = 4;
+const UPCOMING_LOOKAHEAD_DAYS = 90;
 
 const TYPE_LABELS = {
     quiz: 'Quiz',
@@ -98,11 +108,49 @@ function fmtFull(date) {
 function fmtDayHeader(date) {
     return {
         weekday: date.toLocaleDateString('en-IN', { weekday: 'short' }),
+        dayNum: date.getDate(),
         cal: date.toLocaleDateString('en-IN', {
             day: 'numeric',
             month: 'short',
             year: 'numeric',
         }),
+    };
+}
+
+const DAY_POPOVER_WIDTH = 320;
+const DAY_POPOVER_GAP = 10;
+
+/** Position a day popover under (or above) an anchor rect; returns null on narrow viewports. */
+function computeDayPopoverStyle(anchorRect) {
+    if (typeof window === 'undefined') return null;
+    if (window.innerWidth < 640) return null;
+
+    const width = Math.min(DAY_POPOVER_WIDTH, window.innerWidth - 24);
+    let left = anchorRect.left + anchorRect.width / 2 - width / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+
+    const spaceBelow = window.innerHeight - anchorRect.bottom - DAY_POPOVER_GAP - 16;
+    const spaceAbove = anchorRect.top - DAY_POPOVER_GAP - 16;
+    const preferBelow = spaceBelow >= 220 || spaceBelow >= spaceAbove;
+    const maxHeight = Math.min(480, preferBelow ? spaceBelow : spaceAbove);
+    if (maxHeight < 160) return null;
+
+    const top = preferBelow
+        ? anchorRect.bottom + DAY_POPOVER_GAP
+        : Math.max(12, anchorRect.top - DAY_POPOVER_GAP - maxHeight);
+
+    const caretLeft = Math.min(
+        width - 18,
+        Math.max(18, anchorRect.left + anchorRect.width / 2 - left),
+    );
+
+    return {
+        left,
+        top,
+        width,
+        maxHeight,
+        caretLeft,
+        placement: preferBelow ? 'below' : 'above',
     };
 }
 
@@ -217,6 +265,24 @@ function fmtWeekRange(start, end) {
     return `${startStr} – ${endStr}`;
 }
 
+function fmtSidebarDate(date) {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = date
+        .toLocaleDateString('en-IN', { month: 'short' })
+        .toUpperCase();
+    return { day, month };
+}
+
+function daysUntil(date, today) {
+    return Math.round((date.getTime() - today.getTime()) / 86400000);
+}
+
+function formatDaysAway(n) {
+    if (n <= 0) return 'Today';
+    if (n === 1) return '1 day';
+    return `${n} days`;
+}
+
 function loadPlannerCourses() {
     try {
         const raw = localStorage.getItem('selectedCourses');
@@ -301,42 +367,41 @@ function MycalDayModalContent({
         !dayEvents.length &&
         !(showClasses && dayClasses.length > 0);
 
+    const titleText =
+        isQuietDay && !instituteClasses
+            ? 'Quiet day'
+            : (showClasses && dayClasses.length > 0) || dayEvents.length > 0
+              ? [
+                    showClasses && dayClasses.length > 0
+                        ? `${dayClasses.length} class${dayClasses.length === 1 ? '' : 'es'}`
+                        : null,
+                    dayEvents.length > 0
+                        ? `${dayEvents.length} event${dayEvents.length === 1 ? '' : 's'}`
+                        : null,
+                ]
+                    .filter(Boolean)
+                    .join(' · ')
+              : dayHeader.cal;
+
     return (
         <>
-            <div className={`mycal__modal-head${delight ? `${delight}-head` : ''}`}>
+            <div className={`mycal__modal-head mycal__day-head${delight ? `${delight}-head` : ''}`}>
                 <div className="mycal__modal-head-main">
                     {dayDelightClass === 'mycal__ld3' && (
                         <p className="mycal__ld3-kicker mono">Day overview</p>
                     )}
-                    <h2 id="mycal-modal-title" className="mycal__modal-title">
-                        <span className="mycal__modal-title-row">
-                            <span className="mycal__modal-title-dow mono">
-                                {dayHeader.weekday}
-                            </span>
-                            <span className="mycal__modal-title-cal">
-                                {dayHeader.cal}
-                            </span>
-                        </span>
+                    <p className="mycal__day-kicker mono" aria-hidden="true">
+                        {dayHeader.weekday} {dayHeader.dayNum}
+                    </p>
+                    <h2
+                        id="mycal-modal-title"
+                        className="mycal__modal-title mycal__day-title"
+                        aria-label={`${titleText}, ${dayHeader.cal}`}
+                    >
+                        {titleText}
                     </h2>
                     {weekdayLabel ? (
                         <span className="mycal__ld2-weekday mono">{weekdayLabel}</span>
-                    ) : null}
-                    {isQuietDay && !instituteClasses ? (
-                        <p className="mycal__day-summary mono">Quiet day</p>
-                    ) : (showClasses && dayClasses.length > 0) || dayEvents.length > 0 ? (
-                        <p className="mycal__day-summary mono">
-                            {showClasses && dayClasses.length > 0
-                                ? `${dayClasses.length} class${dayClasses.length === 1 ? '' : 'es'}`
-                                : null}
-                            {showClasses &&
-                            dayClasses.length > 0 &&
-                            dayEvents.length > 0
-                                ? ' · '
-                                : null}
-                            {dayEvents.length > 0
-                                ? `${dayEvents.length} event${dayEvents.length === 1 ? '' : 's'}`
-                                : null}
-                        </p>
                     ) : null}
                 </div>
                 <button
@@ -400,9 +465,7 @@ function MycalDayModalContent({
                         ) : null}
                     </div>
                     {!instituteClasses ? (
-                        <p className="mycal__day-empty">
-                            No institute classes today.
-                        </p>
+                        <p className="mycal__day-empty">No classes today.</p>
                     ) : !showClasses ? (
                         <p className="mycal__day-empty mycal__day-empty--hint">
                             Enable <strong>Show classes</strong> in the toolbar
@@ -473,8 +536,8 @@ function MycalDayModalContent({
                             }
                         >
                             {isQuietDay && !instituteClasses
-                                ? 'Your calendar is clear. Add a personal reminder below if you need one.'
-                                : 'No events yet. Add a course or personal event below.'}
+                                ? 'Your calendar is clear.'
+                                : 'No events yet.'}
                         </p>
                     ) : (
                         <ul
@@ -535,44 +598,32 @@ function MycalDayModalContent({
             </div>
 
             <div className="mycal__day-add">
-                <h3 className="mycal__day-section-title mono">Add event</h3>
-                <div className="mycal__picker-options">
-                    <button
-                        type="button"
-                        className="mycal__picker-option mycal__picker-option--shared"
-                        onClick={() => chooseCreateMode('shared')}
-                    >
-                        <span className="mycal__picker-option-label mono">
-                            Shared
-                        </span>
-                        <span className="mycal__picker-option-body">
-                            <span className="mycal__picker-option-title">
-                                Course event
-                            </span>
-                            <span className="mycal__picker-option-desc">
-                                Synced for everyone on that course — quiz,
-                                deadline, exam, …
-                            </span>
-                        </span>
-                    </button>
-                    <button
-                        type="button"
-                        className="mycal__picker-option mycal__picker-option--personal"
-                        onClick={() => chooseCreateMode('personal')}
-                    >
-                        <span className="mycal__picker-option-label mono">
-                            Private
-                        </span>
-                        <span className="mycal__picker-option-body">
-                            <span className="mycal__picker-option-title">
-                                Personal event
-                            </span>
-                            <span className="mycal__picker-option-desc">
-                                Only you see this; not tied to a course
-                            </span>
-                        </span>
-                    </button>
-                </div>
+                <button
+                    type="button"
+                    className="mycal__day-action mycal__day-action--shared"
+                    onClick={() => chooseCreateMode('shared')}
+                >
+                    <span className="mycal__day-action-icon" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <rect x="2.5" y="3.5" width="11" height="10" rx="1.5" stroke="currentColor" />
+                            <path d="M5 2v2.5M11 2v2.5M2.5 7h11" stroke="currentColor" strokeLinecap="round" />
+                        </svg>
+                    </span>
+                    Add course event…
+                </button>
+                <button
+                    type="button"
+                    className="mycal__day-action mycal__day-action--personal"
+                    onClick={() => chooseCreateMode('personal')}
+                >
+                    <span className="mycal__day-action-icon" aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <circle cx="8" cy="6" r="2.5" stroke="currentColor" />
+                            <path d="M3.5 13c.6-2 2.2-3 4.5-3s3.9 1 4.5 3" stroke="currentColor" strokeLinecap="round" />
+                        </svg>
+                    </span>
+                    Add personal event…
+                </button>
             </div>
             </div>
         </>
@@ -597,8 +648,11 @@ function emptyDraft(dateKey, defaultCourseCode = '', mode = 'shared') {
 
 export default function MyCalendar() {
     const { user, login } = useAuth();
-    const { courses: catalogCourses } = useSemesterData();
-    const today = todayMidnight();
+    const { courses: catalogCourses, schedule } = useSemesterData();
+    // Stable for the mount — a fresh Date each render would invalidate fetchRange
+    // → reloadEvents → useEffect and spam /api/me/events until ERR_INSUFFICIENT_RESOURCES.
+    const today = useMemo(() => todayMidnight(), []);
+    const todayKey = formatDateKey(today);
     const [viewMode, setViewMode] = useState('week');
     const [viewYear, setViewYear] = useState(today.getFullYear());
     const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -611,11 +665,14 @@ export default function MyCalendar() {
     const [modal, setModal] = useState(null);
     const [eventFormView, setEventFormView] = useState('form');
     const [reportingEvent, setReportingEvent] = useState(null);
-    const [showClasses, setShowClasses] = useState(false);
+    const [showClasses, setShowClasses] = useState(true);
+    const [academicCalOpen, setAcademicCalOpen] = useState(false);
+    const [upcomingExpanded, setUpcomingExpanded] = useState(false);
     const [enrolledCodes, setEnrolledCodes] = useState([]);
     const migratedLocalRef = useRef(false);
     const modalDialogRef = useRef(null);
     const reportDialogRef = useRef(null);
+    const [dayPopoverStyle, setDayPopoverStyle] = useState(null);
 
     const plannerCourses = useMemo(() => loadPlannerCourses(), []);
     const courseOptions = useMemo(() => buildCourseOptions(catalogCourses), [catalogCourses]);
@@ -673,15 +730,18 @@ export default function MyCalendar() {
         [viewMode, weekDates, weeks]
     );
 
-    const includePlannerClasses = viewMode === 'week' || showClasses;
+    const includePlannerClasses = showClasses;
 
     const fetchRange = useMemo(() => {
         if (gridDates.length === 0) return null;
+        const gridFrom = formatDateKey(gridDates[0]);
+        const gridTo = formatDateKey(gridDates[gridDates.length - 1]);
+        const lookAheadTo = formatDateKey(addDays(today, UPCOMING_LOOKAHEAD_DAYS));
         return {
-            from: formatDateKey(gridDates[0]),
-            to: formatDateKey(gridDates[gridDates.length - 1]),
+            from: gridFrom < todayKey ? gridFrom : todayKey,
+            to: gridTo > lookAheadTo ? gridTo : lookAheadTo,
         };
-    }, [gridDates]);
+    }, [gridDates, today, todayKey]);
 
     const reloadEvents = useCallback(async () => {
         if (!fetchRange) {
@@ -746,10 +806,24 @@ export default function MyCalendar() {
     }, [user, reloadEvents]);
 
     const classesByDate = useMemo(() => {
-        if (!includePlannerClasses) return new Map();
+        if (!includePlannerClasses || !schedule) return new Map();
         const { courses, timetableData } = loadPlannerState();
-        return buildClassesByDate(gridDates, courses, timetableData);
-    }, [includePlannerClasses, gridDates]);
+        // Enrich stale plans (saved before venue sync) with live catalog halls.
+        const hallByCode = new Map(
+            (catalogCourses || [])
+                .filter((c) => c?.courseCode && c.lectureHall)
+                .map((c) => [c.courseCode, c.lectureHall])
+        );
+        const enriched = courses.map((c) => {
+            if (!c?.courseCode) return c;
+            if (c.lectureHall) return c;
+            const hall = hallByCode.get(c.courseCode);
+            return hall ? { ...c, lectureHall: hall } : c;
+        });
+        // `schedule` in deps: rebuild when academic calendar is ready so holidays
+        // (e.g. Milad-un-Nabi) suppress planner classes the same as Android.
+        return buildClassesByDate(gridDates, enriched, timetableData);
+    }, [includePlannerClasses, gridDates, catalogCourses, schedule]);
 
     const plannerCourseCount = useMemo(() => {
         if (!includePlannerClasses) return 0;
@@ -767,11 +841,24 @@ export default function MyCalendar() {
     }, [events]);
 
     const upcoming = useMemo(() => {
-        const todayKey = formatDateKey(today);
         return [...events]
             .filter((e) => e.date >= todayKey)
             .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-    }, [events, today]);
+    }, [events, todayKey]);
+
+    const upcomingVisible = useMemo(() => {
+        if (upcomingExpanded) return upcoming;
+        return upcoming.slice(0, SIDEBAR_UPCOMING_LIMIT);
+    }, [upcoming, upcomingExpanded]);
+
+    const upcomingHolidays = useMemo(() => {
+        const HOLIDAYS = schedule?.HOLIDAYS || {};
+        return Object.entries(HOLIDAYS)
+            .map(([key, name]) => ({ key, date: parseDateKey(key), name }))
+            .filter((h) => h.date.getTime() >= today.getTime())
+            .sort((a, b) => a.date - b.date)
+            .slice(0, SIDEBAR_HOLIDAY_LIMIT);
+    }, [schedule, today]);
 
     const goPrev = () => {
         if (viewMode === 'week') {
@@ -820,6 +907,7 @@ export default function MyCalendar() {
 
     const closeModal = () => {
         setModal(null);
+        setDayPopoverStyle(null);
         setEventFormView('form');
     };
 
@@ -837,8 +925,33 @@ export default function MyCalendar() {
     };
 
     const openDayView = (dateKey, date) => {
+        setDayPopoverStyle(null);
         setModal({ type: 'day', dateKey, label: fmtFull(date) });
     };
+
+    useLayoutEffect(() => {
+        if (!modal || modal.type !== 'day') {
+            setDayPopoverStyle(null);
+            return undefined;
+        }
+
+        const place = () => {
+            const el = document.querySelector(`[data-cal-day="${modal.dateKey}"]`);
+            if (!el) {
+                setDayPopoverStyle(null);
+                return;
+            }
+            setDayPopoverStyle(computeDayPopoverStyle(el.getBoundingClientRect()));
+        };
+
+        place();
+        window.addEventListener('resize', place);
+        window.addEventListener('scroll', place, true);
+        return () => {
+            window.removeEventListener('resize', place);
+            window.removeEventListener('scroll', place, true);
+        };
+    }, [modal]);
 
     const chooseCreateMode = (mode) => {
         setModal((prev) => {
@@ -1010,49 +1123,6 @@ export default function MyCalendar() {
         }
     };
 
-    const handleDeleteFromList = async (evt) => {
-        if (saving) return;
-
-        if (!user) {
-            if (!evt.isPersonal) {
-                login();
-                return;
-            }
-            setSaving(true);
-            setEventsError(null);
-            try {
-                removeLocalPersonalEvent(evt.id);
-                if (modal?.type === 'form' && modal.draft.id === evt.id) closeModal();
-                await reloadEvents();
-            } catch (err) {
-                setEventsError(err.message || 'Could not delete event');
-            } finally {
-                setSaving(false);
-            }
-            return;
-        }
-
-        setSaving(true);
-        setEventsError(null);
-        try {
-            if (evt.isPersonal) {
-                await removePersonalEvent(evt.id);
-            } else {
-                await removeEvent(evt.id);
-            }
-            if (modal?.type === 'form' && modal.draft.id === evt.id) closeModal();
-            await reloadEvents();
-        } catch (err) {
-            if (err.code === 'not_authenticated') {
-                login();
-            } else {
-                setEventsError(err.message || 'Could not delete event');
-            }
-        } finally {
-            setSaving(false);
-        }
-    };
-
     const modalDraft = modal?.type === 'form' ? modal.draft : null;
     const modalFormTitle = modalDraft
         ? modalDraft.id
@@ -1063,8 +1133,6 @@ export default function MyCalendar() {
               ? 'New personal event'
               : 'New course event'
         : '';
-
-    const todayKey = formatDateKey(today);
 
     const renderClassChip = (s) => (
         <span
@@ -1123,20 +1191,11 @@ export default function MyCalendar() {
         <SemesterDataGate>
         <div className="mycal">
             <header className="mycal__head">
-                <div className="mycal__eyebrow">Calendar</div>
-                <h1 className="mycal__title">
-                    Quizzes, deadlines &amp; <em>everything you can't miss</em>.
-                </h1>
+                <h1 className="mycal__title">Calendar</h1>
                 <p className="mycal__sub">
-                    Shared course events are visible to everyone in that course — log in with IITD
-                    to add or edit those. Personal events are private: guests save them on this
-                    device; when you sign in, they sync to your account. Use{' '}
-                    <strong>Holidays &amp; timetable changes</strong> for institute holidays,
-                    swaps and breaks.
+                    Plan your week. Stay on track with classes, quizzes, and institute holidays.
                 </p>
             </header>
-
-            <AndroidAppPromo />
 
             {eventsError && (
                 <p className="mycal__status status status--err" role="alert">
@@ -1160,7 +1219,37 @@ export default function MyCalendar() {
                 </p>
             )}
 
+            <div className="mycal__layout">
+            <div className="mycal__main">
             <div className="mycal__toolbar">
+                <div
+                    className="mycal__viewtoggle"
+                    role="group"
+                    aria-label="Calendar view"
+                >
+                    <button
+                        type="button"
+                        className={
+                            'mycal__viewtoggle-btn' +
+                            (viewMode === 'week' ? ' is-active' : '')
+                        }
+                        aria-pressed={viewMode === 'week'}
+                        onClick={() => switchView('week')}
+                    >
+                        Week
+                    </button>
+                    <button
+                        type="button"
+                        className={
+                            'mycal__viewtoggle-btn' +
+                            (viewMode === 'month' ? ' is-active' : '')
+                        }
+                        aria-pressed={viewMode === 'month'}
+                        onClick={() => switchView('month')}
+                    >
+                        Month
+                    </button>
+                </div>
                 <div className="mycal__nav">
                     <button
                         type="button"
@@ -1197,52 +1286,35 @@ export default function MyCalendar() {
                     </button>
                 </div>
                 <div className="mycal__toolbar-actions">
-                    <div
-                        className="mycal__viewtoggle"
-                        role="group"
-                        aria-label="Calendar view"
+                    <label className="mycal__show-classes">
+                        <input
+                            type="checkbox"
+                            checked={showClasses}
+                            onChange={(e) => setShowClasses(e.target.checked)}
+                        />
+                        <span>Show classes</span>
+                    </label>
+                    <button
+                        type="button"
+                        className="btn btn--sm btn--primary"
+                        onClick={() => openDayView(todayKey, today)}
                     >
-                        <button
-                            type="button"
-                            className={
-                                'mycal__viewtoggle-btn' +
-                                (viewMode === 'month' ? ' is-active' : '')
-                            }
-                            aria-pressed={viewMode === 'month'}
-                            onClick={() => switchView('month')}
-                        >
-                            Month
-                        </button>
-                        <button
-                            type="button"
-                            className={
-                                'mycal__viewtoggle-btn' +
-                                (viewMode === 'week' ? ' is-active' : '')
-                            }
-                            aria-pressed={viewMode === 'week'}
-                            onClick={() => switchView('week')}
-                        >
-                            Week
-                        </button>
-                    </div>
-                    <AcademicCalendarButton />
-                    {viewMode === 'month' && (
-                        <label className="mycal__show-classes">
-                            <input
-                                type="checkbox"
-                                checked={showClasses}
-                                onChange={(e) => setShowClasses(e.target.checked)}
-                            />
-                            <span>Show classes</span>
-                        </label>
-                    )}
+                        + Add event
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn--sm"
+                        onClick={() => setAcademicCalOpen(true)}
+                    >
+                        Holidays
+                    </button>
                     <button type="button" className="btn btn--sm" onClick={goToday}>
                         Today
                     </button>
                 </div>
             </div>
 
-            {(viewMode === 'week' || showClasses) && plannerCourseCount === 0 && (
+            {showClasses && plannerCourseCount === 0 && (
                 <p className="mycal__planner-hint status">
                     No courses on your planner yet — add them on the Plan page to see classes here.
                 </p>
@@ -1295,6 +1367,7 @@ export default function MyCalendar() {
                                     key={key}
                                     type="button"
                                     className={cellClass}
+                                    data-cal-day={key}
                                     onClick={() => openDayView(key, date)}
                                     aria-label={`View ${fmtFull(date)}`}
                                 >
@@ -1375,7 +1448,7 @@ export default function MyCalendar() {
                         weekDates={weekDates}
                         classesByDate={classesByDate}
                         eventsByDate={eventsByDate}
-                        showClasses
+                        showClasses={showClasses}
                         todayKey={todayKey}
                         fmtFull={fmtFull}
                         openDayView={openDayView}
@@ -1383,10 +1456,130 @@ export default function MyCalendar() {
                     />
                 </div>
             )}
+            </div>{/* /.mycal__main */}
+
+            <aside className="mycal__aside" aria-label="Upcoming and holidays">
+                <section className="mycal__aside-panel">
+                    <div className="mycal__aside-head">
+                        <h2 className="mycal__aside-title">Upcoming events</h2>
+                        {upcoming.length > SIDEBAR_UPCOMING_LIMIT && (
+                            <button
+                                type="button"
+                                className="mycal__aside-link"
+                                onClick={() => setUpcomingExpanded((v) => !v)}
+                            >
+                                {upcomingExpanded ? 'Show less' : 'View all'}
+                            </button>
+                        )}
+                    </div>
+                    {upcoming.length === 0 ? (
+                        <p className="mycal__aside-empty">
+                            Nothing scheduled. Add an event from a day on the calendar.
+                        </p>
+                    ) : (
+                        <ul className="mycal__aside-list">
+                            {upcomingVisible.map((e) => {
+                                const d = parseDateKey(e.date);
+                                const when = formatEventSchedule(e);
+                                const { day, month } = fmtSidebarDate(d);
+                                return (
+                                    <li key={e.id}>
+                                        <button
+                                            type="button"
+                                            className="mycal__aside-event"
+                                            onClick={() => openEdit(e)}
+                                        >
+                                            <span className="mycal__aside-date mono" aria-hidden="true">
+                                                <span className="mycal__aside-date-day">{day}</span>
+                                                <span className="mycal__aside-date-month">{month}</span>
+                                            </span>
+                                            <span className="mycal__aside-event-body">
+                                                <span
+                                                    className={
+                                                        'mycal__aside-type mono' +
+                                                        (e.isPersonal
+                                                            ? ' mycal__aside-type--personal'
+                                                            : ` mycal__aside-type--${e.type}`)
+                                                    }
+                                                >
+                                                    {e.isPersonal ? 'Personal' : TYPE_LABELS[e.type]}
+                                                </span>
+                                                <span className="mycal__aside-event-title">
+                                                    {e.title}
+                                                </span>
+                                                <span className="mycal__aside-event-meta mono">
+                                                    {!e.isPersonal && e.courseCode
+                                                        ? e.courseCode
+                                                        : null}
+                                                    {!e.isPersonal && e.courseCode && when
+                                                        ? ' · '
+                                                        : null}
+                                                    {when || null}
+                                                </span>
+                                            </span>
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </section>
+
+                <section className="mycal__aside-panel">
+                    <div className="mycal__aside-head">
+                        <h2 className="mycal__aside-title">Next holidays</h2>
+                        <button
+                            type="button"
+                            className="mycal__aside-link"
+                            onClick={() => setAcademicCalOpen(true)}
+                        >
+                            View calendar
+                        </button>
+                    </div>
+                    {upcomingHolidays.length === 0 ? (
+                        <p className="mycal__aside-empty">
+                            No upcoming holidays in this semester.
+                        </p>
+                    ) : (
+                        <ul className="mycal__aside-list">
+                            {upcomingHolidays.map((h) => {
+                                const { day, month } = fmtSidebarDate(h.date);
+                                const away = daysUntil(h.date, today);
+                                return (
+                                    <li key={h.key} className="mycal__aside-holiday">
+                                        <span className="mycal__aside-date mono" aria-hidden="true">
+                                            <span className="mycal__aside-date-day">{day}</span>
+                                            <span className="mycal__aside-date-month">{month}</span>
+                                        </span>
+                                        <span className="mycal__aside-holiday-body">
+                                            <span className="mycal__aside-holiday-name">{h.name}</span>
+                                            <span className="mycal__aside-holiday-meta mono">
+                                                {formatDaysAway(away)}
+                                            </span>
+                                        </span>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </section>
+
+                <AndroidAppPromo variant="sidebar" />
+            </aside>
+            </div>{/* /.mycal__layout */}
+
+            {academicCalOpen && (
+                <AcademicCalendarDialog onClose={() => setAcademicCalOpen(false)} />
+            )}
 
             {modal && (
                 <div
-                    className="mycal__modal-backdrop"
+                    className={
+                        'mycal__modal-backdrop' +
+                        (modal.type === 'day' && dayPopoverStyle
+                            ? ' mycal__modal-backdrop--popover'
+                            : '')
+                    }
                     onClick={closeModal}
                     role="presentation"
                 >
@@ -1395,13 +1588,38 @@ export default function MyCalendar() {
                             className={
                                 'mycal__modal panel' +
                                 (modal.type === 'form' ? ' mycal__modal--form' : '') +
-                                (modal.type === 'day' ? ' mycal__modal--day' : '')
+                                (modal.type === 'day' ? ' mycal__modal--day' : '') +
+                                (modal.type === 'day' && dayPopoverStyle
+                                    ? ' mycal__modal--day-popover'
+                                    : '')
+                            }
+                            style={
+                                modal.type === 'day' && dayPopoverStyle
+                                    ? {
+                                          left: dayPopoverStyle.left,
+                                          top: dayPopoverStyle.top,
+                                          width: dayPopoverStyle.width,
+                                          maxHeight: dayPopoverStyle.maxHeight,
+                                      }
+                                    : undefined
+                            }
+                            data-placement={
+                                modal.type === 'day' && dayPopoverStyle
+                                    ? dayPopoverStyle.placement
+                                    : undefined
                             }
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="mycal-modal-title"
                             onClick={(e) => e.stopPropagation()}
                         >
+                            {modal.type === 'day' && dayPopoverStyle ? (
+                                <span
+                                    className="mycal__popover-caret"
+                                    style={{ left: dayPopoverStyle.caretLeft }}
+                                    aria-hidden="true"
+                                />
+                            ) : null}
                             {modal.type === 'day' ? (
                                 <MycalDayModalContent
                                     modal={modal}
@@ -1713,84 +1931,6 @@ export default function MyCalendar() {
                         </div>
                 </div>
             )}
-
-            <section className="mycal__section">
-                <div className="mycal__section-head">
-                    <h2 className="mycal__h2">Upcoming</h2>
-                    <span className="mycal__section-rule" aria-hidden="true" />
-                </div>
-
-                {upcoming.length === 0 ? (
-                    <div className="empty">
-                        <strong>Nothing scheduled.</strong>
-                        Click a day above and choose course or personal event.
-                    </div>
-                ) : (
-                    <ul className="mycal__list">
-                        {upcoming.map((e) => {
-                            const d = parseDateKey(e.date);
-                            const when = formatEventSchedule(e);
-                            return (
-                                <li key={e.id} className="mycal__item">
-                                    <span className="mycal__item-date mono">
-                                        {fmtFull(d)}
-                                        {when && (
-                                            <span className="mycal__item-time">{when}</span>
-                                        )}
-                                    </span>
-                                    <span className="mycal__item-main">
-                                        <span
-                                            className={
-                                                'mycal__chip mycal__chip--inline' +
-                                                (e.isPersonal
-                                                    ? ' mycal__chip--personal'
-                                                    : ` mycal__chip--${e.type}`)
-                                            }
-                                        >
-                                            {e.isPersonal ? 'Personal' : TYPE_LABELS[e.type]}
-                                        </span>
-                                        {!e.isPersonal && e.courseCode && (
-                                            <span className="badge badge--count mono">
-                                                {e.courseCode}
-                                            </span>
-                                        )}
-                                        <span className="mycal__item-title">{e.title}</span>
-                                        {e.note && (
-                                            <span className="mycal__item-note">{e.note}</span>
-                                        )}
-                                    </span>
-                                    <span className="mycal__item-actions">
-                                        {!e.isPersonal && user && (
-                                            <button
-                                                type="button"
-                                                className="btn btn--sm btn--ghost"
-                                                onClick={() => setReportingEvent(e)}
-                                            >
-                                                Report
-                                            </button>
-                                        )}
-                                        <button
-                                            type="button"
-                                            className="btn btn--sm btn--ghost"
-                                            onClick={() => openEdit(e)}
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="btn btn--sm btn--danger-ghost"
-                                            onClick={() => handleDeleteFromList(e)}
-                                            aria-label={`Delete ${e.title}`}
-                                        >
-                                            Delete
-                                        </button>
-                                    </span>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                )}
-            </section>
 
             <p className="mycal__foot">
                 Course events are shared with everyone in that course.

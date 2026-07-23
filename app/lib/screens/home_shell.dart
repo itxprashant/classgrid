@@ -32,7 +32,7 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _index = 0;
   String? _drawerRoute;
   PlannerStore? _planner;
@@ -46,6 +46,12 @@ class _HomeShellState extends State<HomeShell> {
     CoursesScreen(),
     RoomsScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   @override
   void didChangeDependencies() {
@@ -65,7 +71,21 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Debounced PUT can be lost if the process dies before 800ms — flush when
+    // the OS backgrounds or stops the app.
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      _planner?.flushPendingSave();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _planner?.flushPendingSave();
     _planner?.removeListener(_onPlannerChanged);
     _attendance?.removeListener(_onAttendanceChanged);
     super.dispose();

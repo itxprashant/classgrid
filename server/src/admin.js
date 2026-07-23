@@ -5,15 +5,41 @@ const config = require('./config');
 const db = require('./db');
 const { requireAdmin } = require('./adminAuth');
 const semesterData = require('./semesterData');
-const { recordAuditSafe, rowToAuditEntry } = require('./auditLog');
+const { recordAuditSafe, rowToAuditEntry, enrichAuditActorNames } = require('./auditLog');
+const {
+    mailConfigured,
+    buildFeedbackDraft,
+    buildReportDraft,
+    sendEmail,
+    loadTemplate,
+    saveTemplate,
+} = require('./mail');
 
 const router = express.Router();
 
 const REPORT_STATUSES = new Set(['open', 'reviewed', 'dismissed', 'actioned']);
 const FEEDBACK_CATEGORIES = new Set(['feature', 'improvement', 'bug', 'other']);
+const EMAIL_TEMPLATE_NAMES = new Set(['feedback-review', 'report-review']);
 const COURSE_CODE_RE = /^[A-Za-z0-9]{2,16}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function reportContextLabel(snapshot, fallback = '') {
+    if (!snapshot || typeof snapshot !== 'object') return fallback;
+    if (snapshot.kind === 'course_event') {
+        return [snapshot.courseCode, snapshot.title, snapshot.date].filter(Boolean).join(' · ') || fallback;
+    }
+    if (snapshot.kind === 'course_policy') {
+        return snapshot.courseCode ? `${snapshot.courseCode} · course policy` : fallback;
+    }
+    if (snapshot.kind === 'occupied_room') {
+        return [snapshot.room, snapshot.date].filter(Boolean).join(' · ') || fallback;
+    }
+    if (snapshot.kind === 'other') {
+        return snapshot.label || snapshot.pageContext || fallback;
+    }
+    return fallback;
+}
 
 function dbUnavailable(res) {
     res.status(503).json({ error: 'database_unavailable' });
@@ -35,6 +61,9 @@ function rowToFeedback(row) {
         category: row.category,
         pageContext: row.page_context || null,
         client: row.client,
+        status: row.status || 'open',
+        reviewedByKerberos: row.reviewed_by_kerberos || null,
+        reviewedAt: row.reviewed_at ? row.reviewed_at.toISOString() : null,
         createdAt: row.created_at.toISOString(),
     };
 }
@@ -75,6 +104,7 @@ router.get('/summary', async (req, res) => {
             db.query(
                 `SELECT
                     COUNT(*)::int AS total,
+                    COUNT(*) FILTER (WHERE status = 'open')::int AS open,
                     COUNT(*) FILTER (WHERE created_at >= now() - interval '24 hours')::int AS last24h,
                     COUNT(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS last7d
                  FROM app_feedback`,
@@ -115,29 +145,35 @@ router.get('/feedback', async (req, res) => {
 
     const limit = clampInt(req.query.limit, 50, 1, 100);
     const offset = clampInt(req.query.offset, 0, 0, 100000);
+    const status = String(req.query.status || 'open').trim().toLowerCase();
+    const statusFilter = REPORT_STATUSES.has(status) ? status : 'open';
     const category = String(req.query.category || '').trim().toLowerCase();
 
-    const params = [limit, offset];
-    let where = '';
+    const conditions = ['status = $1'];
+    const filterParams = [statusFilter];
     if (category && FEEDBACK_CATEGORIES.has(category)) {
-        where = ' WHERE category = $3';
-        params.push(category);
+        filterParams.push(category);
+        conditions.push(`category = $${filterParams.length}`);
     }
+    const where = ` WHERE ${conditions.join(' AND ')}`;
+    const listParams = [...filterParams, limit, offset];
+    const limitParam = filterParams.length + 1;
+    const offsetParam = filterParams.length + 2;
 
     try {
         const [list, count] = await Promise.all([
             db.query(
                 `SELECT id, kerberos, reporter_name, reporter_email, message, category,
-                        page_context, client, created_at
+                        page_context, client, status, reviewed_by_kerberos, reviewed_at, created_at
                  FROM app_feedback
                  ${where}
                  ORDER BY created_at DESC
-                 LIMIT $1 OFFSET $2`,
-                params,
+                 LIMIT $${limitParam} OFFSET $${offsetParam}`,
+                listParams,
             ),
             db.query(
                 `SELECT COUNT(*)::int AS total FROM app_feedback${where}`,
-                where ? [category] : [],
+                filterParams,
             ),
         ]);
 
@@ -146,10 +182,159 @@ router.get('/feedback', async (req, res) => {
             total: count.rows[0].total,
             limit,
             offset,
+            status: statusFilter,
         });
     } catch (e) {
         console.error('[admin] feedback list failed:', e.message);
         res.status(500).json({ error: 'internal_error' });
+    }
+});
+
+router.patch('/feedback/:id', async (req, res) => {
+    if (!config.databaseUrl) {
+        dbUnavailable(res);
+        return;
+    }
+
+    const id = String(req.params.id || '').trim();
+    if (!UUID_RE.test(id)) {
+        res.status(400).json({ error: 'invalid_id' });
+        return;
+    }
+
+    const status = String(req.body?.status || '').trim().toLowerCase();
+    if (!REPORT_STATUSES.has(status)) {
+        res.status(400).json({ error: 'invalid_status' });
+        return;
+    }
+
+    try {
+        const prior = await db.query(
+            'SELECT status FROM app_feedback WHERE id = $1::uuid',
+            [id],
+        );
+        if (prior.rowCount === 0) {
+            res.status(404).json({ error: 'not_found' });
+            return;
+        }
+        const fromStatus = prior.rows[0].status;
+
+        const result = await db.query(
+            `UPDATE app_feedback
+             SET status = $2,
+                 reviewed_by_kerberos = $3,
+                 reviewed_at = now()
+             WHERE id = $1::uuid
+             RETURNING id, kerberos, reporter_name, reporter_email, message, category,
+                       page_context, client, status, reviewed_by_kerberos, reviewed_at, created_at`,
+            [id, status, req.adminKerberos],
+        );
+        const row = result.rows[0];
+        recordAuditSafe({
+            req,
+            action: 'admin.feedback.reviewed',
+            targetKind: 'app_feedback',
+            targetId: row.id,
+            metadata: {
+                fromStatus,
+                toStatus: status,
+                category: row.category,
+            },
+        });
+        res.json({ feedback: rowToFeedback(row) });
+    } catch (e) {
+        console.error('[admin] feedback patch failed:', e.message);
+        res.status(500).json({ error: 'internal_error' });
+    }
+});
+
+router.get('/feedback/:id/email-draft', async (req, res) => {
+    if (!config.databaseUrl) {
+        dbUnavailable(res);
+        return;
+    }
+    const id = String(req.params.id || '').trim();
+    if (!UUID_RE.test(id)) {
+        res.status(400).json({ error: 'invalid_id' });
+        return;
+    }
+    try {
+        const result = await db.query(
+            `SELECT id, kerberos, reporter_name, reporter_email, message, category,
+                    page_context, client, status, reviewed_by_kerberos, reviewed_at, created_at
+             FROM app_feedback WHERE id = $1::uuid`,
+            [id],
+        );
+        if (result.rowCount === 0) {
+            res.status(404).json({ error: 'not_found' });
+            return;
+        }
+        const draft = buildFeedbackDraft(result.rows[0]);
+        if (!draft.to) {
+            res.status(400).json({ error: 'no_recipient' });
+            return;
+        }
+        res.json({
+            draft,
+            mailConfigured: mailConfigured(),
+        });
+    } catch (e) {
+        console.error('[admin] feedback email-draft failed:', e.message);
+        res.status(500).json({ error: 'internal_error' });
+    }
+});
+
+router.post('/feedback/:id/email', async (req, res) => {
+    if (!config.databaseUrl) {
+        dbUnavailable(res);
+        return;
+    }
+    if (!mailConfigured()) {
+        res.status(503).json({ error: 'mail_unconfigured' });
+        return;
+    }
+    const id = String(req.params.id || '').trim();
+    if (!UUID_RE.test(id)) {
+        res.status(400).json({ error: 'invalid_id' });
+        return;
+    }
+    try {
+        const result = await db.query(
+            `SELECT id, kerberos, reporter_name, reporter_email, message, category
+             FROM app_feedback WHERE id = $1::uuid`,
+            [id],
+        );
+        if (result.rowCount === 0) {
+            res.status(404).json({ error: 'not_found' });
+            return;
+        }
+        const row = result.rows[0];
+        const draft = buildFeedbackDraft(row);
+        const to = String(req.body?.to || draft.to || '').trim().toLowerCase();
+        const subject = String(req.body?.subject ?? draft.subject).trim();
+        const body = String(req.body?.body ?? draft.body);
+        if (!to) {
+            res.status(400).json({ error: 'no_recipient' });
+            return;
+        }
+        const sent = await sendEmail({ to, subject, body });
+        recordAuditSafe({
+            req,
+            action: 'admin.feedback.emailed',
+            targetKind: 'app_feedback',
+            targetId: row.id,
+            metadata: {
+                to: sent.to,
+                subject: sent.subject,
+                category: row.category,
+            },
+        });
+        res.json({ ok: true, email: sent });
+    } catch (e) {
+        console.error('[admin] feedback email failed:', e.message);
+        res.status(e.code === 'mail_unconfigured' ? 503 : 400).json({
+            error: e.code || 'mail_send_failed',
+        });
     }
 });
 
@@ -262,8 +447,9 @@ router.get('/audit-log', async (req, res) => {
             ),
         ]);
 
+        const entries = await enrichAuditActorNames(list.rows.map(rowToAuditEntry));
         res.json({
-            entries: list.rows.map(rowToAuditEntry),
+            entries,
             total: count.rows[0].total,
             limit,
             offset,
@@ -331,6 +517,150 @@ router.patch('/reports/:id', async (req, res) => {
     } catch (e) {
         console.error('[admin] report patch failed:', e.message);
         res.status(500).json({ error: 'internal_error' });
+    }
+});
+
+router.get('/reports/:id/email-draft', async (req, res) => {
+    if (!config.databaseUrl) {
+        dbUnavailable(res);
+        return;
+    }
+    const id = String(req.params.id || '').trim();
+    if (!UUID_RE.test(id)) {
+        res.status(400).json({ error: 'invalid_id' });
+        return;
+    }
+    try {
+        const result = await db.query(
+            `SELECT id, reporter_kerberos, reporter_name, target_kind, target_id,
+                    target_snapshot, reason, details, status,
+                    reviewed_by_kerberos, reviewed_at, created_at
+             FROM content_reports WHERE id = $1::uuid`,
+            [id],
+        );
+        if (result.rowCount === 0) {
+            res.status(404).json({ error: 'not_found' });
+            return;
+        }
+        const row = result.rows[0];
+        const draft = buildReportDraft(
+            row,
+            reportContextLabel(row.target_snapshot, row.target_kind),
+        );
+        if (!draft.to) {
+            res.status(400).json({ error: 'no_recipient' });
+            return;
+        }
+        res.json({
+            draft,
+            mailConfigured: mailConfigured(),
+        });
+    } catch (e) {
+        console.error('[admin] report email-draft failed:', e.message);
+        res.status(500).json({ error: 'internal_error' });
+    }
+});
+
+router.post('/reports/:id/email', async (req, res) => {
+    if (!config.databaseUrl) {
+        dbUnavailable(res);
+        return;
+    }
+    if (!mailConfigured()) {
+        res.status(503).json({ error: 'mail_unconfigured' });
+        return;
+    }
+    const id = String(req.params.id || '').trim();
+    if (!UUID_RE.test(id)) {
+        res.status(400).json({ error: 'invalid_id' });
+        return;
+    }
+    try {
+        const result = await db.query(
+            `SELECT id, reporter_kerberos, reporter_name, target_kind, target_id,
+                    target_snapshot, reason, details
+             FROM content_reports WHERE id = $1::uuid`,
+            [id],
+        );
+        if (result.rowCount === 0) {
+            res.status(404).json({ error: 'not_found' });
+            return;
+        }
+        const row = result.rows[0];
+        const draft = buildReportDraft(
+            row,
+            reportContextLabel(row.target_snapshot, row.target_kind),
+        );
+        const to = String(req.body?.to || draft.to || '').trim().toLowerCase();
+        const subject = String(req.body?.subject ?? draft.subject).trim();
+        const body = String(req.body?.body ?? draft.body);
+        if (!to) {
+            res.status(400).json({ error: 'no_recipient' });
+            return;
+        }
+        const sent = await sendEmail({ to, subject, body });
+        recordAuditSafe({
+            req,
+            action: 'admin.report.emailed',
+            targetKind: 'content_report',
+            targetId: row.id,
+            metadata: {
+                to: sent.to,
+                subject: sent.subject,
+                targetKind: row.target_kind,
+                targetId: row.target_id,
+            },
+        });
+        res.json({ ok: true, email: sent });
+    } catch (e) {
+        console.error('[admin] report email failed:', e.message);
+        res.status(e.code === 'mail_unconfigured' ? 503 : 400).json({
+            error: e.code || 'mail_send_failed',
+        });
+    }
+});
+
+router.get('/email-templates/:name', (req, res) => {
+    const name = String(req.params.name || '').trim();
+    if (!EMAIL_TEMPLATE_NAMES.has(name)) {
+        res.status(404).json({ error: 'not_found' });
+        return;
+    }
+    try {
+        res.json({
+            name,
+            body: loadTemplate(name),
+            placeholders: name === 'feedback-review'
+                ? ['name', 'kerberos', 'reply', 'quoted_message']
+                : ['name', 'kerberos', 'reason', 'target', 'reply', 'quoted_message'],
+        });
+    } catch (e) {
+        console.error('[admin] email-template get failed:', e.message);
+        res.status(500).json({ error: 'internal_error' });
+    }
+});
+
+router.put('/email-templates/:name', (req, res) => {
+    const name = String(req.params.name || '').trim();
+    if (!EMAIL_TEMPLATE_NAMES.has(name)) {
+        res.status(404).json({ error: 'not_found' });
+        return;
+    }
+    try {
+        const body = saveTemplate(name, req.body?.body);
+        recordAuditSafe({
+            req,
+            action: 'admin.email_template.updated',
+            targetKind: 'email_template',
+            targetId: name,
+            metadata: { name, length: body.length },
+        });
+        res.json({ ok: true, name, body });
+    } catch (e) {
+        console.error('[admin] email-template put failed:', e.message);
+        res.status(e.code === 'invalid_template' ? 400 : 500).json({
+            error: e.code || 'internal_error',
+        });
     }
 });
 

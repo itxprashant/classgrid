@@ -22,10 +22,84 @@ export async function fetchAdminSummary() {
     return data;
 }
 
-export async function fetchAdminFeedback({ limit = 50, offset = 0, category = '' } = {}) {
-    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+export async function fetchAdminFeedback({
+    limit = 50,
+    offset = 0,
+    status = 'open',
+    category = '',
+} = {}) {
+    const params = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
+        status,
+    });
     if (category) params.set('category', category);
     const res = await apiFetch(`/api/admin/feedback?${params}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw apiError(res, data);
+    return data;
+}
+
+export async function patchAdminFeedback(id, status) {
+    const res = await apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw apiError(res, data);
+    return data;
+}
+
+export async function fetchAdminFeedbackEmailDraft(id) {
+    const res = await apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}/email-draft`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw apiError(res, data);
+    return data;
+}
+
+export async function sendAdminFeedbackEmail(id, { to, subject, body }) {
+    const res = await apiFetch(`/api/admin/feedback/${encodeURIComponent(id)}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject, body }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw apiError(res, data);
+    return data;
+}
+
+export async function fetchAdminReportEmailDraft(id) {
+    const res = await apiFetch(`/api/admin/reports/${encodeURIComponent(id)}/email-draft`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw apiError(res, data);
+    return data;
+}
+
+export async function sendAdminReportEmail(id, { to, subject, body }) {
+    const res = await apiFetch(`/api/admin/reports/${encodeURIComponent(id)}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject, body }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw apiError(res, data);
+    return data;
+}
+
+export async function fetchAdminEmailTemplate(name) {
+    const res = await apiFetch(`/api/admin/email-templates/${encodeURIComponent(name)}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw apiError(res, data);
+    return data;
+}
+
+export async function putAdminEmailTemplate(name, body) {
+    const res = await apiFetch(`/api/admin/email-templates/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw apiError(res, data);
     return data;
@@ -135,9 +209,21 @@ export function adminErrorMessage(code) {
         case 'invalid_title':
             return 'Enter a title (max 120 characters).';
         case 'invalid_body':
-            return 'Enter a message body (max 500 characters).';
+            return 'Enter a message body.';
         case 'invalid_audience':
             return 'Choose a valid audience.';
+        case 'mail_unconfigured':
+            return 'Email is not configured on the server (SMTP_USER / SMTP_PASS).';
+        case 'mail_send_failed':
+            return 'Could not send the email. Check SMTP settings and try again.';
+        case 'no_recipient':
+            return 'No recipient email (need kerberos or reporter email).';
+        case 'invalid_recipient':
+            return 'Enter a valid recipient email address.';
+        case 'invalid_subject':
+            return 'Enter a subject (max 200 characters).';
+        case 'invalid_template':
+            return 'Template cannot be empty.';
         default:
             return 'Something went wrong. Try again.';
     }

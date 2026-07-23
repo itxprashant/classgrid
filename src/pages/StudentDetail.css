@@ -1,15 +1,17 @@
 .sd.page {
-    max-width: 1280px;
+    max-width: 960px;
     margin: 0 auto;
     padding: 96px 32px 64px;
 }
 
 .sd__head {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.75rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--line);
 }
 
 .sd__eyebrow {
-    margin: 0 0 0.35rem;
+    margin: 0 0 0.5rem;
     font-size: 0.75rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -25,43 +27,51 @@
 }
 
 .sd__title {
-    margin: 0 0 0.35rem;
-    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    margin: 0 0 0.4rem;
+    font-size: var(--fs-32);
     font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+}
+
+.sd__title em {
+    font-style: italic;
+    font-weight: 500;
 }
 
 .sd__kerberos,
 .sd__count {
-    margin: 0.15rem 0 0;
+    margin: 0.2rem 0 0;
+    font-size: 0.875rem;
 }
 
-.sd__meta {
+.sd__facts {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem 1rem;
-    margin: 0.75rem 0 0;
+    gap: 0.35rem 1.25rem;
+    margin: 0.85rem 0 0;
     padding: 0;
 }
 
-.sd__meta dt {
+.sd__facts dt {
     margin: 0;
     font-size: 0.72rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
-.sd__meta dd {
+.sd__facts dd {
     margin: 0;
     font-size: 0.875rem;
 }
 
 .sd__sem {
-    margin-bottom: 1rem;
-    padding: 1rem;
+    margin-bottom: 2rem;
 }
 
 .sd__sem-title {
-    margin: 0 0 0.75rem;
+    margin: 0 0 0.85rem;
     font-size: 0.75rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -72,44 +82,57 @@
     list-style: none;
     margin: 0;
     padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
 }
 
 .sd__course {
-    padding: 0.75rem 0;
-    border-top: 1px solid var(--line);
-}
-
-.sd__course:first-child {
-    border-top: 0;
-    padding-top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin: 0;
+    padding: 1rem 1.1rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    min-width: 0;
 }
 
 .sd__course--active {
     background: var(--accent-tint);
-    margin: 0 -0.75rem;
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
-    border-radius: var(--r-sm);
+    border-color: var(--accent-edge);
 }
 
 .sd__course-head {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
+    margin-bottom: 0.15rem;
 }
 
 .sd__code {
     font-weight: 600;
     text-decoration: none;
+    color: var(--ink);
+}
+
+.sd__code:hover {
     color: var(--accent-ink);
 }
 
 .sd__course-name {
-    margin: 0.25rem 0;
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.3;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
 }
 
 .sd__timings {
-    margin: 0 0 0.5rem;
+    margin: 0.15rem 0 0.55rem;
     font-size: 0.8125rem;
 }
 
@@ -117,4 +140,19 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
+    margin-top: auto;
+}
+
+@media (max-width: 720px) {
+    .sd.page {
+        padding: 88px 20px 48px;
+    }
+
+    .sd__courses {
+        grid-template-columns: 1fr;
+    }
+
+    .sd__title {
+        font-size: var(--fs-26);
+    }
 }

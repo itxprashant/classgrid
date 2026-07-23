@@ -11,6 +11,7 @@ import '../core/planner_classes.dart';
 import '../core/semester_schedule.dart';
 import '../models/academic_day.dart';
 import '../models/calendar_event.dart';
+import '../models/plan.dart';
 import '../state/auth_provider.dart';
 import '../state/catalog_provider.dart';
 import '../state/planner_store.dart';
@@ -133,10 +134,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
           planner.selectedCourses.map((c) => c.courseCode).toList();
       final filterCodes = {...plannerCodes, ..._enrolledCodes}.toList();
 
-      // Shared events: skip when there are no course codes (avoids 414 / full
-      // catalog fetch).
+      // Shared events: pass planner + enrolled codes. When logged in with an
+      // empty local filter, still call the API — the server merges enrollments
+      // from the session. Skip only for guests with no planner courses (avoids
+      // an unfiltered / full-catalog fetch).
       List<CalendarEvent> shared = [];
-      if (filterCodes.isNotEmpty) {
+      if (filterCodes.isNotEmpty || auth.isLoggedIn) {
         shared = await sharedApi.fetchEvents(from: from, to: to, courses: filterCodes);
       }
 
@@ -257,18 +260,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
     });
 
     final planner = context.read<PlannerStore>();
+    final catalog = context.read<CatalogProvider>();
+    // Same catalog hall enrichment as the week grid — day sheet used raw plan
+    // courses before, so venues were often missing for stale saved plans.
     final classes = getClassesForDate(
       day,
-      planner.selectedCourses,
+      catalog.enrichSelectedCourses(planner.selectedCourses),
       planner.timetableData,
     );
     final academic = getAcademicDay(day);
+
+    final isQuiet = events.isEmpty && classes.isEmpty && !academic.hasClasses;
+    final sheetTitle = isQuiet
+        ? 'Quiet day'
+        : [
+            if (classes.isNotEmpty)
+              '${classes.length} class${classes.length == 1 ? '' : 'es'}',
+            if (events.isNotEmpty)
+              '${events.length} event${events.length == 1 ? '' : 's'}',
+          ].join(' · ');
+    final sheetEyebrow = DateFormat('EEE d').format(day).toUpperCase();
 
     if (!mounted) return;
     final action = await SheetScaffold.show<_DayDialogResult>(
       context: context,
       child: SheetScaffold(
-        title: DateFormat('EEEE, d MMMM').format(day),
+        title: sheetTitle.isEmpty ? DateFormat('EEEE, d MMMM').format(day) : sheetTitle,
+        eyebrow: sheetEyebrow,
         body: _DayEventsSheetBody(
           day: day,
           academic: academic,
@@ -279,28 +297,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Course events sync for everyone who has that course. '
-              'Personal events are only visible to you.',
-              style: AppText.sans(size: T.fs12, color: T.ink3, height: 1.35),
+            TextButton.icon(
+              onPressed: () => Navigator.pop(context, _DayDialogAdd('shared')),
+              icon: Icon(Icons.calendar_today_outlined, size: 18, color: T.accentInk),
+              label: Text(
+                'Add course event…',
+                style: AppText.sans(size: T.fs14, color: T.ink2),
+              ),
+              style: TextButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context, _DayDialogAdd('personal')),
-                    child: const Text('Personal event'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(context, _DayDialogAdd('shared')),
-                    child: const Text('Course event'),
-                  ),
-                ),
-              ],
+            TextButton.icon(
+              onPressed: () => Navigator.pop(context, _DayDialogAdd('personal')),
+              icon: Icon(Icons.person_outline, size: 18, color: T.labInk),
+              label: Text(
+                'Add personal event…',
+                style: AppText.sans(size: T.fs14, color: T.labInk),
+              ),
+              style: TextButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              ),
             ),
           ],
         ),
@@ -392,13 +411,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     final planner = context.watch<PlannerStore>();
+    final catalog = context.watch<CatalogProvider>();
     final byDate = _eventsByDate();
     final days = _visibleDays();
     final weekDates = _weekDates();
     final includePlannerClasses =
         _viewMode == _CalendarViewMode.week || _showClasses;
+    final planCourses = includePlannerClasses
+        ? catalog.enrichSelectedCourses(planner.selectedCourses)
+        : const <SelectedCourse>[];
     final classesByDate = includePlannerClasses
-        ? buildClassesByDate(days, planner.selectedCourses, planner.timetableData)
+        ? buildClassesByDate(days, planCourses, planner.timetableData)
         : const <String, List<PlannerClass>>{};
     final periodKey = _viewMode == _CalendarViewMode.week
         ? '${weekDates.first.year}-${weekDates.first.month}-${weekDates.first.day}'
@@ -994,7 +1017,11 @@ class _DayEventsSheetBody extends StatelessWidget {
               style: AppText.mono(weight: FontWeight.w600, size: T.fs14),
             ),
             subtitle: Text(
-              '${_classKindLabel(c.kind)} · ${_classTimeRange(c)}',
+              [
+                _classKindLabel(c.kind),
+                _classTimeRange(c),
+                if (c.location.trim().isNotEmpty) c.location.trim(),
+              ].join(' · '),
               style: AppText.sans(size: T.fs12, color: T.ink3),
             ),
             trailing: ReminderToggle(
@@ -1059,7 +1086,11 @@ class _DayEventsSheetBody extends StatelessWidget {
 
     if (items.isEmpty) {
       items.add(Text(
-        'Nothing scheduled on this day.',
+        classes.isEmpty && events.isEmpty
+            ? (academic.hasClasses
+                ? 'Nothing scheduled on this day.'
+                : 'Your calendar is clear.')
+            : 'Nothing scheduled on this day.',
         style: AppText.sans(size: T.fs14, color: T.ink3),
       ));
     }

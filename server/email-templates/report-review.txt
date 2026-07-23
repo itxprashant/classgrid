@@ -1,0 +1,14 @@
+Hi {{name}},
+
+Thanks for reporting this on ClassGrid. We've reviewed it.
+
+{{reply}}
+
+—
+Your report ({{reason}} · {{target}}):
+{{quoted_message}}
+
+—
+Prashant
+ClassGrid · DevClub
+prashant@devclub.in

@@ -50,9 +50,9 @@ List<GridSession> flattenSessions(
       }
     }
 
-    collect(data.lecture, 'Lecture', course.lectureHall);
-    collect(data.tutorial, 'Tutorial', null);
-    collect(data.lab, 'Lab', null);
+    collect(data.lecture, 'LEC', course.lectureHall);
+    collect(data.tutorial, 'TUT', null);
+    collect(data.lab, 'LAB', null);
   }
   return result;
 }

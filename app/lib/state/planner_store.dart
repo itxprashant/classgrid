@@ -19,9 +19,12 @@ class Banner {
 }
 
 /// Owns the planner state. Guests persist to [LocalStore]; signed-in users load
-/// from `GET /api/me/plan` and debounce-save via `PUT`. Mirrors the web
-/// Generator's plan lifecycle, including the "skip one save after a DB load"
-/// behaviour.
+/// from `GET /api/me/plan` and debounce-save via `PUT`.
+///
+/// Note: the web Generator uses a "skip one save after DB load" flag because
+/// React effects fire on the load-induced state update. Flutter loads do not
+/// call [_persist], so that skip must not be used here — it would swallow the
+/// *first user edit* and leave the server on a stale plan until a later save.
 class PlannerStore extends ChangeNotifier {
   PlannerStore({
     required PlannerApi plannerApi,
@@ -43,7 +46,6 @@ class PlannerStore extends ChangeNotifier {
   AppUser? _user;
 
   Timer? _saveTimer;
-  bool _skipNextSave = false;
 
   List<SelectedCourse> get selectedCourses => _selectedCourses;
   Map<String, CourseTimetable> get timetableData => _timetableData;
@@ -89,9 +91,11 @@ class PlannerStore extends ChangeNotifier {
       final hasSaved = saved.selectedCourses.isNotEmpty ||
           saved.timetableData.isNotEmpty;
       if (hasSaved) {
-        _skipNextSave = true;
         _selectedCourses = List.of(saved.selectedCourses);
         _timetableData = Map.of(saved.timetableData);
+        // Keep SharedPreferences aligned so a later guest path / crash mid-edit
+        // does not resurrect a diverged local plan.
+        await _store.savePlanLocal(currentPlan());
       } else {
         // First login with no saved plan: auto-fetch registered courses.
         await refreshUserCourses(silent: true);
@@ -177,7 +181,6 @@ class PlannerStore extends ChangeNotifier {
 
   Future<void> replaceUserPlan(List<String> codes, {bool persistRemote = false}) async {
     final plan = _buildPlanFromCodes(codes);
-    _skipNextSave = true;
     _selectedCourses = List.of(plan.selectedCourses);
     _timetableData = Map.of(plan.timetableData);
     await _store.savePlanLocal(currentPlan());
@@ -186,7 +189,7 @@ class PlannerStore extends ChangeNotifier {
       try {
         await _api.savePlan(currentPlan());
       } catch (_) {
-        // localStorage still holds a copy.
+        // SharedPreferences still holds a copy.
       }
     }
   }
@@ -219,23 +222,43 @@ class PlannerStore extends ChangeNotifier {
 
   void _persist() {
     // Always cache locally (guest + signed-in).
-    _store.savePlanLocal(currentPlan());
+    unawaited(_store.savePlanLocal(currentPlan()));
     notifyListeners();
 
     if (_user == null || !_planReady) return;
-    if (_skipNextSave) {
-      _skipNextSave = false;
-      return;
-    }
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 800), () {
-      _api.savePlan(currentPlan()).catchError((_) => currentPlan());
+      unawaited(_pushRemote());
     });
+  }
+
+  Future<void> _pushRemote() async {
+    if (_user == null) return;
+    try {
+      await _api.savePlan(currentPlan());
+    } catch (_) {
+      // Best-effort — local cache still holds a copy.
+    }
+  }
+
+  /// Flush local + pending remote save (call on app background / dispose).
+  Future<void> flushPendingSave() async {
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    await _store.savePlanLocal(currentPlan());
+    if (_user != null && _planReady) {
+      await _pushRemote();
+    }
   }
 
   @override
   void dispose() {
     _saveTimer?.cancel();
+    _saveTimer = null;
+    // Best-effort sync if the store is torn down with a pending debounce.
+    if (_user != null && _planReady) {
+      unawaited(_pushRemote());
+    }
     super.dispose();
   }
 }

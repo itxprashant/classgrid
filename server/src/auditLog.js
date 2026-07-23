@@ -8,10 +8,13 @@ function auditActorFromSession(session) {
     if (!session) {
         return { kerberos: null, name: null };
     }
-    return {
-        kerberos: session.kerberos ? String(session.kerberos).trim().toLowerCase() : null,
-        name: (session.name || session.kerberos || null),
-    };
+    const kerberos = session.kerberos ? String(session.kerberos).trim().toLowerCase() : null;
+    const rawName = session.name != null ? String(session.name).trim() : '';
+    // Do not store kerberos as the display name — admin UI enriches from rosters when null.
+    const name = rawName && (!kerberos || rawName.toLowerCase() !== kerberos)
+        ? rawName
+        : null;
+    return { kerberos, name };
 }
 
 function clientFromRequest(req) {
@@ -88,9 +91,54 @@ function rowToAuditEntry(row) {
     };
 }
 
+function actorNeedsNameLookup(entry) {
+    if (!entry || !entry.actorKerberos) return false;
+    if (!entry.actorName) return true;
+    return entry.actorName.toLowerCase() === entry.actorKerberos.toLowerCase();
+}
+
+/** Fill missing actorName from course_rosters for admin display. */
+async function enrichAuditActorNames(entries) {
+    if (!config.databaseUrl || !Array.isArray(entries) || entries.length === 0) {
+        return entries;
+    }
+
+    const needLookup = [...new Set(
+        entries.filter(actorNeedsNameLookup).map((e) => e.actorKerberos),
+    )];
+    if (needLookup.length === 0) return entries;
+
+    try {
+        const { rows } = await db.query(
+            `SELECT lower(student_kerberos) AS kerberos,
+                    (array_agg(trim(student_name) ORDER BY semester_code DESC, length(trim(student_name)) DESC))[1] AS name
+             FROM course_rosters
+             WHERE lower(student_kerberos) = ANY($1::text[])
+               AND trim(student_name) <> ''
+             GROUP BY lower(student_kerberos)`,
+            [needLookup],
+        );
+        const byKerberos = new Map(
+            rows
+                .filter((r) => r.name && r.name.toLowerCase() !== r.kerberos)
+                .map((r) => [r.kerberos, r.name]),
+        );
+        for (const entry of entries) {
+            if (!actorNeedsNameLookup(entry)) continue;
+            const name = byKerberos.get(entry.actorKerberos);
+            if (name) entry.actorName = name;
+        }
+    } catch (e) {
+        console.error('[audit] actor name enrich failed:', e.message);
+    }
+
+    return entries;
+}
+
 module.exports = {
     auditActorFromSession,
     recordAudit,
     recordAuditSafe,
     rowToAuditEntry,
+    enrichAuditActorNames,
 };

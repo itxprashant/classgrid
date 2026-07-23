@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/clashes.dart';
+import '../core/timing.dart';
 import '../core/timetable_layout.dart';
 import '../models/plan.dart';
 import '../theme/app_palette_scope.dart';
@@ -18,6 +19,16 @@ const Map<String, int> _dayIndex = {
 };
 const List<String> _dayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
 
+String _shortHall(String loc) {
+  final parts = loc
+      .split(RegExp(r'\s*,\s*'))
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+  if (parts.length <= 1) return loc.trim();
+  return '${parts.first}+…';
+}
+
 /// The weekly timetable board. Mirrors the web TimetableGrid: a mono hour rail
 /// (7 AM–9 PM), five day columns, solid session-tinted blocks positioned
 /// absolutely, and a diagonal hatch + red border for conflicts.
@@ -33,6 +44,7 @@ class TimetableGrid extends StatelessWidget {
     this.sessions,
     this.conflicts,
     this.onBlockTap,
+    this.onDayTap,
   });
 
   final List<SelectedCourse> courses;
@@ -46,6 +58,9 @@ class TimetableGrid extends StatelessWidget {
 
   /// Optional tap handler for a session block (index into the resolved session list).
   final void Function(int index, GridSession session)? onBlockTap;
+
+  /// Optional tap on a day column / header (`Monday`…`Friday`).
+  final void Function(String day)? onDayTap;
 
   /// Drop leading zero on the hour so "09:30" → "9:30" — saves width in narrow columns.
   static String _formatTime(String hhmm) {
@@ -88,15 +103,23 @@ class TimetableGrid extends StatelessWidget {
             child: Row(
               children: [
                 SizedBox(width: TimetableLayout.railWidth),
-                for (final d in _dayLabels)
+                for (var i = 0; i < _dayLabels.length; i++)
                   Expanded(
-                    child: Container(
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        border: Border(left: BorderSide(color: T.line)),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: onDayTap == null ? null : () => onDayTap!(kWeekdays[i]),
+                        child: Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            border: Border(left: BorderSide(color: T.line)),
+                          ),
+                          child: Text(
+                            _dayLabels[i],
+                            style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1),
+                          ),
+                        ),
                       ),
-                      child: Text(d,
-                          style: AppText.mono(size: T.fs12, color: T.ink3, letterSpacing: 1)),
                     ),
                   ),
               ],
@@ -105,10 +128,12 @@ class TimetableGrid extends StatelessWidget {
           Divider(height: 1, color: T.line),
           SizedBox(
             height: plotHeight,
+            width: double.infinity,
             child: LayoutBuilder(builder: (context, constraints) {
               final dayAreaWidth = constraints.maxWidth - TimetableLayout.railWidth;
               final colWidth = dayAreaWidth / 5;
               return Stack(
+                fit: StackFit.expand,
                 clipBehavior: Clip.none,
                 children: [
                   for (int h = TimetableLayout.startHour; h <= TimetableLayout.endHour; h++)
@@ -125,20 +150,36 @@ class TimetableGrid extends StatelessWidget {
                       left: TimetableLayout.railWidth + i * colWidth,
                       child: Container(width: 1, color: T.line),
                     ),
+                  if (onDayTap != null)
+                    for (int i = 0; i < 5; i++)
+                      Positioned(
+                        top: 0,
+                        bottom: 0,
+                        left: TimetableLayout.railWidth + i * colWidth,
+                        width: colWidth,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => onDayTap!(kWeekdays[i]),
+                          ),
+                        ),
+                      ),
                   if (empty)
                     Positioned.fill(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: T.space24),
-                          child: Text(
-                            'No sessions yet — add courses to see your week',
-                            textAlign: TextAlign.center,
-                            style: AppText.sans(size: T.fs13, color: T.ink3),
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: T.space24),
+                            child: Text(
+                              'No sessions yet — add courses to see your week',
+                              textAlign: TextAlign.center,
+                              style: AppText.sans(size: T.fs13, color: T.ink3),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  // Session blocks.
+                  // Session blocks (above day-column hit targets).
                   for (int i = 0; i < resolvedSessions.length; i++)
                     _buildBlock(
                       resolvedSessions[i],
@@ -178,14 +219,21 @@ class TimetableGrid extends StatelessWidget {
     final height = TimetableLayout.blockHeight(s.start, s.end)
         .clamp(20.0, TimetableLayout.plotHeight);
     final compact = span < 0.75;
+    // ≤1h blocks can't fit four lines without clipping — fold LH into type.
+    final short = span < 1.25;
+    final loc = s.location.trim().isEmpty ? '' : _shortHall(s.location);
+    final typeLine = !compact && short && loc.isNotEmpty ? '${s.type} · $loc' : s.type;
+    final showLoc = !compact && !short && loc.isNotEmpty;
 
     Color tint, edge, ink;
     switch (s.type) {
+      case 'TUT':
       case 'Tutorial':
         tint = T.tutorialTint;
         edge = T.tutorialEdge;
         ink = T.tutorialInk;
         break;
+      case 'LAB':
       case 'Lab':
         tint = T.labTint;
         edge = T.labEdge;
@@ -220,7 +268,7 @@ class TimetableGrid extends StatelessWidget {
             ),
             if (!compact)
               _fittedLine(
-                s.type,
+                typeLine,
                 AppText.sans(size: T.fs10, color: ink),
               ),
             if (!compact)
@@ -228,9 +276,9 @@ class TimetableGrid extends StatelessWidget {
                 '$start–$end',
                 AppText.mono(size: T.fs10, color: ink),
               ),
-            if (!compact && s.location.isNotEmpty)
+            if (showLoc)
               _fittedLine(
-                s.location,
+                loc,
                 AppText.mono(size: T.fs10, color: ink),
               ),
           ],
@@ -238,12 +286,16 @@ class TimetableGrid extends StatelessWidget {
       ),
     );
 
+    final VoidCallback? tap = onBlockTap != null
+        ? () => onBlockTap!(index, s)
+        : (onDayTap != null ? () => onDayTap!(s.day) : null);
+
     Widget child = block;
-    if (onBlockTap != null) {
+    if (tap != null) {
       child = Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => onBlockTap!(index, s),
+          onTap: tap,
           borderRadius: BorderRadius.circular(T.rSm),
           child: block,
         ),
@@ -261,7 +313,7 @@ class TimetableGrid extends StatelessWidget {
     if (conflict) {
       return Semantics(
         label: '${s.courseCode} ${s.type}, clashes with another session',
-        button: onBlockTap != null,
+        button: tap != null,
         child: positioned,
       );
     }

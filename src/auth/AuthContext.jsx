@@ -7,9 +7,14 @@ export function apiUrl(path) {
 }
 
 export async function apiFetch(path, options = {}) {
+    const headers = new Headers(options.headers || {});
+    if (!headers.has('X-ClassGrid-Client')) {
+        headers.set('X-ClassGrid-Client', 'web');
+    }
     return fetch(apiUrl(path), {
         credentials: 'include',
         ...options,
+        headers,
     });
 }
 

@@ -135,7 +135,7 @@ export default function Navbar() {
                         role="menuitem"
                         onClick={() => setUserMenuOpen(false)}
                     >
-                        Suggest a feature
+                        Report/Suggestion
                     </Link>
                     <button
                         type="button"

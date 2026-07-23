@@ -14,8 +14,8 @@ export default function Footer() {
                     <span className="footer__version mono dim">v{siteVersion}</span>
                 </span>
                 <span className="footer__credit">
-                    <Link to="/feedback" className="footer__link">Suggest a feature</Link>
-                    Built by Prashant
+                    <Link to="/feedback" className="footer__link">Report/Suggestion</Link>
+                    Built by DevClub
                     <a href="mailto:prashant@devclub.in" className="footer__link">prashant@devclub.in</a>
                 </span>
             </div>

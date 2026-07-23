@@ -54,16 +54,20 @@ export default function AdminDashboard() {
 
     const { health, explorer, feedback, reports } = data;
     const openReports = reports.open ?? 0;
+    const openFeedback = feedback.open ?? 0;
 
     return (
         <>
             <div className="admin__priority admin__priority--inset">
                 <PriorityStat label="Open reports" value={openReports} alert={openReports > 0} />
+                <PriorityStat label="Open feedback" value={openFeedback} alert={openFeedback > 0} />
                 <PriorityStat label="Feedback (24h)" value={feedback.last24h ?? 0} />
                 <PriorityStat label="Feedback (7d)" value={feedback.last7d ?? 0} />
-                <PriorityStat label="Feedback total" value={feedback.total ?? 0} />
-                {openReports > 0 && (
-                    <Link to="/admin/reports" className="admin__priority-link">
+                {(openReports > 0 || openFeedback > 0) && (
+                    <Link
+                        to={openReports > 0 ? '/admin/reports' : '/admin/feedback'}
+                        className="admin__priority-link"
+                    >
                         Review queue →
                     </Link>
                 )}

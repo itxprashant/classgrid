@@ -57,7 +57,6 @@ router.get('/callback', async (req, res) => {
         res.status(400).send('Bad session. Start over from the home page.');
         return;
     }
-    clearFlowCookie(res);
 
     try {
         const client = await getClientLib();
@@ -72,6 +71,9 @@ router.get('/callback', async (req, res) => {
             pkceCodeVerifier: flow.v,
             expectedState: flow.s,
         });
+
+        // Only drop PKCE state after a successful code exchange.
+        clearFlowCookie(res);
 
         const claims = tokens.claims() || {};
         let userinfo = {};
@@ -119,6 +121,8 @@ router.get('/callback', async (req, res) => {
                 desktop: flow.desktop === 1,
             },
             actor: auditActorFromSession({ kerberos, name }),
+            // OAuth callback has no X-ClassGrid-Client header; derive from PKCE flow.
+            client: flow.app === 1 ? 'android' : 'web',
         });
 
         if (flow.app === 1 && flow.desktop === 1) {

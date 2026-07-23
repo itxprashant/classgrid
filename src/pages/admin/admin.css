@@ -465,6 +465,57 @@
     color: var(--ink-3);
 }
 
+.admin__email {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+}
+
+.admin__email-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.admin__email-title {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-12);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+}
+
+.admin__email-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.admin__email-body {
+    min-height: 220px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-12);
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.admin__email-hint {
+    margin: 0;
+    font-size: var(--fs-12);
+}
+
+.admin__email-template {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 /* Status badges */
 .admin__status--open {
     background: var(--accent-tint);

@@ -1,4 +1,4 @@
-import React, { useMemo, memo } from 'react';
+import React, { useEffect, useMemo, useState, memo } from 'react';
 import { getAcademicDay, formatDateKey } from '../../utils/semesterSchedule';
 import { formatEventSchedule } from '../../utils/calendarEvents';
 import '../Timetable/Timetable.css';
@@ -8,13 +8,45 @@ const HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
 const START_HOUR = 7;
 const COLS = 7;
 
+function useNow() {
+    const [now, setNow] = useState(() => new Date());
+    useEffect(() => {
+        const tick = () => setNow(new Date());
+        const msToNextMinute =
+            (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+        let intervalId;
+        const timeoutId = setTimeout(() => {
+            tick();
+            intervalId = setInterval(tick, 60_000);
+        }, Math.max(msToNextMinute, 250));
+        return () => {
+            clearTimeout(timeoutId);
+            if (intervalId) clearInterval(intervalId);
+        };
+        // Intentionally mount-once: first tick aligns to the minute boundary.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return now;
+}
+
 const WEEKDAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const KIND_TYPE = {
-    lecture: 'Lecture',
-    tutorial: 'Tutorial',
-    lab: 'Lab',
+    lecture: 'LEC',
+    tutorial: 'TUT',
+    lab: 'LAB',
 };
+
+/** First hall + "+…" when multi-venue (full list stays in title). */
+function shortHall(loc) {
+    if (!loc) return '';
+    const parts = String(loc)
+        .split(/\s*,\s*/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    if (parts.length <= 1) return String(loc).trim();
+    return `${parts[0]}+…`;
+}
 
 const TYPE_LABELS = {
     quiz: 'Quiz',
@@ -81,8 +113,13 @@ function eventTiming(evt) {
 }
 
 function WeekBlock({ item }) {
-    const { colIdx, start, end, compact, className, title, body, sub, onClick } = item;
+    const { colIdx, start, end, compact, className, title, body, sub, loc, onClick } = item;
     const span = durationHours(start, end);
+    const hall = shortHall(loc);
+    // ≤1h blocks can't fit four lines without clipping glyphs — fold LH into type.
+    const short = span < 1.25;
+    const typeLine = short && hall ? (sub ? `${sub} · ${hall}` : hall) : sub;
+    const showLoc = Boolean(hall) && !short && !compact;
 
     return (
         <div
@@ -115,11 +152,12 @@ function WeekBlock({ item }) {
         >
             <div className="tt-block__body">
                 <span className="tt-block__code">{body}</span>
-                {sub ? <span className="tt-block__type">{sub}</span> : null}
+                {typeLine ? <span className="tt-block__type">{typeLine}</span> : null}
                 <span className="tt-block__time mono">
                     {formatTime(start)}–{formatTime(end)}
                 </span>
             </div>
+            {showLoc ? <div className="tt-block__loc">{hall}</div> : null}
         </div>
     );
 }
@@ -182,6 +220,8 @@ function CalendarWeekGrid({
     openDayView,
     openEdit,
 }) {
+    const now = useNow();
+
     const columns = useMemo(
         () =>
             weekDates.map((date, colIdx) => {
@@ -196,6 +236,8 @@ function CalendarWeekGrid({
                 const allDay = [];
 
                 for (const s of classes) {
+                    const kindLabel = KIND_TYPE[s.kind] || s.kindLabel;
+                    const loc = (s.location || '').trim();
                     timed.push({
                         id: `c-${s.id}`,
                         kind: 'class',
@@ -204,8 +246,9 @@ function CalendarWeekGrid({
                         end: s.end,
                         className: `tt-block--${s.kind}`,
                         body: s.courseCode,
-                        sub: KIND_TYPE[s.kind] || s.kindLabel,
-                        title: `${s.courseCode} ${KIND_TYPE[s.kind] || s.kindLabel} — ${formatTime(s.start)} to ${formatTime(s.end)}`,
+                        sub: kindLabel,
+                        loc,
+                        title: `${s.courseCode} ${kindLabel} — ${formatTime(s.start)} to ${formatTime(s.end)}${loc ? ` · ${loc}` : ''}`,
                     });
                 }
 
@@ -273,6 +316,22 @@ function CalendarWeekGrid({
     const hasAnyAllDay = columns.some((c) => c.allDay.length > 0);
     const hasAnyHeadNote = columns.some((c) => c.headNote);
 
+    const nowLine = useMemo(() => {
+        const todayCol = columns.find((c) => c.isToday);
+        if (!todayCol) return null;
+        const hour = now.getHours();
+        const minute = now.getMinutes();
+        const offset = hour - START_HOUR + minute / 60;
+        if (offset < 0 || offset > HOURS.length) return null;
+        const hh = String(hour).padStart(2, '0');
+        const mm = String(minute).padStart(2, '0');
+        return {
+            offset,
+            colIdx: todayCol.colIdx,
+            label: `Current time ${hh}:${mm}`,
+        };
+    }, [columns, now]);
+
     return (
         <div className="tt-scroll">
             <div
@@ -314,6 +373,7 @@ function CalendarWeekGrid({
                                         <button
                                             type="button"
                                             className="tt__day-head-btn"
+                                            data-cal-day={col.key}
                                             onClick={() => openDayView(col.key, col.date)}
                                             aria-label={`View ${fmtFull(col.date)}`}
                                         >
@@ -323,6 +383,7 @@ function CalendarWeekGrid({
                                         <button
                                             type="button"
                                             className="tt__day-add"
+                                            data-cal-day={col.key}
                                             onClick={() => openDayView(col.key, col.date)}
                                             aria-label={`Add event on ${fmtFull(col.date)}`}
                                         >
@@ -383,20 +444,37 @@ function CalendarWeekGrid({
                         </div>
 
                         {columns.map((col) => (
-                            <button
-                                key={`tap-${col.key}`}
-                                type="button"
-                                className="tt__col-tap"
-                                style={{ left: colLeft(col.colIdx), width: `calc(100% / ${COLS})` }}
-                                onClick={() => openDayView(col.key, col.date)}
-                                aria-label={`View ${fmtFull(col.date)}`}
-                            />
+                                <button
+                                    key={`tap-${col.key}`}
+                                    type="button"
+                                    className="tt__col-tap"
+                                    data-cal-day={col.key}
+                                    style={{ left: colLeft(col.colIdx), width: `calc(100% / ${COLS})` }}
+                                    onClick={() => openDayView(col.key, col.date)}
+                                    aria-label={`View ${fmtFull(col.date)}`}
+                                />
                         ))}
 
                         {columns.flatMap((col) =>
                             col.timed.map((item) => (
                                 <WeekBlock key={item.id} item={item} />
                             ))
+                        )}
+
+                        {nowLine && (
+                            <div
+                                className="tt__now"
+                                style={{
+                                    top: rowMultiple(nowLine.offset),
+                                    left: colLeft(nowLine.colIdx),
+                                    width: `calc(100% / ${COLS})`,
+                                }}
+                                aria-hidden="true"
+                                title={nowLine.label}
+                            >
+                                <span className="tt__now-dot" />
+                                <span className="tt__now-line" />
+                            </div>
                         )}
 
                         {!hasAnyTimed && !hasAnyAllDay && (

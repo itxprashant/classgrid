@@ -15,10 +15,12 @@ class TimetableHourRail extends StatelessWidget {
   Widget build(BuildContext context) {
     AppPaletteScope.watch(context);
     final label = hour.toString().padLeft(2, '0');
-    // One-pixel anchor on the hour boundary; label centered on the line via
-    // translate (matches web `.tt__hour span { transform: translateY(-50%) }`).
+    // Full-width 1px anchor on the hour line. Label is explicitly [left: 0] in a
+    // non-clipping stack so it cannot center under loose constraints, and is
+    // given its own height so a 1px parent does not squash the text to invisible.
     return SizedBox(
       height: 1,
+      width: double.infinity,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -33,17 +35,16 @@ class TimetableHourRail extends StatelessWidget {
             ),
           ),
           Positioned(
-            top: 0,
+            left: 0,
+            top: -7,
             width: TimetableLayout.railWidth,
-            child: Transform.translate(
-              offset: const Offset(0, -7),
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Text(
-                  label,
-                  textAlign: TextAlign.right,
-                  style: AppText.mono(size: T.fs12, color: T.ink3, height: 1),
-                ),
+            height: 14,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                label,
+                textAlign: TextAlign.right,
+                style: AppText.mono(size: T.fs12, color: T.ink3, height: 1),
               ),
             ),
           ),

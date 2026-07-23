@@ -52,9 +52,9 @@ function TimetableGrid({ timetable, timetableData, showFooter = false }) {
                     });
                 });
             };
-            collect(courseData.lecture, 'Lecture', course.lectureHall);
-            collect(courseData.tutorial, 'Tutorial');
-            collect(courseData.lab, 'Lab');
+            collect(courseData.lecture, 'LEC', course.lectureHall);
+            collect(courseData.tutorial, 'TUT');
+            collect(courseData.lab, 'LAB');
         });
         return result;
     }, [timetable, timetableData]);

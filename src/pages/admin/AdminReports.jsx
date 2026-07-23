@@ -6,13 +6,16 @@ import {
     deleteAdminCourseEvent,
     deleteAdminCoursePolicy,
     deleteAdminOccupiedRoom,
+    fetchAdminReportEmailDraft,
     fetchAdminReports,
     patchAdminReport,
+    sendAdminReportEmail,
 } from '../../utils/adminApi';
 import { REPORT_REASONS, reportContextLabel } from '../../utils/feedback';
 import { snapshotFields, snapshotHeading } from './adminSnapshot';
 import { coursePolicyReportPath } from '../../utils/courseRoutes';
 import { adminSelectableRowProps } from '../../utils/adminSelectableRow';
+import AdminEmailCompose from './AdminEmailCompose';
 import './admin.css';
 
 const PAGE_SIZE = 30;
@@ -80,7 +83,19 @@ async function removeReportedContent(report) {
     throw new Error('unsupported_target');
 }
 
-function ReportDetail({ report, busy, onReview, onDismiss, onRemove, onActioned }) {
+function ReportDetail({
+    report,
+    busy,
+    composing,
+    emailDraftLoader,
+    onReview,
+    onDismiss,
+    onRemove,
+    onActioned,
+    onEmail,
+    onCloseEmail,
+    onSendEmail,
+}) {
     const [showRaw, setShowRaw] = useState(false);
     const link = targetLink(report);
     const fields = snapshotFields(report.targetSnapshot, report.targetKind);
@@ -127,54 +142,75 @@ function ReportDetail({ report, busy, onReview, onDismiss, onRemove, onActioned 
                 <pre className="admin__detail-raw">{JSON.stringify(report.targetSnapshot, null, 2)}</pre>
             )}
 
-            <div className="admin__actions">
-                {report.status === 'open' && (
-                    <>
+            {composing ? (
+                <AdminEmailCompose
+                    kind="report"
+                    templateName="report-review"
+                    draftLoader={emailDraftLoader}
+                    onSend={onSendEmail}
+                    onClose={onCloseEmail}
+                    busy={busy}
+                />
+            ) : (
+                <div className="admin__actions">
+                    {report.reporterKerberos && (
                         <button
                             type="button"
                             className="btn btn--ghost btn--sm"
                             disabled={busy}
-                            onClick={onReview}
+                            onClick={onEmail}
                         >
-                            Mark reviewed
+                            Email user
                         </button>
-                        <button
-                            type="button"
-                            className="btn btn--ghost btn--sm"
-                            disabled={busy}
-                            onClick={onDismiss}
-                        >
-                            Dismiss
-                        </button>
-                        {report.targetKind !== 'other' && (
+                    )}
+                    {report.status === 'open' && (
+                        <>
                             <button
                                 type="button"
-                                className="btn btn--danger-ghost btn--sm"
+                                className="btn btn--ghost btn--sm"
                                 disabled={busy}
-                                onClick={onRemove}
+                                onClick={onReview}
                             >
-                                Remove content & close
+                                Mark reviewed
                             </button>
-                        )}
-                        {report.targetKind === 'other' && (
                             <button
                                 type="button"
-                                className="btn btn--primary btn--sm"
+                                className="btn btn--ghost btn--sm"
                                 disabled={busy}
-                                onClick={onActioned}
+                                onClick={onDismiss}
                             >
-                                Mark actioned
+                                Dismiss
                             </button>
-                        )}
-                    </>
-                )}
-                {report.status !== 'open' && report.reviewedAt && (
-                    <span className="admin__reviewed">
-                        Reviewed {formatDate(report.reviewedAt)}
-                        {report.reviewedByKerberos ? ` · ${report.reviewedByKerberos}` : ''}
-                    </span>
-                )}
-            </div>
+                            {report.targetKind !== 'other' && (
+                                <button
+                                    type="button"
+                                    className="btn btn--danger-ghost btn--sm"
+                                    disabled={busy}
+                                    onClick={onRemove}
+                                >
+                                    Remove content & close
+                                </button>
+                            )}
+                            {report.targetKind === 'other' && (
+                                <button
+                                    type="button"
+                                    className="btn btn--primary btn--sm"
+                                    disabled={busy}
+                                    onClick={onActioned}
+                                >
+                                    Mark actioned
+                                </button>
+                            )}
+                        </>
+                    )}
+                    {report.status !== 'open' && report.reviewedAt && (
+                        <span className="admin__reviewed">
+                            Reviewed {formatDate(report.reviewedAt)}
+                            {report.reviewedByKerberos ? ` · ${report.reviewedByKerberos}` : ''}
+                        </span>
+                    )}
+                </div>
+            )}
         </aside>
     );
 }
@@ -185,6 +221,7 @@ export default function AdminReports() {
     const [items, setItems] = useState([]);
     const [total, setTotal] = useState(0);
     const [selectedId, setSelectedId] = useState(null);
+    const [composingEmail, setComposingEmail] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [busy, setBusy] = useState(false);
@@ -202,6 +239,7 @@ export default function AdminReports() {
             setTotal(data.total || 0);
             setSelectedId((prev) => {
                 if (prev && !(data.items || []).some((r) => r.id === prev)) {
+                    setComposingEmail(false);
                     return null;
                 }
                 return prev;
@@ -219,14 +257,34 @@ export default function AdminReports() {
 
     const selected = items.find((r) => r.id === selectedId) || null;
 
+    const emailDraftLoader = useCallback(
+        () => fetchAdminReportEmailDraft(selectedId),
+        [selectedId],
+    );
+
     async function updateStatus(reportId, nextStatus) {
         setBusy(true);
         setError(null);
         try {
             await patchAdminReport(reportId, nextStatus);
+            setComposingEmail(false);
             await load();
         } catch (e) {
             setError(adminErrorMessage(e.code || e.message));
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function sendEmail(payload) {
+        setBusy(true);
+        setError(null);
+        try {
+            await sendAdminReportEmail(selectedId, payload);
+            setComposingEmail(false);
+        } catch (e) {
+            setError(adminErrorMessage(e.code || e.message));
+            throw e;
         } finally {
             setBusy(false);
         }
@@ -269,6 +327,7 @@ export default function AdminReports() {
                             setStatus(e.target.value);
                             setOffset(0);
                             setSelectedId(null);
+                            setComposingEmail(false);
                         }}
                     >
                         {STATUSES.map((s) => (
@@ -317,7 +376,10 @@ export default function AdminReports() {
                             <tbody>
                                 {items.map((row) => {
                                     const isSelected = row.id === selectedId;
-                                    const toggleRow = () => setSelectedId(isSelected ? null : row.id);
+                                    const toggleRow = () => {
+                                        setSelectedId(isSelected ? null : row.id);
+                                        setComposingEmail(false);
+                                    };
                                     return (
                                         <tr
                                             key={row.id}
@@ -347,10 +409,15 @@ export default function AdminReports() {
                         <ReportDetail
                             report={selected}
                             busy={busy}
+                            composing={composingEmail}
+                            emailDraftLoader={emailDraftLoader}
                             onReview={() => updateStatus(selected.id, 'reviewed')}
                             onDismiss={() => updateStatus(selected.id, 'dismissed')}
                             onRemove={() => removeAndClose(selected)}
                             onActioned={() => updateStatus(selected.id, 'actioned')}
+                            onEmail={() => setComposingEmail(true)}
+                            onCloseEmail={() => setComposingEmail(false)}
+                            onSendEmail={sendEmail}
                         />
                     )}
                 </div>

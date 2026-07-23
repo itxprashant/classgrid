@@ -176,6 +176,8 @@ sync_script_inputs() {
             ;;
         sync_venues.js)
             rsync_if_exists "${REPO_ROOT}/scripts/extract_venue_map.py" "scripts/extract_venue_map.py"
+            rsync_if_exists "${REPO_ROOT}/data/Room_Allotment_Chart.pdf" "data/Room_Allotment_Chart.pdf"
+            rsync_if_exists "${REPO_ROOT}/data/venue_map.json" "data/venue_map.json"
             ;;
         backfill_instructors.js|activate_semester.js|refresh_semester_labels.js|check_semester.sh)
             rsync_if_exists "${REPO_ROOT}/server/src/parse_instructors.js" "server/src/parse_instructors.js"

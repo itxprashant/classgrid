@@ -14,6 +14,20 @@ function formatHostel(hostel) {
     return value || '—';
 }
 
+function titleWithEmphasis(name) {
+    const text = (name || '').trim();
+    if (!text) return null;
+    const parts = text.split(/\s+/);
+    if (parts.length < 2) return text;
+    const last = parts.pop();
+    return (
+        <>
+            {parts.join(' ')}{' '}
+            <em>{last}</em>
+        </>
+    );
+}
+
 export default function StudentDetail() {
     const { kerberos: kerberosParam } = useParams();
     const kerberos = decodeURIComponent(kerberosParam || '').trim().toLowerCase();
@@ -75,6 +89,7 @@ export default function StudentDetail() {
 
     const student = data?.student || { kerberos, name: kerberos };
     const offerings = sortedOfferings;
+    const semesterCount = grouped.length;
 
     return (
         <div className="sd page">
@@ -82,9 +97,11 @@ export default function StudentDetail() {
                 <p className="sd__eyebrow mono muted">
                     <Link to="/students" className="sd__back">Student explorer</Link>
                 </p>
-                <h1 className="sd__title serif">{student.name || kerberos}</h1>
+                <h1 className="sd__title serif">
+                    {titleWithEmphasis(student.name || kerberos)}
+                </h1>
                 <p className="sd__kerberos mono muted">{student.kerberos}</p>
-                <dl className="sd__meta">
+                <dl className="sd__facts">
                     {student.branch && (
                         <>
                             <dt className="mono muted">Branch</dt>
@@ -102,6 +119,9 @@ export default function StudentDetail() {
                 </dl>
                 <p className="sd__count muted">
                     {offerings.length} registered course{offerings.length === 1 ? '' : 's'}
+                    {semesterCount > 0
+                        ? ` across ${semesterCount} semester${semesterCount === 1 ? '' : 's'}`
+                        : ''}
                 </p>
             </header>
 
@@ -109,11 +129,14 @@ export default function StudentDetail() {
                 <div className="empty panel"><strong>No courses found</strong></div>
             ) : (
                 grouped.map(([semesterCode, rows]) => (
-                    <section key={semesterCode} className="sd__sem panel">
+                    <section key={semesterCode} className="sd__sem">
                         <h2 className="sd__sem-title mono">{rows[0]?.label || semesterCode}</h2>
                         <ul className="sd__courses">
                             {rows.map((o) => (
-                                <li key={`${o.semesterCode}-${o.courseCode}`} className={`sd__course${o.isActive ? ' sd__course--active' : ''}`}>
+                                <li
+                                    key={`${o.semesterCode}-${o.courseCode}`}
+                                    className={`sd__course${o.isActive ? ' sd__course--active' : ''}`}
+                                >
                                     <div className="sd__course-head">
                                         <Link
                                             to={`/course/${encodeURIComponent(o.courseCode)}/${encodeURIComponent(o.semesterCode)}`}
@@ -121,7 +144,9 @@ export default function StudentDetail() {
                                         >
                                             {o.courseCode}
                                         </Link>
-                                        {o.isActive && <span className="badge">Current</span>}
+                                        {o.isActive && (
+                                            <span className="badge badge--accent">Current</span>
+                                        )}
                                     </div>
                                     <p className="sd__course-name">{o.courseName}</p>
                                     <p className="sd__timings mono muted">{offeringTimingSummary(o)}</p>
@@ -132,7 +157,9 @@ export default function StudentDetail() {
                                         {o.credits != null && (
                                             <span className="badge">{o.credits} cr</span>
                                         )}
-                                        {o.lectureHall && <span className="badge">{o.lectureHall}</span>}
+                                        {o.lectureHall && (
+                                            <span className="badge">{o.lectureHall}</span>
+                                        )}
                                     </div>
                                 </li>
                             ))}

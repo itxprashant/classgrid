@@ -50,6 +50,7 @@ class ApiClient {
           options.headers['Cookie'] =
               '${AppConfig.sessionCookie}=${client._sessionToken}';
         }
+        options.headers['X-ClassGrid-Client'] ??= 'android';
         handler.next(options);
       },
     ));

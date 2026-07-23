@@ -8,6 +8,20 @@ import {
 } from '../utils/historyApi';
 import './ProfessorDetail.css';
 
+function titleWithEmphasis(name) {
+    const text = (name || '').trim();
+    if (!text) return null;
+    const parts = text.split(/\s+/);
+    if (parts.length < 2) return text;
+    const last = parts.pop();
+    return (
+        <>
+            {parts.join(' ')}{' '}
+            <em>{last}</em>
+        </>
+    );
+}
+
 export default function ProfessorDetail() {
     const { email: emailParam } = useParams();
     const email = decodeURIComponent(emailParam || '').trim().toLowerCase();
@@ -69,6 +83,7 @@ export default function ProfessorDetail() {
 
     const instructor = data?.instructor || { name: email, email };
     const offerings = sortedOfferings;
+    const semesterCount = grouped.length;
 
     return (
         <div className="pd page">
@@ -76,20 +91,30 @@ export default function ProfessorDetail() {
                 <p className="pd__eyebrow mono muted">
                     <Link to="/professors" className="pd__back">Prof explorer</Link>
                 </p>
-                <h1 className="pd__title serif">{instructor.name || email}</h1>
+                <h1 className="pd__title serif">
+                    {titleWithEmphasis(instructor.name || email)}
+                </h1>
                 <p className="pd__email mono muted">{instructor.email}</p>
-                <p className="pd__meta muted">{offerings.length} catalog offering{offerings.length === 1 ? '' : 's'}</p>
+                <p className="pd__meta muted">
+                    {offerings.length} catalog offering{offerings.length === 1 ? '' : 's'}
+                    {semesterCount > 0
+                        ? ` across ${semesterCount} semester${semesterCount === 1 ? '' : 's'}`
+                        : ''}
+                </p>
             </header>
 
             {offerings.length === 0 ? (
                 <div className="empty panel"><strong>No offerings found</strong></div>
             ) : (
                 grouped.map(([semesterCode, rows]) => (
-                    <section key={semesterCode} className="pd__sem panel">
+                    <section key={semesterCode} className="pd__sem">
                         <h2 className="pd__sem-title mono">{rows[0]?.label || semesterCode}</h2>
                         <ul className="pd__courses">
                             {rows.map((o) => (
-                                <li key={`${o.semesterCode}-${o.courseCode}`} className={`pd__course${o.isActive ? ' pd__course--active' : ''}`}>
+                                <li
+                                    key={`${o.semesterCode}-${o.courseCode}`}
+                                    className={`pd__course${o.isActive ? ' pd__course--active' : ''}`}
+                                >
                                     <div className="pd__course-head">
                                         <Link
                                             to={`/course/${encodeURIComponent(o.courseCode)}/${encodeURIComponent(o.semesterCode)}`}
@@ -97,7 +122,9 @@ export default function ProfessorDetail() {
                                         >
                                             {o.courseCode}
                                         </Link>
-                                        {o.isActive && <span className="badge">Current</span>}
+                                        {o.isActive && (
+                                            <span className="badge badge--accent">Current</span>
+                                        )}
                                     </div>
                                     <p className="pd__course-name">{o.courseName}</p>
                                     <p className="pd__timings mono muted">{offeringTimingSummary(o)}</p>
@@ -108,7 +135,9 @@ export default function ProfessorDetail() {
                                         {o.credits != null && (
                                             <span className="badge">{o.credits} cr</span>
                                         )}
-                                        {o.lectureHall && <span className="badge">{o.lectureHall}</span>}
+                                        {o.lectureHall && (
+                                            <span className="badge">{o.lectureHall}</span>
+                                        )}
                                     </div>
                                 </li>
                             ))}

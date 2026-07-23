@@ -1,15 +1,17 @@
 .pd.page {
-    max-width: 1280px;
+    max-width: 960px;
     margin: 0 auto;
     padding: 96px 32px 64px;
 }
 
 .pd__head {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.75rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--line);
 }
 
 .pd__eyebrow {
-    margin: 0 0 0.35rem;
+    margin: 0 0 0.5rem;
     font-size: 0.75rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -25,23 +27,38 @@
 }
 
 .pd__title {
-    margin: 0 0 0.35rem;
-    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    margin: 0 0 0.4rem;
+    font-size: var(--fs-32);
     font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+}
+
+.pd__title em {
+    font-style: italic;
+    font-weight: 500;
 }
 
 .pd__email,
 .pd__meta {
-    margin: 0.15rem 0 0;
+    margin: 0.2rem 0 0;
+}
+
+.pd__email {
+    font-size: 0.875rem;
+}
+
+.pd__meta {
+    font-size: 0.875rem;
 }
 
 .pd__sem {
-    margin-bottom: 1rem;
-    padding: 1rem;
+    margin-bottom: 2rem;
 }
 
 .pd__sem-title {
-    margin: 0 0 0.75rem;
+    margin: 0 0 0.85rem;
     font-size: 0.75rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -52,44 +69,57 @@
     list-style: none;
     margin: 0;
     padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
 }
 
 .pd__course {
-    padding: 0.75rem 0;
-    border-top: 1px solid var(--line);
-}
-
-.pd__course:first-child {
-    border-top: 0;
-    padding-top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin: 0;
+    padding: 1rem 1.1rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    min-width: 0;
 }
 
 .pd__course--active {
     background: var(--accent-tint);
-    margin: 0 -0.75rem;
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
-    border-radius: var(--r-sm);
+    border-color: var(--accent-edge);
 }
 
 .pd__course-head {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
+    margin-bottom: 0.15rem;
 }
 
 .pd__code {
     font-weight: 600;
     text-decoration: none;
+    color: var(--ink);
+}
+
+.pd__code:hover {
     color: var(--accent-ink);
 }
 
 .pd__course-name {
-    margin: 0.25rem 0;
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.3;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
 }
 
 .pd__timings {
-    margin: 0 0 0.5rem;
+    margin: 0.15rem 0 0.55rem;
     font-size: 0.8125rem;
 }
 
@@ -97,4 +127,19 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
+    margin-top: auto;
+}
+
+@media (max-width: 720px) {
+    .pd.page {
+        padding: 88px 20px 48px;
+    }
+
+    .pd__courses {
+        grid-template-columns: 1fr;
+    }
+
+    .pd__title {
+        font-size: var(--fs-26);
+    }
 }

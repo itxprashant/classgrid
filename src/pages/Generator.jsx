@@ -534,8 +534,9 @@ export default function Generator() {
         setActiveResultIndex(0);
     }, [debouncedSearchQuery, filteredCourses.length]);
 
+    // Keep focus on the search input (combobox); only scroll the highlighted option into view.
     useEffect(() => {
-        resultOptionRefs.current[activeResultIndex]?.focus();
+        resultOptionRefs.current[activeResultIndex]?.scrollIntoView({ block: 'nearest' });
     }, [activeResultIndex, filteredCourses]);
 
     // Stats: total credits and conflict count
@@ -569,6 +570,20 @@ export default function Generator() {
         }
         return { credits, conflicts };
     }, [selectedCourses, timetableData]);
+
+    // Enrich stale plans (saved before venue sync) with live catalog halls for /plan grid + list.
+    const coursesWithHalls = useMemo(() => {
+        const hallByCode = new Map(
+            (catalogCourses || [])
+                .filter((c) => c?.courseCode && c.lectureHall)
+                .map((c) => [c.courseCode, c.lectureHall])
+        );
+        return selectedCourses.map((c) => {
+            if (!c?.courseCode || c.lectureHall) return c;
+            const hall = hallByCode.get(c.courseCode);
+            return hall ? { ...c, lectureHall: hall } : c;
+        });
+    }, [selectedCourses, catalogCourses]);
 
     const openAddCourse = () => {
         setSearchQuery('');
@@ -781,11 +796,7 @@ export default function Generator() {
                                         className="gen__result"
                                         role="option"
                                         aria-selected={index === activeResultIndex}
-                                        tabIndex={index === activeResultIndex ? 0 : -1}
                                         onClick={() => addCourse(c.courseCode)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') addCourse(c.courseCode);
-                                        }}
                                     >
                                         <div>
                                             <span className="gen__result-code">{c.courseCode}</span>
@@ -837,7 +848,7 @@ export default function Generator() {
             <div className="gen__main">
                 <div className="gen__col-board" ref={timetableRef}>
                     <TimetableGrid
-                        timetable={selectedCourses}
+                        timetable={coursesWithHalls}
                         timetableData={timetableData}
                         showFooter
                     />
@@ -882,7 +893,7 @@ export default function Generator() {
                         </div>
                     ) : (
                         <div className="gen__course-list">
-                            {selectedCourses.map((course) => {
+                            {coursesWithHalls.map((course) => {
                                 const isExpanded = expandedCourse === course.courseCode;
                                 return (
                                     <div key={course.courseCode} className="gen__course">

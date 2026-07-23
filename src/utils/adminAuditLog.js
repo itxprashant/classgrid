@@ -39,6 +39,10 @@ export const AUDIT_ACTIONS = [
         group: 'Admin',
         actions: [
             { id: 'admin.report.reviewed', label: 'Report reviewed' },
+            { id: 'admin.feedback.reviewed', label: 'Feedback reviewed' },
+            { id: 'admin.feedback.emailed', label: 'Feedback email sent' },
+            { id: 'admin.report.emailed', label: 'Report email sent' },
+            { id: 'admin.email_template.updated', label: 'Email template updated' },
             { id: 'admin.course_event.deleted', label: 'Admin deleted course event' },
             { id: 'admin.occupied_room.deleted', label: 'Admin deleted room marking' },
             { id: 'admin.course_policy.deleted', label: 'Admin deleted course policy' },
@@ -60,6 +64,7 @@ export const AUDIT_TARGET_KINDS = [
     { id: 'course_policy', label: 'Course policy' },
     { id: 'app_feedback', label: 'Feedback' },
     { id: 'content_report', label: 'Content report' },
+    { id: 'email_template', label: 'Email template' },
     { id: 'session', label: 'Session' },
 ];
 
@@ -77,6 +82,24 @@ export function formatAuditAction(id) {
 
 export function formatTargetKind(id) {
     return TARGET_KIND_LABELS[id] || id || '—';
+}
+
+/** Display label for audit/feedback client channel (`web` | `android`). */
+export function formatClient(client) {
+    if (client === 'web') return 'Web';
+    if (client === 'android') return 'App';
+    return client || '—';
+}
+
+/** Actor label: name + kerberos when both are present. */
+export function formatAuditActor(entry) {
+    const kerberos = entry?.actorKerberos ? String(entry.actorKerberos).trim() : '';
+    const name = entry?.actorName ? String(entry.actorName).trim() : '';
+    if (name && kerberos) {
+        if (name.toLowerCase() === kerberos.toLowerCase()) return kerberos;
+        return `${name} (${kerberos})`;
+    }
+    return name || kerberos || '—';
 }
 
 function joinParts(parts) {
@@ -165,10 +188,10 @@ export function auditDetailRows(entry) {
         { label: 'Event ID', value: entry.id },
         { label: 'When', value: entry.occurredAt },
         { label: 'Action', value: formatAuditAction(entry.action) },
-        { label: 'Actor', value: entry.actorKerberos || entry.actorName || '—' },
+        { label: 'Actor', value: formatAuditActor(entry) },
         { label: 'Target kind', value: formatTargetKind(entry.targetKind) },
         { label: 'Target ID', value: entry.targetId || '—' },
-        { label: 'Client', value: entry.client || '—' },
+        { label: 'Client', value: formatClient(entry.client) },
         { label: 'IP', value: entry.ip || '—' },
     ];
 

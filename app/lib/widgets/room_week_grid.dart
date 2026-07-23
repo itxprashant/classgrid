@@ -88,11 +88,13 @@ class RoomWeekGrid extends StatelessWidget {
           else
             SizedBox(
               height: plotHeight,
+              width: double.infinity,
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final dayAreaWidth = constraints.maxWidth - TimetableLayout.railWidth;
                   final colWidth = dayAreaWidth / 5;
                   return Stack(
+                    fit: StackFit.expand,
                     clipBehavior: Clip.none,
                     children: [
                       for (int h = TimetableLayout.startHour; h <= TimetableLayout.endHour; h++)

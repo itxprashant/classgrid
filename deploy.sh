@@ -262,6 +262,8 @@ deploy_api() {
         --exclude data \
         --exclude .env \
         --exclude .env.* \
+        --exclude '__pycache__' \
+        --exclude '*.pyc' \
         -e "$RSYNC_SSH" \
         server/ "${REMOTE}:${REMOTE_API_DIR}/"
 

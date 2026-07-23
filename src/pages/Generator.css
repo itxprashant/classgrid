@@ -264,7 +264,7 @@
 }
 
 .gen__result:hover,
-.gen__result:focus-visible {
+.gen__result[aria-selected='true'] {
     background: var(--paper-2);
 }
 
@@ -344,7 +344,6 @@
     padding: 10px 14px;
     margin: 0 0 20px;
     border: 1px solid var(--line);
-    border-left-width: 3px;
     border-radius: var(--r-sm);
     background: var(--paper-2);
     color: var(--ink-2);
@@ -352,16 +351,19 @@
 }
 
 .gen__oauth-banner--ok {
-    border-left-color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 12%, var(--paper-2));
+    border-color: color-mix(in oklch, var(--accent) 35%, var(--line));
     color: var(--accent-ink, var(--ink));
 }
 
 .gen__oauth-banner--warn {
-    border-left-color: var(--warn);
+    background: color-mix(in oklch, var(--warn) 12%, var(--paper-2));
+    border-color: color-mix(in oklch, var(--warn) 35%, var(--line));
 }
 
 .gen__oauth-banner--err {
-    border-left-color: var(--danger);
+    background: color-mix(in oklch, var(--danger) 12%, var(--paper-2));
+    border-color: color-mix(in oklch, var(--danger) 35%, var(--line));
     color: var(--danger);
 }
 

@@ -75,4 +75,9 @@ app.listen(config.port, () => {
     } else {
         console.warn('[classgrid-api] FCM: FIREBASE_SERVICE_ACCOUNT_PATH not set (admin push disabled)');
     }
+    if (config.smtpUser && config.smtpPass) {
+        console.log(`[classgrid-api] SMTP: configured (from ${config.smtpFrom})`);
+    } else {
+        console.warn('[classgrid-api] SMTP: SMTP_USER/SMTP_PASS not set (admin email disabled)');
+    }
 });

@@ -12,19 +12,22 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 try:
-    import PyPDF2
+    from pypdf import PdfReader
 except ImportError:
-    print("Error: PyPDF2 is not installed.", file=sys.stderr)
-    sys.exit(1)
+    try:
+        from PyPDF2 import PdfReader
+    except ImportError:
+        print("Error: install pypdf or PyPDF2 (e.g. pacman -S python-pypdf).", file=sys.stderr)
+        sys.exit(1)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PDF_URL = os.environ.get(
     'ROOM_ALLOTMENT_PDF_URL',
-    'https://web.iitd.ac.in/~tti/timetable/Room_Allotment_Chart_2025_2026_2.pdf',
+    'https://roombooking.iitd.ac.in/allot/files/Room_Allotment_Chart.pdf',
 )
 LOCAL_PDF_PATH = os.path.join(SCRIPT_DIR, '../data/Room_Allotment_Chart.pdf')
 SOURCE_PDF_NAME = os.path.basename(PDF_URL)
-SOURCE_SEMESTER = os.environ.get('ROOM_ALLOTMENT_SOURCE_SEMESTER', '2502')
+SOURCE_SEMESTER = os.environ.get('ROOM_ALLOTMENT_SOURCE_SEMESTER', '2601')
 
 COURSE_REGEX = r"\b([A-Z]{3}\d{3,4}[A-Z]?)\b"
 VENUE_PATTERNS = [
@@ -50,7 +53,7 @@ def normalize_venue(v):
 def parse_pdf(pdf_path):
     pdf_courses = defaultdict(set)
     with open(pdf_path, 'rb') as f:
-        reader = PyPDF2.PdfReader(f)
+        reader = PdfReader(f)
         for page in reader.pages:
             text = page.extract_text()
             if not text:
@@ -78,6 +81,18 @@ def parse_pdf(pdf_path):
                 else:
                     buffer_courses.extend(valid_courses)
     return {k: sorted(v) for k, v in pdf_courses.items()}
+
+
+def expand_section_venues(pdf_courses):
+    """Fold section-letter codes into base (CVL100A/B → CVL100)."""
+    out = defaultdict(set)
+    section_re = re.compile(r"^([A-Z]+\d+)[A-Z]$")
+    for code, venues in pdf_courses.items():
+        out[code].update(venues)
+        m = section_re.match(code)
+        if m:
+            out[m.group(1)].update(venues)
+    return {k: sorted(v) for k, v in out.items()}
 
 
 def unique_rooms(pdf_courses):
@@ -125,6 +140,8 @@ def main():
     pdf_path = LOCAL_PDF_PATH
     ensure_pdf(pdf_path)
     data = parse_pdf(pdf_path)
+    # Keep raw keys for rooms-list; fold A/B sections for course→venue map.
+    course_map = expand_section_venues(data)
 
     if args.rooms_list:
         payload = {
@@ -136,7 +153,7 @@ def main():
         json.dump(payload, sys.stdout, indent=2)
         sys.stdout.write('\n')
     else:
-        json.dump(data, sys.stdout)
+        json.dump(course_map, sys.stdout)
 
 
 if __name__ == '__main__':

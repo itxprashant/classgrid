@@ -11,6 +11,106 @@
     transition: box-shadow var(--t), transform var(--t);
 }
 
+/* Calendar sidebar card (layout D) */
+.android-promo--sidebar {
+    margin: 0;
+    padding: 16px;
+    background: var(--accent-tint);
+    border-color: var(--accent-edge);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.android-promo--sidebar:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.android-promo__sidebar-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.android-promo--sidebar .android-promo__copy {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.android-promo--sidebar .android-promo__title {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-size: var(--fs-18, 1.125rem);
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+    line-height: 1.2;
+}
+
+.android-promo__tagline {
+    margin: 0 0 10px;
+    font-size: var(--fs-13);
+    color: var(--ink-2);
+    line-height: 1.45;
+}
+
+.android-promo__features {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.android-promo__features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: var(--fs-12);
+    color: var(--ink-2);
+    line-height: 1.4;
+}
+
+.android-promo__feature-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--accent-ink);
+    border: 1px solid var(--accent-edge);
+}
+
+.android-promo--sidebar .android-promo__phone {
+    width: 44px;
+    height: 76px;
+    transform: rotate(-4deg);
+}
+
+.android-promo--sidebar:hover .android-promo__phone {
+    transform: rotate(2deg) translateY(-1px);
+}
+
+.android-promo__version {
+    margin: 0;
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.04em;
+}
+
+.android-promo__download {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    text-decoration: none;
+}
+
 .android-promo:hover {
     box-shadow: var(--shadow-card);
     transform: translateY(-0.35px);

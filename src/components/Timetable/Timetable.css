@@ -224,7 +224,9 @@
     flex-direction: column;
     gap: 1px;
     min-width: 0;
-    line-height: 1.2;
+    min-height: 0;
+    flex: 1 1 auto;
+    line-height: 1.25;
 }
 
 .tt-block__code {
@@ -259,9 +261,11 @@
 }
 
 .tt-block__loc {
+    flex: 0 0 auto;
     font-size: 10px;
-    margin-top: auto;
-    padding-top: 2px;
+    line-height: 1.25;
+    margin-top: 2px;
+    padding-top: 0;
     color: inherit;
     opacity: 0.85;
     white-space: nowrap;

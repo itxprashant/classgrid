@@ -1,0 +1,14 @@
+Hi {{name}},
+
+Thanks for your feedback on ClassGrid.
+
+{{reply}}
+
+—
+On your message:
+{{quoted_message}}
+
+—
+Prashant
+ClassGrid · DevClub
+prashant@devclub.in

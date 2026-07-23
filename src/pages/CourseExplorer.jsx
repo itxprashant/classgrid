@@ -102,7 +102,7 @@ export default function CourseExplorer() {
                         </button>
                     )}
                 </div>
-                <FormField label="Department" htmlFor="ce-dept" className="ce__dept-field form-field--sm">
+                <FormField label="Department" htmlFor="ce-dept" className="ce__dept-field">
                     <select
                         id="ce-dept"
                         className="field field--mono ce__dept"

@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Fetch IITD LDAP student lists and optionally import into Postgres.
 #
+# Production one-shot (VPN + ssh mydevclub → fetch, import, restart API):
+#   ./scripts/sync_student_enrollments.sh 2601
+#
 # LDAP (ldapweb.iitd.ac.in) is only reachable on IITD intranet or VPN.
-# Typical workflow:
+# Lower-level workflow:
 #
 #   1. Connect to IITD VPN.
 #   2. Fetch JSON locally (no DB needed):
-#        ./scripts/fetch_student_enrollments.sh 2502 --fetch-only
-#   3. Copy data/ldap_exports/2502/ to a machine with DATABASE_URL, then:
-#        ./scripts/fetch_student_enrollments.sh 2502 --import
+#        ./scripts/fetch_student_enrollments.sh 2601 --fetch-only
+#   3. Copy data/ldap_exports/2601/ to a machine with DATABASE_URL, then:
+#        ./scripts/fetch_student_enrollments.sh 2601 --import
 #      Or on prod VM:
-#        ./scripts/db/run_on_prod.sh import_student_data.js --semester=2502 --from-json
+#        ./scripts/db/run_on_prod.sh import_student_data.js --semester=2601 --from-json
 #
 # One-shot on VPN with local Postgres:
-#   ./scripts/fetch_student_enrollments.sh 2502
+#   ./scripts/fetch_student_enrollments.sh 2601
 #
 # LDAP rows with non-student kerberos (not aa1234567 / abc123456) are skipped at fetch/import.
 #

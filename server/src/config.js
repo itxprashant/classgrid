@@ -54,6 +54,14 @@ const config = {
 
     // Path to Firebase Admin SDK service account JSON (FCM broadcast). Optional.
     firebaseServiceAccountPath: (process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim() || null,
+
+    // AWS SES SMTP for admin feedback/report reply emails (optional).
+    // Uses server/scripts/send_email_devclub.py when configured.
+    smtpHost: (process.env.SMTP_HOST || 'email-smtp.us-east-1.amazonaws.com').trim(),
+    smtpPort: Number(process.env.SMTP_PORT || 587) || 587,
+    smtpUser: (process.env.SMTP_USER || '').trim() || null,
+    smtpPass: (process.env.SMTP_PASS || '').trim() || null,
+    smtpFrom: (process.env.SMTP_FROM || 'prashant@devclub.in').trim(),
 };
 
 config.isProd = config.nodeEnv === 'production';

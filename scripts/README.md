@@ -13,7 +13,8 @@ clients fetch it at runtime — nothing is bundled from `src/*.json` anymore.
 | Task | Command |
 |------|---------|
 | Full semester refresh (local or prod `DATABASE_URL`) | `./scripts/db/refresh_semester.sh 2601` |
-| **LDAP student lists (VPN)** | `./scripts/fetch_student_enrollments.sh 2502 --fetch-only` then `--import` |
+| **LDAP student lists → prod (VPN)** | `./scripts/sync_student_enrollments.sh 2601` |
+| LDAP fetch/import (local / split) | `./scripts/fetch_student_enrollments.sh 2601 --fetch-only` then `--import` |
 | Run any importer on **production VM** | `./scripts/db/run_on_prod.sh import_student_data.js --semester=2601` (add `--with-data` for full semester refresh / seed) |
 | One-time seed from legacy JSON files | `node scripts/db/seed_from_files.js` |
 | Verify API after refresh | `./scripts/db/check_semester.sh` |
@@ -84,8 +85,9 @@ pip install PyPDF2
 Set the allotment PDF when IITD publishes a new one:
 
 ```bash
-export ROOM_ALLOTMENT_PDF_URL='https://web.iitd.ac.in/~tti/timetable/Room_Allotment_Chart_….pdf'
+export ROOM_ALLOTMENT_PDF_URL='https://roombooking.iitd.ac.in/allot/files/Room_Allotment_Chart.pdf'
 # optional local cache: data/Room_Allotment_Chart.pdf
+export ROOM_ALLOTMENT_SOURCE_SEMESTER=2601
 ```
 
 **Campus room list (client fallback, no DB):** when the active catalog has no
@@ -341,33 +343,42 @@ The following pre-Postgres scripts were deleted; use the `scripts/db/` importers
 
 IITD course rosters live at `https://ldapweb.iitd.ac.in/LDAP/courses/` — **intranet/VPN only**.
 
-Use [`fetch_student_enrollments.sh`](fetch_student_enrollments.sh) (wrapper) or
-[`import_student_data.js`](db/import_student_data.js) directly.
+### Production one-shot (recommended)
 
-### Two-step (recommended when prod DB is remote)
+```bash
+# IITD VPN + ssh mydevclub — fetch LDAP, import prod Postgres, restart API
+./scripts/sync_student_enrollments.sh 2601
+./scripts/sync_student_enrollments.sh 2601 --no-deploy   # skip ./deploy.sh --api
+./scripts/sync_student_enrollments.sh 2601 --dry-run     # fetch + count only
+```
+
+Lower-level: [`fetch_student_enrollments.sh`](fetch_student_enrollments.sh) or
+[`import_student_data.js`](db/import_student_data.js).
+
+### Two-step (local DB or split machines)
 
 ```bash
 # 1. On campus or IITD VPN — fetch JSON only (no DATABASE_URL needed)
-./scripts/fetch_student_enrollments.sh 2502 --fetch-only
-# → data/ldap_exports/2502/{studentCourses,courseStudents,meta}.json
+./scripts/fetch_student_enrollments.sh 2601 --fetch-only
+# → data/ldap_exports/2601/{studentCourses,courseStudents,meta}.json
 
 # 2. Import into Postgres (local or prod)
 export DATABASE_URL=postgresql://classgrid:…@127.0.0.1:5432/classgrid
-./scripts/fetch_student_enrollments.sh 2502 --import
+./scripts/fetch_student_enrollments.sh 2601 --import
 
 # Or copy JSON to the VM and:
-./scripts/db/run_on_prod.sh import_student_data.js --semester=2502 --from-json
+./scripts/db/run_on_prod.sh import_student_data.js --semester=2601 --from-json
 ./deploy.sh --api
 ```
 
 ### One-shot (VPN + DATABASE_URL on same machine)
 
 ```bash
-./scripts/fetch_student_enrollments.sh 2502
+./scripts/fetch_student_enrollments.sh 2601
 ```
 
-**Prerequisite:** a `semesters` row for `2502` must exist (FK). For archived terms,
-import catalog/calendar first (`import_historical_catalog.js --semester=2502` or full
+**Prerequisite:** a `semesters` row for `2601` must exist (FK). For archived terms,
+import catalog/calendar first (`import_historical_catalog.js --semester=2601` or full
 `refresh_semester.sh` for the active term).
 
 Exported JSON is gitignored under `data/ldap_exports/` (PII).
